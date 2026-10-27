@@ -1,0 +1,62 @@
+{
+  "name": "talata",
+  "version": "0.0.0",
+  "description": "Fast Markdown parser that produces remark-compatible mdast",
+  "keywords": [
+    "commonmark",
+    "gfm",
+    "markdown",
+    "mdast",
+    "parser",
+    "remark"
+  ],
+  "license": "MIT",
+  "author": "Alexis Munsayac",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lxsmnsyc/talata.git"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.cts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "prepublishOnly": "tsdown",
+    "build": "tsdown",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@types/mdast": "^4.0.4"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "commonmark-spec": "^0.31.2",
+    "hast-util-to-html": "^9.0.5",
+    "mdast-util-from-markdown": "^2.0.2",
+    "mdast-util-gfm": "^3.1.0",
+    "mdast-util-to-hast": "^13.2.0",
+    "micromark-extension-gfm": "^3.0.0",
+    "tsdown": "^0.23.1",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

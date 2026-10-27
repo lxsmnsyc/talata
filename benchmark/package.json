@@ -1,0 +1,21 @@
+{
+  "name": "benchmark",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "corpus": "sh scripts/fetch-corpus.sh",
+    "bench": "node --expose-gc scripts/bench.js",
+    "interleaved": "node --expose-gc scripts/interleaved.js 15",
+    "profile": "node --cpu-prof --cpu-prof-dir=profiles scripts/profile-target.js && node scripts/analyze-profile.js profiles/*.cpuprofile"
+  },
+  "devDependencies": {
+    "markdown-it": "^15.0.3",
+    "marked": "^18.1.1",
+    "mdast-util-from-markdown": "^2.1.0",
+    "mdast-util-gfm": "^3.1.0",
+    "micromark": "^4.0.3",
+    "micromark-extension-gfm": "^3.0.0",
+    "mitata": "^1.0.34",
+    "talata": "workspace:*"
+  }
+}
