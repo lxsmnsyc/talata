@@ -68,10 +68,7 @@ branches:
 ## Decisions
 
 - The GitHub repository is not created yet. Branches stay local until the user publishes the repo.
-
-## Open questions
-
-- Is 4 times faster than "mdast + gfm" the right target? markdown-it is about 6 to 9 times faster today, and building mdast with positions costs more than markdown-it's tokens.
+- 2026-10-28: the user confirmed the plan: the 4x speed target, CommonMark plus GFM plus the unified plugin for 0.1, and maintainer merges. Execution has not started; wave 1 (core-skeleton, harness) starts when the user asks.
 
 ## Gates
 
