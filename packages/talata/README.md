@@ -1,6 +1,6 @@
 # Talata
 
-Talata is a Markdown parser for JavaScript that produces the same mdast tree as `mdast-util-from-markdown`, so it works with remark plugins, while parsing several times faster.
+Talata is a Markdown parser that produces the same mdast tree as `mdast-util-from-markdown`, so it works with remark plugins, while parsing several times faster.
 
 Status: not usable yet. The repository holds the test harness, the benchmark and the roadmap. See `roadmaps/v1/`.
 
