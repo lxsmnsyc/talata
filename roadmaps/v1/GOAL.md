@@ -69,6 +69,7 @@ branches:
 
 - The GitHub repository is not created yet. Branches stay local until the user publishes the repo.
 - 2026-10-28: the user confirmed the plan: the 4x speed target, CommonMark plus GFM plus the unified plugin for 0.1, and maintainer merges. Execution has not started; wave 1 (core-skeleton, harness) starts when the user asks.
+- 2026-10-28: Talata stays in TypeScript. A Go version was considered and rejected: compiling Go to WebAssembly, a native addon or a separate process all add a boundary that costs about what the rewrite saves, and none fit the bundle-size goal. A native batch CLI may become a separate roadmap after 0.1, measured against Talata.
 
 ## Gates
 
