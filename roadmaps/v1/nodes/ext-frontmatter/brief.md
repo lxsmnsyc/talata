@@ -1,7 +1,7 @@
 ---
 id: ext-frontmatter
 title: Frontmatter extension
-status: todo
+status: dropped
 priority: could
 type: feature
 outline: true
@@ -34,3 +34,5 @@ YAML and TOML frontmatter, matching `mdast-util-frontmatter`.
 ## Notes
 
 Outline. Break into a full brief when `plan.py refine` lists it.
+
+Moved to `roadmaps/v2/nodes/ext-frontmatter` on 2026-10-28, as a subpath of `talata`.

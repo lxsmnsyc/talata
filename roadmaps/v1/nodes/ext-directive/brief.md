@@ -1,7 +1,7 @@
 ---
 id: ext-directive
 title: Directive extension
-status: todo
+status: dropped
 priority: could
 type: feature
 outline: true
@@ -34,3 +34,5 @@ Text, leaf and container directives, matching `mdast-util-directive`.
 ## Notes
 
 Outline. Break into a full brief when `plan.py refine` lists it.
+
+Moved to `roadmaps/v2/nodes/ext-directive` on 2026-10-28, as a subpath of `talata`.
