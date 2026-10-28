@@ -23,7 +23,6 @@ How positions and `spread` match the reference (from micromark `document.js`, `m
 
 - New test file `test/blocks-container.test.ts`, outside the owned paths. It is a new file, so it cannot conflict.
 - I did not edit `test/core-sections.test.ts`. Its `waiting` map still lists 57, 60 and 61 as waiting on lists. They pass now and run in `test/blocks-container.test.ts`. I left them because blocks-leaf removes 59 from the line next to 57, and the two edits would conflict. The orchestrator can delete the three lines after both merges.
-- `roadmaps/v1/contracts/parser-core.change-request.md` replaces core-skeleton's accepted v1 to v2 request, which stays in git history. That is the path the instructions gave.
 
 ## Stubs left
 
@@ -32,7 +31,7 @@ How positions and `spread` match the reference (from micromark `document.js`, `m
 
 ## Gotchas
 
-- Change request (open): after indented code, micromark also restricts list starts (`    a\n2. b` is code then a paragraph). `BlockState` cannot see an unmatched code tip, so talata starts a list there. See `contracts/parser-core.change-request.md`.
+- Change request (open): after indented code, micromark also restricts list starts (`    a\n2. b` is code then a paragraph). `BlockState` cannot see an unmatched code tip, so talata starts a list there. See `contracts/parser-core-v3.change-request.md` (accepted as parser-core v3; spec-green implements it).
 - Containers that are not `TrackedContainer` (GFM footnote definitions later) break the `quoteLine` and `openChild` chains. A footnote definition inside a quote, holding a list, may then get end positions off by the quote prefix. gfm-tasks-footnotes should implement `TrackedContainer` on its container, or check these cases.
 - Leaves inside items need their end at the line end, trailing whitespace included (as paragraphs and headings do). Item and list ends come from the last child's end.
 - `list.spread` and `listItem.spread` come from child positions only, so a leaf that spans blank lines (fenced code, HTML kinds 1 to 5) must report its real end line. Blank lines inside it then do not count, as in the reference.
