@@ -6,7 +6,7 @@
   - Job `check`, matrix Node 22 and 24, `fail-fast: false`. Steps in order: `pnpm install --frozen-lockfile`, `pnpm --filter benchmark corpus`, `npx oxlint`, `npx oxfmt --check`, `npx tsc --noEmit -p .` (in `packages/talata`), `pnpm --filter talata build`, `pnpm --filter talata test`.
   - Job `smoke-node20`: builds on Node 24, then switches to Node 20 and runs `node .github/scripts/smoke.mjs`. The script loads `dist/index.js`, `dist/index.cjs`, `dist/unified.js` and `dist/unified.cjs`, parses a GFM document and checks the tree shape.
 - `.github/workflows/release.yml`, copied from the seroval pattern (actions pinned to commit SHAs with version comments, harden-runner in audit mode). Trigger: `push` to `main`. Top-level `permissions: {}`; concurrency group `${{ github.workflow }}-${{ github.ref }}`, `cancel-in-progress: false`. Node 24. Four jobs:
-  - `select-mode` (only when the repository is `lxsmnsyc/talata`; `contents: read`): `changesets/action/select-mode@v2`, then a guard step that turns mode `publish` into `none` while `packages/talata/package.json` says `0.0.0`.
+  - `select-mode` (only when the repository is `lxsmnsyc/talata`; `contents: read`): `changesets/action/select-mode@v2`. There is no 0.0.0 guard: once the user publishes `talata@0.0.0` by hand, select-mode returns `none` by itself.
   - `version` (`contents: write`, `pull-requests: write`): runs when mode is `version`; opens or updates the "chore: version packages" pull request.
   - `pack` (`contents: read`): runs when mode is `publish`; build, `pnpm --filter talata test`, then `changesets/action/pack@v2`.
   - `publish` (`contents: write`, `id-token: write`): `changesets/action/publish@v2` with the pack artifact and `create-github-releases: true`.
@@ -17,7 +17,7 @@
 
 ## What the first push to main does
 
-`select-mode` runs `changeset publish-plan`, which treats a package that is not on npm as publishable. I ran it locally: with `talata@0.0.0` and no changesets it lists `talata@0.0.0` to publish, so select-mode would return `publish`. The guard step overrides that to `none` while the version is `0.0.0`, so `version`, `pack` and `publish` are skipped and nothing is built or published. The guard stays harmless after release. When a changeset is added, select-mode returns `version` and the pull request opens. When that pull request merges (version 0.1.0, no changesets left, not on npm), select-mode returns `publish`.
+`select-mode` runs `changeset publish-plan`, which treats a package that is not on npm as publishable. I ran it locally before `talata@0.0.0` existed on npm: it listed `talata@0.0.0`, so select-mode would return `publish` and the run would try to publish 0.0.0. That is why the user publishes 0.0.0 by hand first (setup step 1). After that the plan is empty, select-mode returns `none`, and the first run does nothing. With a changeset, it returns `version`. After the "chore: version packages" pull request merges (0.1.0 not on npm), it returns `publish`.
 
 ## Deviations
 
@@ -37,15 +37,16 @@
 
 ## Setup trusted publishing needs
 
-1. Create the GitHub repository `lxsmnsyc/talata` and push `main`.
-2. Settings, Actions, General, Workflow permissions: "Read and write permissions", and tick "Allow GitHub Actions to create and approve pull requests". The `version` job cannot open its pull request without it.
-3. First publish of 0.1.0 is manual (the user's decision). Order matters:
-   1. Push `main`. The release run finds `talata@0.0.0`, the guard sets mode `none`, and nothing is published.
-   2. Add a changeset and merge it. The `version` job opens the "chore: version packages" pull request. Do not merge it yet.
-   3. Check out that pull request branch (or run `pnpm cs:ver` locally so `packages/talata/package.json` says 0.1.0), then `pnpm --filter talata build` and, in `packages/talata`, `npm publish --access public` while logged in with `npm login` and 2FA. This publish has no provenance.
-   4. Merge the pull request. select-mode sees 0.1.0 on npm, returns `none`, and no job publishes. If the pull request is merged before the manual publish, the `publish` job runs without a trusted publisher and fails at the publish step; nothing is lost, but the failure is confusing.
-4. On npmjs.com, package `talata`, Settings, Trusted Publisher, GitHub Actions: owner `lxsmnsyc`, repository `talata`, workflow `release.yml`, no environment. From then on every release is made by the workflow with no token.
-5. Optional: protect `main` and require `Check (Node 22)`, `Check (Node 24)` and `Smoke test built package (Node 20)`.
+Do these in order. Do not push the repository before step 1, or the first run tries to publish 0.0.0.
+
+1. Claim the name. From `packages/talata` at version 0.0.0, run `npm publish --access public` while logged in with `npm login` and 2FA. `prepublishOnly` builds first.
+2. On npmjs.com, package `talata`, Settings, Trusted Publisher, GitHub Actions: owner `lxsmnsyc`, repository `talata`, workflow `release.yml`, no environment.
+3. Create the GitHub repository `lxsmnsyc/talata`. Settings, Actions, General, Workflow permissions: "Read and write permissions", and tick "Allow GitHub Actions to create and approve pull requests". The `version` job cannot open its pull request without it.
+4. Push `main`. The first release run does nothing.
+5. Merge the 0.1.0 changeset (the release node writes it). The "chore: version packages" pull request opens. Merging that pull request publishes 0.1.0 through OIDC, with no token.
+6. Optional: protect `main` and require `Check (Node 22)`, `Check (Node 24)` and `Smoke test built package (Node 20)`.
+
+Unverified until the 0.1.0 run: whether pnpm 12 with `changesets/action/publish` completes the npm OIDC exchange. If that run fails at the publish step, the fallback is `npm publish --provenance --access public` from `packages/talata` on a machine that can sign in, or a workflow change to publish with npm directly.
 
 ## Proposed learnings
 
@@ -56,7 +57,7 @@
 - `actionlint` 1.7.12: no output.
 - After rebasing onto main: `npx oxlint` and `npx oxfmt --check` are clean; `npx tsc --noEmit -p .` passes; `pnpm --filter talata test` passes (5003 tests, Node 22.16); build passes.
 - Smoke script passes on Node 20.20.2 (`npx -y node@20`).
-- `changeset publish-plan` run locally shows the `talata@0.0.0` plan described above.
+- `changeset publish-plan` run locally (before `talata@0.0.0` was on npm) lists `talata@0.0.0`, as described above.
 - Node 24 and a GitHub-hosted runner were not available locally. The first real run is the orchestrator's check.
 
 ## Size

@@ -9,3 +9,4 @@
 - Review fixes: changesets/action v2 has renamed inputs; release.yml was rewritten to the seroval pattern (select-mode, version, pack, publish; SHA-pinned; OIDC only). Token path and publish.sh removed. select-mode picks publish for talata@0.0.0 (checked with `changeset publish-plan`), so a guard step maps it to none.
 - check.yml: nits applied, brumate style (persist-credentials false, package-manager-cache false). smoke.mjs loads unified entries.
 - Rebased onto main; oxlint and oxfmt clean.
+- Removed the 0.0.0 guard step: the user publishes 0.0.0 by hand before pushing, so select-mode returns none. Setup steps reordered.

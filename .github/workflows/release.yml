@@ -19,7 +19,7 @@ jobs:
     if: github.repository == 'lxsmnsyc/talata'
     runs-on: ubuntu-latest
     outputs:
-      mode: ${{ steps.guard.outputs.mode }}
+      mode: ${{ steps.select-mode.outputs.mode }}
       publish-plan-artifact-id: ${{ steps.select-mode.outputs.publish-plan-artifact-id }}
     permissions:
       contents: read
@@ -46,20 +46,6 @@ jobs:
       - name: Select mode
         id: select-mode
         uses: changesets/action/select-mode@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
-
-      # talata is at 0.0.0 and not on npm, so select-mode picks "publish" for
-      # the placeholder version. Never publish 0.0.0.
-      - name: Skip the placeholder version
-        id: guard
-        env:
-          MODE: ${{ steps.select-mode.outputs.mode }}
-        run: |
-          version=$(node -p "require('./packages/talata/package.json').version")
-          if [ "$MODE" = "publish" ] && [ "$version" = "0.0.0" ]; then
-            echo "talata is at $version, not publishing"
-            MODE=none
-          fi
-          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
 
   # Opens or updates the "Version Packages" pull request.
   version:
