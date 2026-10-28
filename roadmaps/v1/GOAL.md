@@ -75,6 +75,7 @@ release:
 ## Decisions
 
 - The GitHub repository is not created yet. Branches stay local until the user publishes the repo.
+- 2026-10-28: the user chose a public repository, `lxsmnsyc/talata`, created and pushed when perf-pass merges. From then on, node branches are pushed and go through GitHub pull requests.
 - 2026-10-28: the user confirmed the plan: the 4x speed target, CommonMark plus GFM plus the unified plugin for 0.1, and maintainer merges. Execution has not started; wave 1 (core-skeleton, harness) starts when the user asks.
 - 2026-10-28: Talata stays in TypeScript. A Go version was considered and rejected: compiling Go to WebAssembly, a native addon or a separate process all add a boundary that costs about what the rewrite saves, and none fit the bundle-size goal. A native batch CLI may become a separate roadmap after 0.1, measured against Talata.
 - 2026-10-28: the user switched merges to auto. With no remote, the orchestrator merges locally (`git merge --no-ff`) when `plan.py can-merge` allows it, after a clean fresh-context review and a passing fast check on the branch merged onto current main. Gated, contract, release and hotfix nodes still go to the user.

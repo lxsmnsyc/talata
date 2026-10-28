@@ -1,7 +1,7 @@
 import type { Delete, Emphasis, PhrasingContent, Strong, Text } from 'mdast';
 import { ASTERISK, UNDERSCORE } from '../core/chars';
 import type { Delimiter, InlineRule, InlineState } from '../core/inline';
-import { nodeIndex, resolveSpan } from '../core/inline';
+import { DEAD_BRACKET, nodeIndex, resolveSpan } from '../core/inline';
 import { point } from '../core/source';
 import { OTHER, PUNCTUATION, WHITESPACE, classifyCharacter } from './classify';
 import { workSteps } from './lines';
@@ -185,7 +185,8 @@ function onlyEmphasis(state: InlineState, bottom: number): boolean {
       marker !== ASTERISK &&
       marker !== UNDERSCORE &&
       marker !== LEFT_BRACKET &&
-      marker !== EXCLAMATION
+      marker !== EXCLAMATION &&
+      marker !== DEAD_BRACKET
     ) {
       return false;
     }

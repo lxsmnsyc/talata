@@ -11,6 +11,9 @@ import type { DocumentState } from './state';
  * resolves the span inside it (`resolveSpan`) before it moves those nodes
  * into the link. Find the node's index with `nodeIndex`.
  */
+/** Marker of a bracket that failed to close a link; it stays on the stack, inert. */
+export const DEAD_BRACKET = 0;
+
 export interface Delimiter {
   /** Character code of the marker. */
   marker: number;
