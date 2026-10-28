@@ -22,6 +22,7 @@ shared:
   - packages/talata/package.json
   - pnpm-lock.yaml
   - packages/talata/test/fuzz/fixtures/**
+  - roadmaps/v1/contracts/*.change-request.md
 reserves: []
 provides: []
 depends_on:
@@ -37,6 +38,8 @@ depends_on:
 Profile talata on the benchmark corpus and optimize until it is at least 4 times faster than "mdast + gfm" on the README corpus and `node fs.md`, with every test still passing.
 
 ## Context
+
+From the gfm-inline review: the literal-autolink transform still costs about 9% of GFM parse time on prose, mostly walking text nodes that cannot match. Let the inline rule flag the document when it rejects a `www.`, `://` or `@` candidate and run the transform only then. The mixed emphasis/strikethrough quadratic case: `*x* ` then `'~a~ a* '` repeated (670 ms at 56 KB).
 
 From the gfm-tables review: on table-heavy documents 58% of the time is garbage collection from per-cell inline state (`createInlineState`, `state.inline`, a 2-element range array per cell in `src/gfm/table.ts:330`).
 

@@ -20,6 +20,7 @@ owns:
 shared:
   - package.json
   - pnpm-lock.yaml
+  - roadmaps/v1/contracts/*.change-request.md
 reserves: []
 provides: []
 depends_on:

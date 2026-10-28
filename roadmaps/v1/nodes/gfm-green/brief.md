@@ -21,6 +21,7 @@ shared:
   - packages/talata/src/**
   - packages/talata/test/fuzz/features.ts
   - packages/talata/test/fuzz/fixtures/**
+  - roadmaps/v1/contracts/*.change-request.md
 reserves: []
 provides: []
 depends_on:

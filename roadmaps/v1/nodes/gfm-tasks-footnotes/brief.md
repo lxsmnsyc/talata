@@ -32,6 +32,7 @@ shared:
   - packages/talata/test/equivalence.test.ts
   - packages/talata/test/gfm.test.ts
   - packages/talata/test/fuzz/fixtures/**
+  - roadmaps/v1/contracts/*.change-request.md
 reserves: []
 provides: []
 depends_on:
