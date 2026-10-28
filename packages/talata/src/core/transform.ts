@@ -1,5 +1,6 @@
 import type { Root } from 'mdast';
 import autolinkLiteralTransform from '../gfm/autolink-literal-transform';
+import { outsideChecks } from '../gfm/task-list';
 import type { DocumentState } from './state';
 
 /** A tree pass that runs after inline parsing, in registration order. */
@@ -11,4 +12,4 @@ export interface Transform {
 }
 
 /** Registered transforms. Add one line per transform. */
-export const transforms: Transform[] = [autolinkLiteralTransform];
+export const transforms: Transform[] = [outsideChecks, autolinkLiteralTransform];

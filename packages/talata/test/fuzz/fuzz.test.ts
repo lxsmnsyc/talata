@@ -10,6 +10,7 @@ import { createRandom } from './random';
 import { parseTalata } from '../parsers';
 import { runFuzz } from './run';
 import shrink from './shrink';
+import { createTimedCheck, referenceTimeout } from './timed-check';
 
 interface Fixture {
   input: string;
@@ -116,6 +117,23 @@ describe('fuzz smoke run', () => {
     );
     expect(position.kind).toBe('diff');
   });
+});
+
+describe('fuzz time limit', () => {
+  it('skips a document the reference never finishes and goes on', () => {
+    const timed = createTimedCheck(1000);
+    try {
+      expect(timed.check('# a\n', true, supported)).toEqual({ kind: 'equal' });
+      // micromark with GFM loops on this input.
+      expect(timed.check('[^n]: x\n\n![ \n^n]', true, supported)).toEqual({
+        kind: 'skip',
+        reason: referenceTimeout,
+      });
+      expect(timed.check('a *b*\n', false, supported)).toEqual({ kind: 'equal' });
+    } finally {
+      timed.close();
+    }
+  }, 60000);
 });
 
 describe('fuzz parts', () => {

@@ -190,13 +190,5 @@ for (const [name, inputs] of groups) {
   });
 }
 
-// Known difference: after a list item whose marker line is empty, the
-// reference runs the task check on a lazy paragraph outside any list item
-// and sets `checked` on its parent (the root or a block quote).
-describe('task check outside list items', () => {
-  for (const input of ['-\n[ ] a', '> -\n> [ ] a']) {
-    it.fails(JSON.stringify(input), () => {
-      check(input);
-    });
-  }
-});
+// The task check outside list items (`-\n[ ] a`) is in gfm-green.test.ts:
+// the reference's development build, which vitest loads, throws on it.

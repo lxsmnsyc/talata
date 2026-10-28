@@ -24,6 +24,9 @@ export interface RunOptions {
   // Include pathological documents (default true). The smoke test turns them off.
   pathological?: boolean;
   onProgress?: (done: number) => void;
+  // Runs one document. Defaults to `check` in this thread; the CLI passes a
+  // worker with a time limit (timed-check.ts).
+  check?: (value: string, gfm: boolean, features: Features) => Outcome;
 }
 
 export interface Failure {
@@ -41,6 +44,9 @@ export interface Report {
   skipReasons: Record<string, number>;
   failures: number;
   reported: Failure[];
+  // Indexes of the first documents skipped for a reason other than an off
+  // feature (a reference timeout or throw), to replay them.
+  skippedAt: { index: number; reason: string }[];
 }
 
 /** Starting texts for mutation: the spec examples and, when downloaded, the corpus files. */
@@ -94,16 +100,21 @@ export function runFuzz(options: RunOptions): Report {
     skipReasons: {},
     failures: 0,
     reported: [],
+    skippedAt: [],
   };
+  const run = options.check ?? check;
   const seen = new Set<string>();
   for (let n = 0; n < count; n++) {
     const index = start + n;
     const source = documentAt(seed, index, features, seeds, options.pathological ?? true);
-    const outcome = check(source, gfm, features);
+    const outcome = run(source, gfm, features);
     report.documents++;
     if (outcome.kind === 'skip') {
       report.skipped++;
       report.skipReasons[outcome.reason] = (report.skipReasons[outcome.reason] ?? 0) + 1;
+      if (outcome.reason.startsWith('reference') && report.skippedAt.length < 20) {
+        report.skippedAt.push({ index, reason: outcome.reason });
+      }
     } else {
       report.compared++;
     }
@@ -113,12 +124,12 @@ export function runFuzz(options: RunOptions): Report {
       if (report.reported.length < options.maxFailures) {
         const minimized = shrink(
           source,
-          (value) => failureKind(check(value, gfm, features)) === kind,
+          (value) => failureKind(run(value, gfm, features)) === kind,
           options.shrinkBudget,
         );
         if (!seen.has(minimized)) {
           seen.add(minimized);
-          const final = check(minimized, gfm, features);
+          const final = run(minimized, gfm, features);
           const message = final.kind === 'diff' || final.kind === 'throw' ? final.message : '';
           report.reported.push({ index, kind, source, minimized, message });
         }

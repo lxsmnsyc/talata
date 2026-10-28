@@ -3,6 +3,7 @@ import type { Delimiter, InlineRule, InlineState } from '../core/inline';
 import { nodeIndex } from '../core/inline';
 import { point } from '../core/source';
 import { OTHER, PUNCTUATION, WHITESPACE, classifyCharacter } from '../inline/classify';
+import { resolveAttentionFirst } from '../inline/emphasis';
 import { workSteps } from '../inline/lines';
 import { appendText, mergeText, pushNode } from '../inline/text';
 
@@ -16,6 +17,13 @@ import { appendText, mergeText, pushNode } from '../inline/text';
 
 const TILDE = 126;
 const PRIORITY = 50;
+
+/**
+ * For tests: `mixed` sends emphasis-first leaves through emphasis's general
+ * path (quadratic, one pair at a time) instead of `resolveAttentionFirst`,
+ * to compare both.
+ */
+export const strikethroughPaths: { mixed: boolean } = { mixed: false };
 
 // The leaf whose first sequence was seen, and whether it was `*` or `_`.
 let orderState: InlineState | undefined;
@@ -245,17 +253,21 @@ function resolveStrikethrough(state: InlineState, bottom: number): void {
     return;
   }
   // Emphasis resolves each of its pairs' insides with every rule
-  // (micromark's insideSpan), which takes its general path.
-  for (const rule of state.rules.inlineResolvers) {
-    if (rule.priority > PRIORITY) {
-      rule.resolve!(state, bottom);
+  // (micromark's insideSpan), then the tildes left pair.
+  if (strikethroughPaths.mixed) {
+    for (const rule of state.rules.inlineResolvers) {
+      if (rule.priority > PRIORITY) {
+        rule.resolve!(state, bottom);
+      }
     }
+    // Unpaired emphasis runs are text now.
+    filterStack(delimiters, bottom, true);
+    if (delimiters.length > bottom) {
+      resolveTildes(state, bottom);
+    }
+    return;
   }
-  // Unpaired emphasis runs are text now.
-  filterStack(delimiters, bottom, true);
-  if (delimiters.length > bottom) {
-    resolveTildes(state, bottom);
-  }
+  resolveAttentionFirst(state, bottom);
 }
 
 const strikethrough: InlineRule = {
