@@ -36,13 +36,13 @@ describe('GFM spec examples through the reference parser', () => {
   });
 
   it('parses the footnote inputs into footnote nodes', () => {
-    let withReference = 0;
-    for (const input of footnoteInputs) {
-      if (JSON.stringify(parseReference(input, true)).includes('footnoteReference')) {
-        withReference++;
-      }
+    // Input 3 uses an undefined label and input 7 a label with a space. Both
+    // stay plain text, which makes them negative cases.
+    const plainText = [2, 6];
+    for (let i = 0; i < footnoteInputs.length; i++) {
+      const json = JSON.stringify(parseReference(footnoteInputs[i], true));
+      expect(json.includes('footnoteReference'), `input ${i + 1}`).toBe(!plainText.includes(i));
     }
-    expect(withReference).toBeGreaterThan(0);
   });
 });
 
