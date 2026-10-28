@@ -1,7 +1,7 @@
 ---
 id: core-skeleton
 title: Parser core: source, lines, block and inline frameworks
-status: active
+status: done
 priority: must
 type: contract
 outline: false

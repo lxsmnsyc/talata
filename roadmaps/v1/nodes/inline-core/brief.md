@@ -37,7 +37,7 @@ Add every CommonMark inline: backslash escapes, entity and numeric references, c
 
 Put links and images in `src/inline/link.ts`, so GFM footnote calls can take priority over it by registration. Reference links need `definitions` from blocks-leaf. Test them with a `DocumentState` whose `definitions` is filled by the test. The spec examples that need real definition parsing pass in spec-green.
 
-Spec sections from Backslash escapes to Textual content. Emphasis and links share the delimiter stack, so they are in one node. Entity decoding needs the HTML named character reference table; generate a compact table into `src/inline/entities.ts` from the WHATWG list, with no runtime dependency.
+Spec sections from Backslash escapes to Textual content. Emphasis and links share the delimiter stack, so they are in one node. Emphasis is a `resolve(state, bottom)` rule; a link calls `resolveSpan(state, bracketIndex + 1)` before moving nodes into itself, so delimiters never pair across a link boundary (parser-core v2 Behavior). `test/core.test.ts` has test-only `~~` and `[text](url)` rules showing the pattern. Entity decoding needs the HTML named character reference table; generate a compact table into `src/inline/entities.ts` from the WHATWG list, with no runtime dependency.
 
 ## Acceptance
 

@@ -39,7 +39,7 @@ Add `~~strikethrough~~` (single and double tildes, as the reference does) and au
 
 ## Context
 
-GFM spec sections Strikethrough and Autolinks (extension). The reference's output is the spec. It finds autolink literals in a tree transform over merged text nodes with `findAndReplace`, ignoring `link` and `linkReference`, and the nodes it creates have no `position`. Implement it as a `Transform` first, matching node boundaries and missing positions exactly. Moving it into the inline pass is a later optimization for perf-pass. Turn on `ready.gfm.strikethrough` and `ready.gfm.autolinkLiteral` when done.
+Strikethrough is a `resolve(state, bottom)` rule with `gfm: true`; links resolve their span first, so `~~[a~~](b)` keeps the outer `~~` as text (parser-core v2). GFM spec sections Strikethrough and Autolinks (extension). The reference's output is the spec. It finds autolink literals in a tree transform over merged text nodes with `findAndReplace`, ignoring `link` and `linkReference`, and the nodes it creates have no `position`. Implement it as a `Transform` first, matching node boundaries and missing positions exactly. Moving it into the inline pass is a later optimization for perf-pass. Turn on `ready.gfm.strikethrough` and `ready.gfm.autolinkLiteral` when done.
 
 ## Acceptance
 

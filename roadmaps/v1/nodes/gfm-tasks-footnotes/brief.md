@@ -48,7 +48,7 @@ Add task list items (`checked` on `listItem`) and footnotes (`footnoteDefinition
 
 ## Context
 
-Use rule priorities to run before the CommonMark definition and link rules instead of editing them where possible. Footnote calls resolve only against `footnotes` in `DocumentState`. Turn on `ready.gfm.taskList` and `ready.gfm.footnote` when done.
+Use rule priorities to run before the CommonMark definition and link rules instead of editing them where possible. Footnote definitions are a container block rule that can interrupt paragraphs, not a paragraph prefix rule (parser-core v2). Footnote calls resolve only against `footnotes` in `DocumentState`. Turn on `ready.gfm.taskList` and `ready.gfm.footnote` when done.
 
 GFM spec sections Task list items and footnotes as micromark-extension-gfm-footnote implements them.
 

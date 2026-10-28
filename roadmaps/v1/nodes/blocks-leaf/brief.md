@@ -41,7 +41,7 @@ Add setext headings, indented code, fenced code (with info string and meta), the
 
 ## Context
 
-Setext headings take over the open paragraph with `takeParagraph()`. Link reference definitions are a `ParagraphPrefixRule` that fills `definitions`. Merge after blocks-container and test the cross cases: a setext underline inside a list or quote, a definition inside a list or quote, lazy continuation.
+Setext headings take over the open paragraph with `takeParagraph()`, called before the rule knows the result, and start at `paragraph.start` so a heading after definitions starts before them. `test/core.test.ts` has a test-only setext rule (parser-core v2). Link reference definitions are a `ParagraphPrefixRule` that fills `definitions`. Merge after blocks-container and test the cross cases: a setext underline inside a list or quote, a definition inside a list or quote, lazy continuation.
 
 Spec sections: Setext headings, Indented code blocks, Fenced code blocks, HTML blocks, Link reference definitions. Definitions also feed the inline parser's reference map (see the contract). mdast nodes: `heading`, `code` (with `lang` and `meta`), `html`, `definition`.
 

@@ -40,7 +40,7 @@ Add GFM tables: delimiter row, alignment, escaped pipes, and rows that end the t
 
 ## Context
 
-The header row is the open paragraph's last line; take it with `takeParagraph()`. Turn on `ready.gfm.table` when done.
+The header row is the open paragraph's last line; take it with `splitParagraph(1)`, which leaves earlier lines to close as a paragraph and returns undefined under a lazy paragraph. Mark the open table `interruptible`, so any block start ends the body; body rows are never lazy. `test/core.test.ts` has a test-only table that shows both (parser-core v2). Turn on `ready.gfm.table` when done.
 
 GFM spec section Tables, and `mdast-util-gfm-table`.
 

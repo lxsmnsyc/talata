@@ -48,7 +48,7 @@ Differences left at this point come from interactions between rules: lazy contin
 
 ## Acceptance
 
-- [ ] `pnpm --filter talata test` passes with `READY = true` for the CommonMark and corpus suites (GFM suites may still be skipped).
+- [ ] `pnpm --filter talata test` passes with `ready.commonmark` and `ready.corpus` on (GFM suites may still be skipped).
 - [ ] Fast check passes: `pnpm --filter talata test && (cd packages/talata && npx tsc --noEmit -p .) && npx oxlint`
 
 ## Sizing
