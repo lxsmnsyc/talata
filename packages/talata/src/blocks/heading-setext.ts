@@ -3,6 +3,7 @@ import type { BlockRule, BlockState, OpenBlock } from '../core/blocks';
 import { isSpaceOrTab } from '../core/chars';
 import type { Line } from '../core/line';
 import { point } from '../core/source';
+import { paragraphIndents } from './paragraph';
 
 const EQUALS = 61; // =
 
@@ -62,7 +63,7 @@ const headingSetext: BlockRule = {
       children: [],
       position: { start: point(state.source, paragraph.start), end: point(state.source, end) },
     };
-    state.inline(node, paragraph.lines);
+    state.inline(node, paragraph.lines, paragraphIndents(paragraph));
     line.start = end;
     return new OpenSetextHeading(node);
   },

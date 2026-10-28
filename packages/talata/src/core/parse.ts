@@ -17,8 +17,9 @@ export default function parse(value: string, options: ParseOptions, rules: Regis
   const children = blocks.run();
   const nodes = blocks.inlineNodes;
   const ranges = blocks.inlineRanges;
+  const indents = blocks.inlineIndents;
   for (let i = 0; i < nodes.length; i++) {
-    nodes[i].children = parseInline(state, ranges[i]);
+    nodes[i].children = parseInline(state, ranges[i], indents[i]);
   }
   const tree: Root = {
     type: 'root',

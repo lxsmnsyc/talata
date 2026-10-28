@@ -49,6 +49,12 @@ export interface InlineState extends DocumentState {
   textStart: number;
   textEnd: number;
   delimiters: Delimiter[];
+  /**
+   * Flat triples for lines with whitespace after their container prefixes:
+   * line ending offset, offset after the prefixes, split-tab columns. As
+   * passed to `BlockState.inline`; undefined for leaves that did not pass any.
+   */
+  indents: number[] | undefined;
 }
 
 export interface InlineRule {
@@ -76,7 +82,11 @@ export interface InlineRule {
   resolve?(state: InlineState, bottom: number): void;
 }
 
-export function createInlineState(state: DocumentState, ranges: number[]): InlineState {
+export function createInlineState(
+  state: DocumentState,
+  ranges: number[],
+  indents?: number[],
+): InlineState {
   const first = ranges.length > 0 ? ranges[0] : 0;
   return {
     source: state.source,
@@ -95,6 +105,7 @@ export function createInlineState(state: DocumentState, ranges: number[]): Inlin
     textStart: -1,
     textEnd: -1,
     delimiters: [],
+    indents,
   };
 }
 
@@ -142,8 +153,12 @@ function tryRules(inline: InlineState, candidates: InlineRule[], pos: number): b
  * values with their raw line ending. Trailing whitespace before a line ending
  * becomes a hard break when it is two or more spaces with no tab.
  */
-export function parseInline(state: DocumentState, ranges: number[]): PhrasingContent[] {
-  const inline = createInlineState(state, ranges);
+export function parseInline(
+  state: DocumentState,
+  ranges: number[],
+  indents?: number[],
+): PhrasingContent[] {
+  const inline = createInlineState(state, ranges, indents);
   const text = state.source.text;
   const table = state.rules.inlineByChar;
   while (inline.range < ranges.length) {

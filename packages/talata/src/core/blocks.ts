@@ -63,8 +63,13 @@ export interface BlockState extends DocumentState {
    * restore after a failed start does not undo it.
    */
   openContainer(block: OpenBlock): void;
-  /** Schedules inline parsing of `ranges` into `node.children` after all blocks close. */
-  inline(node: { children: PhrasingContent[] }, ranges: number[]): void;
+  /**
+   * Schedules inline parsing of `ranges` into `node.children` after all
+   * blocks close. `indents` holds flat triples for lines with whitespace
+   * after their container prefixes: line ending offset, offset after the
+   * prefixes, split-tab columns (`OpenParagraph` keeps them).
+   */
+  inline(node: { children: PhrasingContent[] }, ranges: number[], indents?: number[]): void;
 }
 
 export interface BlockRule {
@@ -196,6 +201,7 @@ export class BlockParser implements BlockState {
   containerIndex = 0;
   inlineNodes: { children: PhrasingContent[] }[] = [];
   inlineRanges: number[][] = [];
+  inlineIndents: (number[] | undefined)[] = [];
 
   constructor(state: DocumentState) {
     this.source = state.source;
@@ -500,8 +506,9 @@ export class BlockParser implements BlockState {
     return taken;
   }
 
-  inline(node: { children: PhrasingContent[] }, ranges: number[]): void {
+  inline(node: { children: PhrasingContent[] }, ranges: number[], indents?: number[]): void {
     this.inlineNodes.push(node);
     this.inlineRanges.push(ranges);
+    this.inlineIndents.push(indents);
   }
 }
