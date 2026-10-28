@@ -1,7 +1,7 @@
 ---
 id: bundle-size
 title: Bundle size check
-status: active
+status: done
 priority: must
 type: feature
 outline: false
