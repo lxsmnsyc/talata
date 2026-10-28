@@ -1,6 +1,6 @@
 {
   "name": "talata",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Fast Markdown parser that produces remark-compatible mdast",
   "keywords": [
     "commonmark",
