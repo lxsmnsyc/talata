@@ -8,6 +8,7 @@ import { fromMarkdown } from 'mdast-util-from-markdown';
 import { gfmFromMarkdown } from 'mdast-util-gfm';
 import MarkdownIt from 'markdown-it';
 import { marked } from 'marked';
+import { loadTalata } from './talata.js';
 
 const readmeDir = new URL('../corpus/readmes/', import.meta.url);
 const readmes = readdirSync(readmeDir).map((file) =>
@@ -42,6 +43,11 @@ const pipelines = {
   'markdown-it tokens only': (doc) => gfmIt.parse(doc, {}),
   'marked html (gfm)': (doc) => marked.parse(doc, { async: false }),
 };
+
+const talata = await loadTalata();
+if (talata) {
+  pipelines['talata (gfm)'] = (doc) => talata(doc, { gfm: true });
+}
 
 for (const [inputName, docs] of Object.entries(inputs)) {
   group(inputName, () => {
