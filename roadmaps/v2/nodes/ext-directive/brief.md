@@ -1,7 +1,7 @@
 ---
 id: ext-directive
 title: Directive extension
-status: todo
+status: active
 priority: must
 type: feature
 outline: false

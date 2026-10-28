@@ -1,7 +1,7 @@
 ---
 id: ext-frontmatter
 title: Frontmatter extension
-status: todo
+status: active
 priority: must
 type: feature
 outline: false
