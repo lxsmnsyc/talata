@@ -1,7 +1,7 @@
 ---
 id: ci
 title: CI workflows for tests and releases
-status: active
+status: done
 priority: must
 type: feature
 outline: false
