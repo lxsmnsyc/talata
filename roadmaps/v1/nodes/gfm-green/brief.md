@@ -15,9 +15,11 @@ exclusive: []
 fulfilled_by:
 gate: false
 added:
-owns: []
+owns:
+  - packages/talata/test/gfm-green*.test.ts
 shared:
   - packages/talata/src/**
+  - packages/talata/test/fuzz/features.ts
 reserves: []
 provides: []
 depends_on:
@@ -39,6 +41,8 @@ depends_on:
 Every GFM example and every corpus file gives a tree equal to the reference parser with GFM enabled.
 
 ## Context
+
+Every GFM flag in `test/fuzz/features.ts` must be on.
 
 Remaining differences come from GFM rules interacting with each other or with CommonMark rules.
 

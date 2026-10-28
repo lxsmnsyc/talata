@@ -15,9 +15,12 @@ exclusive: [benchmark]
 fulfilled_by:
 gate: false
 added:
-owns: []
+owns:
+  - packages/talata/test/perf-pass*.test.ts
 shared:
   - packages/talata/src/**
+  - packages/talata/package.json
+  - pnpm-lock.yaml
 reserves: []
 provides: []
 depends_on:
