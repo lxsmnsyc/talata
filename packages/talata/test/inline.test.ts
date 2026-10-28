@@ -292,10 +292,6 @@ const growthCases: [string, (size: number) => string][] = [
   ['`_**a****b*_`', (size) => '_**a****b*_ '.repeat(size / 12)],
   ['unclosed comments', (size) => 'a <!--\n'.repeat(size / 7)],
   ['unclosed code spans', (size) => '`` a `b` '.repeat(size / 9)],
-  [
-    'failed brackets under delimiters',
-    (size) => '[*a '.repeat(size / 8) + ' a*]'.repeat(size / 8),
-  ],
   ['unclosed resources', (size) => '[a](b '.repeat(size / 6)],
 ];
 

@@ -1,6 +1,5 @@
 import type { Link } from 'mdast';
 import type { Delimiter, InlineRule, InlineState } from '../core/inline';
-import { DEAD_BRACKET } from '../core/inline';
 import { point, skipLineEnding } from '../core/source';
 import {
   OTHER,
@@ -277,12 +276,7 @@ function unbalanced(state: InlineState): boolean {
   const length = delimiters.length;
   let from = 0;
   if (bracketState === state) {
-    if (
-      openIndex !== -1 &&
-      openIndex < length &&
-      delimiters[openIndex] === openBracket &&
-      openBracket!.marker !== DEAD_BRACKET
-    ) {
+    if (openIndex !== -1 && openIndex < length && delimiters[openIndex] === openBracket) {
       return true;
     }
     if (cleanLength <= length && (cleanLength === 0 || delimiters[cleanLength - 1] === cleanLast)) {
