@@ -19,7 +19,9 @@ owns:
   - packages/talata/test/gfm-green*.test.ts
 shared:
   - packages/talata/src/**
-  - packages/talata/test/fuzz/features.ts
+  - packages/talata/test/fuzz/**
+  - packages/talata/test/parsers.ts
+  - packages/talata/test/gfm-tasks-footnotes.test.ts
   - packages/talata/test/fuzz/fixtures/**
   - roadmaps/v1/contracts/*.change-request.md
 reserves: []
