@@ -11,7 +11,7 @@ const module: unknown = await import(
   pathToFileURL(createRequire(fromMarkdown).resolve('character-entities')).href
 );
 const list: unknown = Reflect.get(Object(module), 'characterEntities');
-const names = Object.keys(Object(list));
+const names = Object.keys(typeof list === 'object' && list !== null ? list : {});
 
 describe('browser entity decoder under happy-dom', () => {
   it('decodes every name as the Node table does', () => {
