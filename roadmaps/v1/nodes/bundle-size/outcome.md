@@ -25,6 +25,7 @@ Rerun after perf-pass merges: `pnpm --filter benchmark size` (it rebuilds talata
 ## Deviations
 
 - Edited `packages/talata/scripts/generate-entities.mjs` (not in the brief's paths) so the generator writes the new table format. The old output would have been overwritten by the next run otherwise.
+- Added `packages/talata/test/bundle-size-dom.test.ts` (3 tests, happy-dom as a devDependency of `packages/talata`): `entities.browser.ts` gives the Node table's value for all 2,125 names, keeps `semi`, and rejects `notit`, `ampfoo`, unknown and empty names.
 - Added `packages/talata/test/bundle-size.test.ts` (3 tests): the table decodes all 2,125 names to the same value as the reference's `decode-named-character-reference`, and rejects the names it rejects.
 - `entities.ts` was regenerated from a local `entities.json` rebuilt from the previous table, because the sandbox had no network. The new test compares against the reference's `character-entities` list, so a wrong table would fail. Rerunning the generator with the network should give the same file.
 - `packages/talata/tsdown.config.ts` now exports an array of two configs. The second sets `clean: false`; the first cleans `dist` including `dist/browser`, and I saw `dist/browser` survive two rebuilds, but the order between the two configs is not documented.
@@ -35,7 +36,7 @@ Rerun after perf-pass merges: `pnpm --filter benchmark size` (it rebuilds talata
 
 ## Gotchas
 
-- The DOM decoder (`entities.browser.ts`) is not exercised by a test: no DOM library is installed. It copies the reference's logic. Check it once in a real browser, or add jsdom/happy-dom if a test is wanted.
+- The DOM decoder is tested under happy-dom (`test/bundle-size-dom.test.ts`), not in a real browser. happy-dom gave the Node table's result for all 2,125 names; no disagreement found, but a real browser was not run.
 - The margins are thin (about 1.3 KB gzip in the browser, 3.3 KB in Node). Code added by perf-pass or the extension nodes can erase the browser margin. The biggest non-table modules (minified): emphasis 5.2 KB, link 4.7 KB, autolink-literal 4.4 KB, core/blocks 4.4 KB, blocks/html 4.1 KB.
 - The test hooks `emphasisPaths` (emphasis.ts) and `workSteps` (lines.ts) are still in the public bundle; they cost a few hundred bytes. perf-pass removes them, as the brief says.
 - `pnpm build` output now holds `dist/browser/`. `files: ["dist"]` already ships it.
@@ -47,7 +48,7 @@ Rerun after perf-pass merges: `pnpm --filter benchmark size` (it rebuilds talata
 
 ## Verification
 
-- `pnpm --filter talata test`: 20 files, 4,976 tests pass.
+- `pnpm --filter talata test`: 21 files pass.
 - `npx tsc --noEmit -p .` in `packages/talata`: clean. `npx oxlint`: clean. `oxfmt` run on the touched files.
 - `pnpm --filter benchmark size`: talata smaller in both builds (table above).
 - No benchmarks run.
