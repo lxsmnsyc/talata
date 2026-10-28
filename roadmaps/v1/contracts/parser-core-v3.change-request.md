@@ -44,4 +44,3 @@ interface BlockState extends DocumentState {
 None. The list item rule applies the restrictions only after an open, matched paragraph (`state.paragraph !== undefined && !state.lazy`). After indented code, `2. b` and an empty `-` start a list where the reference does not. No spec example in Block quotes, List items or Lists depends on it.
 
 ## Decision
-

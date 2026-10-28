@@ -41,17 +41,17 @@ Without GFM: none known. The final 200,000-document run and every run since the 
 
 With GFM, every difference found comes from GFM features that are not built yet:
 
-| Input | Reference | Talata | Owner |
-| --- | --- | --- | --- |
-| `www.a.b`, `a@b.c` (spec 602, 606, 608, 611, 612) | link | text | gfm-inline |
-| `[www.` | text `"["`, then `"www."` as a separate node | one text `"[www."` | gfm-inline (the literal autolink attempt splits text even when it fails) |
-| `<\+@b.c` | text `"<"`, then the rest | one text node | gfm-inline (same) |
-| `~~a~~` | delete | text | gfm-inline |
-| `![~~a~~](b)` | alt `"a"` | alt `"~~a~~"` | gfm-inline (alt comes from the delete's text) |
-| `\| a \|\n\| - \|` | table | paragraph | gfm-tables |
-| `- [ ] a` | `checked: false` | `null` | gfm-tasks-footnotes |
-| `a[^1]\n\n[^1]: b` | footnote | text and paragraph | gfm-tasks-footnotes |
-| 23 corpus files with GFM (listed in `gfmWaiting` in `test/corpus.test.ts`) | tables, autolinks, task items | | gfm-tables, gfm-inline, gfm-tasks-footnotes |
+| Input                                                                      | Reference                                    | Talata             | Owner                                                                    |
+| -------------------------------------------------------------------------- | -------------------------------------------- | ------------------ | ------------------------------------------------------------------------ |
+| `www.a.b`, `a@b.c` (spec 602, 606, 608, 611, 612)                          | link                                         | text               | gfm-inline                                                               |
+| `[www.`                                                                    | text `"["`, then `"www."` as a separate node | one text `"[www."` | gfm-inline (the literal autolink attempt splits text even when it fails) |
+| `<\+@b.c`                                                                  | text `"<"`, then the rest                    | one text node      | gfm-inline (same)                                                        |
+| `~~a~~`                                                                    | delete                                       | text               | gfm-inline                                                               |
+| `![~~a~~](b)`                                                              | alt `"a"`                                    | alt `"~~a~~"`      | gfm-inline (alt comes from the delete's text)                            |
+| `\| a \|\n\| - \|`                                                         | table                                        | paragraph          | gfm-tables                                                               |
+| `- [ ] a`                                                                  | `checked: false`                             | `null`             | gfm-tasks-footnotes                                                      |
+| `a[^1]\n\n[^1]: b`                                                         | footnote                                     | text and paragraph | gfm-tasks-footnotes                                                      |
+| 23 corpus files with GFM (listed in `gfmWaiting` in `test/corpus.test.ts`) | tables, autolinks, task items                |                    | gfm-tables, gfm-inline, gfm-tasks-footnotes                              |
 
 The fuzzer's support filter does not skip the two text-split cases, so a GFM fuzz run reports them while `autolinkLiteral` is off.
 

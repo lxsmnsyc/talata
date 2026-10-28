@@ -22,7 +22,7 @@ All paths are under `packages/talata/src/`. Each rule is the default export of i
 
 ## Deviations
 
-- Contract: added `closeKeepsLineEnding: boolean` to `BlockState`, implemented in `core/blocks.ts` (`attach` sets it for container starts; `run()` sets it at a final line ending when every open container continues over the empty last line, through a new `continuesOverEnd`). Change request: `roadmaps/v1/contracts/parser-core-v3-blocks-leaf.change-request.md`. Without it, fenced code and HTML 1 to 5 get wrong end positions and values (`- ```\n  a\n- b`, `` ```\na\n``).
+- Contract: added `closeKeepsLineEnding: boolean` to `BlockState`, implemented in `core/blocks.ts` (`attach` sets it for container starts; `run()` sets it at a final line ending when every open container continues over the empty last line, through a new `continuesOverEnd`). Change request: `roadmaps/v1/contracts/parser-core-v3-blocks-leaf.change-request.md`. Without it, fenced code and HTML 1 to 5 get wrong end positions and values (`- ```\n  a\n- b`, ` ```\na\n`).
 - `test/core-sections.test.ts`: removed 48, 59, 69 and 225 from its waiting list, as the core-skeleton outcome asks. They pass now.
 - New test file `test/blocks-leaf.test.ts`, outside the owned paths.
 - `blocks/index.ts`: one rule per line; main (blocks-container) is merged in, with both rule sets kept.

@@ -62,14 +62,6 @@
   "dependencies": {
     "@types/mdast": "^4.0.4"
   },
-  "peerDependencies": {
-    "unified": "^11.0.0"
-  },
-  "peerDependenciesMeta": {
-    "unified": {
-      "optional": true
-    }
-  },
   "devDependencies": {
     "@types/node": "^26.6.5",
     "commonmark-spec": "^0.31.2",
@@ -86,6 +78,14 @@
     "typescript": "^7.0.2",
     "unified": "^11.0.5",
     "vitest": "^5.0.5"
+  },
+  "peerDependencies": {
+    "unified": "^11.0.0"
+  },
+  "peerDependenciesMeta": {
+    "unified": {
+      "optional": true
+    }
   },
   "engines": {
     "node": ">=20"

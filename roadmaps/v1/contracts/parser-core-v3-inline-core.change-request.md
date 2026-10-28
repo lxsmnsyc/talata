@@ -20,7 +20,7 @@ Give the inline parser each line's start after container prefixes:
 ```ts
 // core/blocks.ts
 interface OpenParagraph extends OpenBlock {
-  lines: number[];    // unchanged: flat [start, end) pairs, content start to line end
+  lines: number[]; // unchanged: flat [start, end) pairs, content start to line end
   prefixes: number[]; // new: per line, flat [offset, partialTab] pairs: line.start and line.partialTab after container prefixes
   start: number;
 }
@@ -51,4 +51,3 @@ The same data fixes a second case. A line ending ends after the next line's cont
 The interface change above would replace the side table with an explicit field. The orchestrator can accept it or close this request as handled by the side table.
 
 ## Decision
-

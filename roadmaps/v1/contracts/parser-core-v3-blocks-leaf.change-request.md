@@ -8,7 +8,7 @@
 Fenced code and HTML blocks of kinds 1 to 5 sometimes keep the line ending after their last line, and a leaf cannot tell when. micromark keeps it when the next line is not lazy. In the core's terms, that is when one of these holds:
 
 - a container starts on the next line (`- ```\n  a\n- b`: code ends at 3:1, after the line ending; `> ```\n> a\n- b` the same);
-- the document ends after a line ending and every open container continues on the empty line after it (`` ```\na\n`` and `- ```\n  a\n` end at 3:1; `> ```\n> a\n` ends at 2:4).
+- the document ends after a line ending and every open container continues on the empty line after it (` ```\na\n` and `- ```\n  a\n` end at 3:1; `> ```\n> a\n` ends at 2:4).
 
 When a leaf starts (`> ```\n> a\n# b`), the line is lazy (`> ```\n> a\nb`), or the line is blank (`> ```\n> a\n\nb`), the block ends before the line ending. `close(state, children)` runs inside `attach` or `closeTo`, and `BlockState` does not say which one, so the leaf cannot decide. HTML kinds 6 and 7 and indented code never keep it.
 
@@ -38,4 +38,3 @@ blocks-leaf implements the field and the behavior above in `packages/talata/src/
 Known gap, not covered by the flag: `> > ```\n> > a\n>`. The inner quote stays matched through the end-of-file special case in the contract's Positions section. The reference treats that line as lazy and ends the code at 2:6, but talata ends it at 3:1. A fix needs the container to say it matched only through that special case, for example by leaving a flag on the state. blocks-container owns the quote rule, so it can decide.
 
 ## Decision
-

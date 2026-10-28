@@ -59,18 +59,18 @@ All paths are under `packages/talata/src/inline/`. Each rule is a default export
 - Scratch corpus check: 5843 top-level paragraphs and headings compared; the 5 differences are all GFM autolink literals.
 - Pathological inputs at 50 KB, measured in vitest on this machine (best of runs; the reference from one run, in parentheses):
 
-  | Input | talata | reference |
-  | --- | --- | --- |
-  | `[`×25000 then `]`×25000 | 28 ms | 2026 ms |
-  | `* a` | 18 to 23 ms | 7924 ms |
-  | `_a*b ` | 33 ms | 10624 ms |
-  | `**_ a` | 31 ms | 5985 ms |
-  | `a**b` | 16 ms | 2974 ms |
-  | `*a `×n then ` a*`×n | 22 ms | 46653 ms |
-  | `*a* ` | 34 to 50 ms | 964 ms |
-  | `[a](b) ` | 19 ms | 515 ms |
-  | `[a [b] c ` | 9 ms | 286 ms |
-  | unclosed `<!--` on each line | 14 ms | not measured |
+  | Input                        | talata      | reference    |
+  | ---------------------------- | ----------- | ------------ |
+  | `[`×25000 then `]`×25000     | 28 ms       | 2026 ms      |
+  | `* a`                        | 18 to 23 ms | 7924 ms      |
+  | `_a*b `                      | 33 ms       | 10624 ms     |
+  | `**_ a`                      | 31 ms       | 5985 ms      |
+  | `a**b`                       | 16 ms       | 2974 ms      |
+  | `*a `×n then ` a*`×n         | 22 ms       | 46653 ms     |
+  | `*a* `                       | 34 to 50 ms | 964 ms       |
+  | `[a](b) `                    | 19 ms       | 515 ms       |
+  | `[a [b] c `                  | 9 ms        | 286 ms       |
+  | unclosed `<!--` on each line | 14 ms       | not measured |
 
   Timings were 2 to 3 times higher while a fuzz run shared the machine.
 

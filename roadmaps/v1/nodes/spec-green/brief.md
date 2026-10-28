@@ -47,14 +47,15 @@ Turn on `ready.commonmark` and `ready.corpus` and fix every remaining difference
 ## Context
 
 Known cross-node differences found in wave 2 reviews; fix each and add it as a test:
-- `- \`\`\`\n  a\n- b`: the list item ends one column off.
+
+- `- \`\`\`\n a\n- b`: the list item ends one column off.
 - `> > \`\`\`\n> > a\n>`: code ends at 3:1, the reference at 2:6 (the end-of-file quote rule versus a lazy line).
 - `> a\n<x>\n` and `- a\n<x>\n`: kind 7 HTML on a lazy line must stay inside the container, which continues over later lines (`> a\n<x>\n> c\n`). Needs core support.
 - Replace the `lineIndents` WeakMap side table (`src/inline/lines.ts`, filled in `src/blocks/paragraph.ts`) with the parser-core v3 `indents` argument to `inline()`; keep the container line-ending tests green.
 - From the fuzzer flag experiment (4000 documents per flag, seed 11): setext and definition gave 0 differences; turning on blockquote, list, code and html surfaced:
-  - a trailing-space hard break inside a quote or list item ends one or more columns early (`>`  \n>|`, `5.\n   `  \r   r`), also with `\r` line endings and non-ASCII text;
+  - a trailing-space hard break inside a quote or list item ends one or more columns early (`>` \n>|`, `5.\n `  \r   r`), also with `\r` line endings and non-ASCII text;
   - fenced code value with `\r` line endings (` ~~~\r \n_` gives `"\n_"`, the reference `"_"`); `\ta\r*` gives a list, the reference a paragraph;
-  - a trailing whitespace-only line at the end of a list item or quote extends its end by one line (` 1)  ___\n    o\n    `, `>    *\n>     o\n>     `);
+  - a trailing whitespace-only line at the end of a list item or quote extends its end by one line (`1)  ___\n    o\n   `, `>    *\n>     o\n>     `);
   - `    (\n3.` (the `tip` case above).
 - Code spans, raw HTML and reference labels that span lines inside list items: `lines.ts` `linePrefix()` guesses the container prefix (see `contracts/parser-core-v3-inline-core.change-request.md`).
 
