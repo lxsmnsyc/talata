@@ -10,7 +10,8 @@
 ## Deviations
 
 - An opening fence with no closing fence stops new containers (quote, list item, footnote definition) on all later lines in the reference. The rule reproduces this by swapping `state.rules` for a registry copy without container rules, matched by name. The directive container rule must be named `directiveContainer` for this to cover it; ext-directive should check the name.
-- Known gap: with `anywhere`, a matter that interrupts a lazy paragraph of a quote or list stays inside that container in the reference. Here it does not start. The default options are not affected.
+- Known gap, accepted by the orchestrator and pinned by a test: with `anywhere`, a matter that interrupts a lazy paragraph of a quote or list stays inside that container in the reference (input `> a\n---\nb\n---`). Here it does not start. The default options are not affected.
+- The container suppression after an unclosed fence is accepted for now, matched by rule name.
 - Priority 50 and `canInterruptParagraph: anywhere` as in the contract.
 
 ## Stubs left
@@ -26,6 +27,7 @@
 ## Proposed learnings
 
 - A multi-line concrete construct that fails turns off container starts for the rest of the document in micromark | found with the fuzzer | src/ext | yes, with `---\n>`.
+- Follow-up for core: a flag on the block state that stops container starts, instead of swapping `state.rules` and matching rule names | removes the name list | src/core | yes, with `---\n>`.
 
 ## Verification
 
