@@ -34,7 +34,7 @@
 - actionlint does not check inputs of third-party actions. The changesets/action sub-action inputs were read from the v2.1.2 README and `action.yml`.
 - The release `pack` job runs on `ubuntu-latest` with Node 24; the check job does not run the corpus download there, so corpus tests skip in the release run. The check workflow covers them.
 - The corpus step in the check workflow downloads three files from raw.githubusercontent.com. A network failure fails the job.
-- Unverified: whether `changesets/action/publish` with pnpm 12 does the npm OIDC exchange itself. It publishes the tarballs from `pack` and the job has `id-token: write`, as seroval's does.
+- Checked by example: `lxsmnsyc/brumate` uses `packageManager: pnpm@12.14.0` and the same changesets/action v2 four-job `release.yml`. `npm view brumate@0.3.0 dist.attestations` shows SLSA provenance, so `changesets/action/publish` under pnpm 12 does the npm OIDC trusted-publishing exchange.
 
 ## Setup trusted publishing needs
 
@@ -47,7 +47,7 @@ Do these in order. Do not push the repository before step 1, or the first run tr
 5. Merge the 0.1.0 changeset (the release node writes it). The "chore: version packages" pull request opens. Merging that pull request publishes 0.1.0 through OIDC, with no token.
 6. Optional: protect `main` and require `Check (Node 22)`, `Check (Node 24)` and `Smoke test built package (Node 20)`.
 
-Unverified until the 0.1.0 run: whether pnpm 12 with `changesets/action/publish` completes the npm OIDC exchange. If that run fails at the publish step, the fallback is `npm publish --provenance --access public` from `packages/talata` on a machine that can sign in, or a workflow change to publish with npm directly.
+That setup matches brumate, which claimed its name with a manual `0.0.0-stage` publish. Talata uses `0.0.0`; either works.
 
 ## Proposed learnings
 
