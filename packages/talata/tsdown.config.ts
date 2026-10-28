@@ -1,7 +1,10 @@
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'tsdown';
 
+// `clean` is off for both configs: the first one would delete dist/browser.
+// The `build` script empties dist first.
 const shared = {
+  clean: false,
   platform: 'neutral',
   target: 'es2020',
   // Keep `exports.default` next to the named export, as the .d.cts says.
@@ -24,7 +27,6 @@ export default defineConfig([
     entry: { index: 'src/index.ts', unified: 'src/unified.ts' },
     outDir: 'dist/browser',
     dts: false,
-    clean: false,
     format: ['esm'],
     alias: {
       './entities': fileURLToPath(new URL('src/inline/entities.browser.ts', import.meta.url)),
