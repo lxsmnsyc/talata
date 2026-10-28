@@ -12,9 +12,9 @@ import { fromMarkdown } from '../src';
 // The roadmap node that lands a feature turns its flag on.
 export const ready = {
   // The block and inline parser: CommonMark spec examples, with and without gfm.
-  commonmark: false,
+  commonmark: true,
   // Every file of the benchmark corpus, parsed with gfm.
-  corpus: false,
+  corpus: true,
   // One flag per GFM feature. Each gates the spec examples of that section.
   gfm: {
     table: false,
@@ -24,6 +24,14 @@ export const ready = {
     footnote: false,
   },
 };
+
+// True when every GFM feature is on. The corpus is compared with GFM then.
+export function gfmReady(): boolean {
+  const flags = ready.gfm;
+  return (
+    flags.table && flags.strikethrough && flags.autolinkLiteral && flags.taskList && flags.footnote
+  );
+}
 
 export function parseReference(value: string, useGfm: boolean): Root {
   if (!useGfm) {
