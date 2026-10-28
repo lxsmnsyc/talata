@@ -4,6 +4,8 @@ import { gfm } from 'micromark-extension-gfm';
 import { describe, expect, it } from 'vitest';
 import { fromMarkdown } from '../src';
 import { normalizeIdentifier } from '../src/core/state';
+import { emphasisPaths } from '../src/inline/emphasis';
+import { workSteps } from '../src/inline/lines';
 import { specExamples, specText } from './parsers';
 import { describeDiff, firstDiff } from './tree-diff';
 
@@ -188,18 +190,91 @@ describe('normalizeIdentifier and the test definitions agree', () => {
   });
 });
 
-// Pathological inputs must grow about linearly. Make the input 8 times larger
-// and compare the best of five runs: linear work grows about 8 times,
-// quadratic work 64 times. The bound sits between them, with room for noise
-// from test files running in parallel.
-function bestTime(markdown: string): number {
-  let best = Number.POSITIVE_INFINITY;
-  for (let run = 0; run < 5; run++) {
-    const start = performance.now();
-    fromMarkdown(markdown);
-    best = Math.min(best, performance.now() - start);
+// Review cases: a run that shrinks after failing the rule of three pairs
+// again inside the outer emphasis (micromark resolves a pair's inside
+// again), and line endings after a lookahead into the next line end after
+// that line's container prefixes.
+const reviewCases = [
+  '_**a****b*_',
+  '*__a____b_*',
+  '>`\n>*a*',
+  '- `\n  *a*',
+  '>`\\\n>]',
+  '><a\n>*a*',
+  '>`\n>   *a*',
+  '>`\n>\t\t*a*',
+  '>`\n>a\n>*b*',
+  '> a\n> *b*',
+  '- a `b\n     c`',
+  '- x <a\n         b>',
+  '- [a\n     b]\n\n[a b]: /u',
+  '> - `a\n>   b`',
+];
+
+describe('review cases', () => {
+  for (const markdown of reviewCases) {
+    it(JSON.stringify(markdown), () => {
+      expect(compare(markdown)).toBeUndefined();
+    });
   }
-  return best;
+});
+
+// xorshift32: a 32-bit generator that stays in integers.
+function generator(seed: number): () => number {
+  let state = seed | 0 || 1;
+  return () => {
+    state ^= state << 13;
+    state ^= state >>> 17;
+    state ^= state << 5;
+    return state >>> 0;
+  };
+}
+
+// Emphasis resolves on a linear path unless other rules' delimiters share
+// the span. Both paths must build the same trees.
+describe('linear and general emphasis paths agree', () => {
+  it('on generated emphasis-heavy inputs', () => {
+    // Runs of `*` or `_` (1 to 4 long) between letters, spaces or punctuation.
+    const between = ['a', 'b', 'a', 'b', ' ', '.', '[', '](u)'];
+    const next = generator(20_261_028);
+    const seen = new Set<string>();
+    let compared = 0;
+    for (let i = 0; i < 8000; i++) {
+      let markdown = '';
+      const runs = 3 + (next() % 5);
+      for (let j = 0; j < runs; j++) {
+        markdown += (next() % 2 === 0 ? '*' : '_').repeat(1 + (next() % 4));
+        if (j + 1 < runs) {
+          markdown += between[next() % between.length];
+        }
+      }
+      if (seen.has(markdown)) {
+        continue;
+      }
+      seen.add(markdown);
+      const linear = fromMarkdown(markdown);
+      emphasisPaths.mixedOnly = true;
+      let general;
+      try {
+        general = fromMarkdown(markdown);
+      } finally {
+        emphasisPaths.mixedOnly = false;
+      }
+      expect(describeDiff(firstDiff(general, linear)), JSON.stringify(markdown)).toBeUndefined();
+      compared++;
+    }
+    expect(compared).toBeGreaterThan(6000);
+  });
+});
+
+// Pathological inputs must need about linear work. `workSteps` counts the
+// inner steps of the rules that scan ahead or back. Making the input 8 times
+// larger must not make the count grow more than 12 times (quadratic work
+// grows 64 times).
+function steps(markdown: string): number {
+  workSteps.count = 0;
+  fromMarkdown(markdown);
+  return workSteps.count;
 }
 
 const growthCases: [string, (size: number) => string][] = [
@@ -214,18 +289,18 @@ const growthCases: [string, (size: number) => string][] = [
   ['`a**b`', (size) => 'a**b'.repeat(size / 4)],
   ['nested emphasis', (size) => '*a '.repeat(size / 6) + ' a*'.repeat(size / 6)],
   ['`*a* `', (size) => '*a* '.repeat(size / 4)],
+  ['`_**a****b*_`', (size) => '_**a****b*_ '.repeat(size / 12)],
   ['unclosed comments', (size) => 'a <!--\n'.repeat(size / 7)],
   ['unclosed code spans', (size) => '`` a `b` '.repeat(size / 9)],
+  ['unclosed resources', (size) => '[a](b '.repeat(size / 6)],
 ];
 
-describe('growth on pathological inputs', () => {
+describe('work growth on pathological inputs', () => {
   for (const [name, build] of growthCases) {
     it(name, () => {
-      const small = build(4000);
-      const large = build(32_000);
-      bestTime(small);
-      const ratio = bestTime(large) / Math.max(bestTime(small), 1);
-      expect(ratio).toBeLessThan(24);
+      const small = steps(build(4800));
+      const large = steps(build(38_400));
+      expect(large).toBeLessThan(12 * Math.max(small, 100));
     });
   }
 });

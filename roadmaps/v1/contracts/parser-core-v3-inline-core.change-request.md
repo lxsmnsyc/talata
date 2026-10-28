@@ -42,7 +42,13 @@ core-skeleton's paragraph (now blocks-leaf for definitions and setext), blocks-c
 
 ## Workaround in place
 
-`src/inline/lines.ts` `linePrefix()` guesses from the source: all whitespace when only whitespace precedes the range on its line (right for top-level and lazy lines), and what follows a `>` plus its optional space or split tab (right for block quotes). Inside list items it counts the item's indent as kept whitespace, which is wrong. Code spans, raw HTML and reference labels that span lines inside list items differ from the reference until this lands. Text nodes are not affected.
+Round 2 (inline-core review): exact for paragraphs without a contract change. `src/blocks/paragraph.ts` already recorded `line.start` and `partialTab` for indented continuation lines (blocks-leaf, for definitions, only in paragraphs starting with `[`). It now records them for every multi-line paragraph and registers them in `lineIndents`, a `WeakMap` exported from `src/inline/lines.ts` and keyed by the paragraph's `lines` array, which is the ranges array the inline parser gets. Setext headings pass that same array.
+
+For other multi-line leaves `lines.ts` still guesses: all whitespace when only whitespace precedes the range on its line, or what follows a `>` and its optional space or split tab. No other multi-line leaf exists yet.
+
+The same data fixes a second case. A line ending ends after the next line's container prefixes when a lookahead (code span, raw HTML, link resource or label) already reached that line, as micromark feeds lines one at a time.
+
+The interface change above would replace the side table with an explicit field. The orchestrator can accept it or close this request as handled by the side table.
 
 ## Decision
 

@@ -1,6 +1,6 @@
 import type { InlineRule, InlineState } from '../core/inline';
 import { point, skipLineEnding } from '../core/source';
-import { linePrefix } from './lines';
+import { linePrefix, reach, workSteps } from './lines';
 import { appendText, pushNode } from './text';
 
 // Code spans: a run of backticks up to the next run of the same length,
@@ -69,6 +69,7 @@ function parseCodeSpan(state: InlineState): boolean {
   let close = -1;
   for (;;) {
     while (pos < end) {
+      workSteps.count++;
       if (text.charCodeAt(pos) !== BACKTICK) {
         pos++;
         continue;
@@ -88,6 +89,7 @@ function parseCodeSpan(state: InlineState): boolean {
     range += 2;
     pos = ranges[range];
     end = ranges[range + 1];
+    reach(state, range);
   }
   if (close === -1) {
     // No closer: the whole opening run is text.

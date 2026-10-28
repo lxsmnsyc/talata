@@ -1,7 +1,7 @@
 import type { InlineRule, InlineState } from '../core/inline';
 import { point, skipLineEnding } from '../core/source';
 import { isAsciiAlpha, isAsciiAlphanumeric } from './classify';
-import { END, LINE_ENDING, linePrefix, nextLine, peek } from './lines';
+import { END, LINE_ENDING, linePrefix, nextLine, peek, workSteps } from './lines';
 import type { Cursor } from './lines';
 import { pushNode } from './text';
 
@@ -112,6 +112,7 @@ function scan(state: InlineState): number {
   let index = 0;
   cursor.pos++;
   for (;;) {
+    workSteps.count++;
     const code = peek(state, cursor);
     if (code === LINE_ENDING) {
       // Only states that allow a line ending reach here with one.

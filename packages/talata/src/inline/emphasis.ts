@@ -4,6 +4,7 @@ import type { InlineRule, InlineState } from '../core/inline';
 import { nodeIndex, resolveSpan } from '../core/inline';
 import { point } from '../core/source';
 import { OTHER, PUNCTUATION, WHITESPACE, classifyCharacter } from './classify';
+import { workSteps } from './lines';
 import { appendText, mergeText, pushNode } from './text';
 
 // Emphasis and strong emphasis with `*` and `_`, following micromark's
@@ -11,6 +12,9 @@ import { appendText, mergeText, pushNode } from './text';
 // with the nearest matching opener.
 
 const TILDE = 126;
+
+/** For tests: `mixedOnly` sends every span to the general path, to compare both. */
+export const emphasisPaths: { mixedOnly: boolean } = { mixedOnly: false };
 const EXCLAMATION = 33;
 const LEFT_BRACKET = 91;
 
@@ -126,6 +130,7 @@ function resolveMixed(state: InlineState, bottom: number): void {
     const closeSize = closer.end - closer.start;
     let open = index - 1;
     for (; open >= bottom; open--) {
+      workSteps.count++;
       const opener = delimiters[open];
       if (opener.marker !== marker || !opener.canOpen) {
         continue;
@@ -186,15 +191,47 @@ const PAIR_SIZE = 5;
 function resolveLinear(state: InlineState, bottom: number): void {
   const delimiters = state.delimiters;
   const count = delimiters.length - bottom;
+  const all = new Int32Array(count);
+  for (let i = 0; i < count; i++) {
+    all[i] = i;
+  }
+  const pairs: number[] = [];
+  // Lists of delimiters to pair, as indices from `bottom`. A pair's inside
+  // is paired again on its own; that never touches the outer list again, so
+  // the order lists run in does not matter.
+  const queue: Int32Array[] = [all];
+  while (queue.length > 0) {
+    pairList(state, bottom, queue.pop()!, pairs, queue);
+  }
+  if (pairs.length > 0) {
+    rebuild(state, bottom, count, pairs);
+  }
+  delimiters.length = bottom;
+}
+
+/**
+ * Pairs the delimiters `ids` (indices from `bottom`, in order) as
+ * micromark's attention resolver does, appending to `pairs`. The delimiters
+ * left between a new pair go to `queue`: micromark resolves a pair's inside
+ * again (insideSpan), where runs that an earlier pair shrank can now pair.
+ */
+function pairList(
+  state: InlineState,
+  bottom: number,
+  ids: Int32Array,
+  pairs: number[],
+  queue: Int32Array[],
+): void {
+  const delimiters = state.delimiters;
+  const count = ids.length;
   const previous = new Int32Array(count);
   for (let i = 0; i < count; i++) {
     previous[i] = i - 1;
   }
   const bottoms = new Int32Array(12);
-  const pairs: number[] = [];
   let index = 0;
   while (index < count) {
-    const closer = delimiters[bottom + index];
+    const closer = delimiters[bottom + ids[index]];
     const marker = closer.marker;
     if (!closer.canClose || (marker !== ASTERISK && marker !== UNDERSCORE)) {
       index++;
@@ -205,7 +242,8 @@ function resolveLinear(state: InlineState, bottom: number): void {
     const limit = bottoms[key];
     let open = previous[index];
     for (; open >= limit; open = previous[open]) {
-      const opener = delimiters[bottom + open];
+      workSteps.count++;
+      const opener = delimiters[bottom + ids[open]];
       if (opener.marker !== marker || !opener.canOpen) {
         continue;
       }
@@ -227,12 +265,27 @@ function resolveLinear(state: InlineState, bottom: number): void {
       index++;
       continue;
     }
-    const opener = delimiters[bottom + open];
+    const opener = delimiters[bottom + ids[open]];
     const use = opener.end - opener.start > 1 && closeSize > 1 ? 2 : 1;
     opener.end -= use;
     closer.start += use;
-    pairs.push(open, index, use, opener.end, closer.start);
-    // Everything between the pair drops out.
+    pairs.push(ids[open], ids[index], use, opener.end, closer.start);
+    // Everything between the pair drops out of this list and is paired again
+    // on its own.
+    let inside = 0;
+    for (let k = previous[index]; k > open; k = previous[k]) {
+      inside++;
+    }
+    if (inside > 1) {
+      const list = new Int32Array(inside);
+      let k = previous[index];
+      for (let i = inside - 1; i >= 0; i--) {
+        workSteps.count++;
+        list[i] = ids[k];
+        k = previous[k];
+      }
+      queue.push(list);
+    }
     if (opener.end > opener.start) {
       previous[index] = open;
       for (let k = 0; k < 12; k++) {
@@ -250,10 +303,6 @@ function resolveLinear(state: InlineState, bottom: number): void {
       index++;
     }
   }
-  if (pairs.length > 0) {
-    rebuild(state, bottom, count, pairs);
-  }
-  delimiters.length = bottom;
 }
 
 /** Replaces the span's nodes with the emphasis and strong nodes of `pairs`. */
@@ -335,7 +384,7 @@ function resolveEmphasis(state: InlineState, bottom: number): void {
   if (state.delimiters.length <= bottom) {
     return;
   }
-  if (onlyEmphasis(state, bottom)) {
+  if (!emphasisPaths.mixedOnly && onlyEmphasis(state, bottom)) {
     resolveLinear(state, bottom);
   } else {
     resolveMixed(state, bottom);
