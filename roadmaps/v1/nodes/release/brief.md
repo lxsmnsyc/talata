@@ -45,7 +45,7 @@ Write the README (usage, options, the unified plugin, differences from the refer
 
 ## Context
 
-From spec-green: list these reference-versus-spec quirks in `packages/talata/README.md` (details in `nodes/spec-green/outcome.md`): kind 7 HTML on a lazy line stays in its containers; one-line indented code on a lazy line; fenced code line-ending trimming; NUL next to emphasis; list item and quote ends after a kept line ending.
+From spec-green: list these reference-versus-spec quirks in `packages/talata/README.md` (details in `nodes/spec-green/outcome.md`): kind 7 HTML on a lazy line stays in its containers; one-line indented code on a lazy line; fenced code line-ending trimming; NUL next to emphasis; list item and quote ends after a kept line ending. From gfm-tables: a kind 7 HTML header line takes the delimiter row as HTML (`a\n<n>\n|-`); no header right after a table closed by a lazy line; one-column tables without pipes (`a\n:-`).
 
 Follow the plain-writing skill for docs and the changesets skill for the changeset.
 

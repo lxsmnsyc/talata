@@ -18,7 +18,7 @@ export const ready = {
   corpus: true,
   // One flag per GFM feature. Each gates the spec examples of that section.
   gfm: {
-    table: false,
+    table: true,
     strikethrough: false,
     autolinkLiteral: false,
     taskList: true,

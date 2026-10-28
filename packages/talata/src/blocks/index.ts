@@ -10,6 +10,7 @@ import headingSetext from './heading-setext';
 import html from './html';
 import listItem from './list-item';
 import thematicBreak from './thematic-break';
+import table from '../gfm/table';
 
 // Registered block rules. Each rule lives in its own file; add one line here.
 // Priorities (lower runs first), spaced so GFM and later rules fit between:
@@ -26,6 +27,7 @@ export const blockRules: BlockRule[] = [
   codeIndented,
   footnoteDefinition,
   taskListStart,
+  table,
 ];
 
 // Registered paragraph prefix rules (link reference definitions).

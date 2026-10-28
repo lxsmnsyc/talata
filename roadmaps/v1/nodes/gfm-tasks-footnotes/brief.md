@@ -31,6 +31,7 @@ shared:
   - packages/talata/test/corpus.test.ts
   - packages/talata/test/equivalence.test.ts
   - packages/talata/test/gfm.test.ts
+  - packages/talata/test/fuzz/fixtures/**
 reserves: []
 provides: []
 depends_on:
