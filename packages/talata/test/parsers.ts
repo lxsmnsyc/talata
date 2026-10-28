@@ -21,8 +21,8 @@ export const ready = {
     table: false,
     strikethrough: false,
     autolinkLiteral: false,
-    taskList: false,
-    footnote: false,
+    taskList: true,
+    footnote: true,
   },
 };
 

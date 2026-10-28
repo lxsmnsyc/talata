@@ -70,9 +70,8 @@ const gfmWaiting = new Map<string, GfmFeature[]>([
   ['readmes/33.md', ['table']],
   ['readmes/38.md', ['autolinkLiteral']],
   ['readmes/40.md', ['autolinkLiteral']],
-  ['readmes/87.md', ['taskList']],
   ['readmes/91.md', ['table', 'autolinkLiteral']],
-  ['readmes/93.md', ['table', 'taskList']],
+  ['readmes/93.md', ['table']],
   ['readmes/97.md', ['table']],
   ['readmes/99.md', ['table']],
 ]);

@@ -16,7 +16,6 @@ const GREATER_THAN = 62;
 const LEFT_BRACKET = 91;
 const BACKSLASH = 92;
 const RIGHT_BRACKET = 93;
-const CARET = 94;
 
 /** Indent entries the scanners stepped over, for a test that checks the lookup stays linear. */
 export const indentSteps = { count: 0 };
@@ -116,7 +115,7 @@ class Scanner {
   }
 
   /** The label between brackets, raw, or undefined. `pos` is on `[`. */
-  label(gfm: boolean): string | undefined {
+  label(): string | undefined {
     const text = this.text;
     this.pos++;
     let value = '';
@@ -147,10 +146,6 @@ class Scanner {
         value += text.slice(from, this.pos);
         this.pos++;
         return value;
-      }
-      // With GFM, `[^` starts a footnote definition, not a definition.
-      if (gfm && code === CARET && size === 0) {
-        return undefined;
       }
       size++;
       if (!seen && !isSpaceOrTab(code)) {
@@ -270,7 +265,7 @@ function parseDefinition(state: BlockState, scanner: Scanner): Definition | unde
   if (text.charCodeAt(start) !== LEFT_BRACKET) {
     return undefined;
   }
-  const label = scanner.label(state.options.gfm);
+  const label = scanner.label();
   if (
     label === undefined ||
     scanner.pos === scanner.end ||

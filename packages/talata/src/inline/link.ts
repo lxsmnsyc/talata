@@ -11,6 +11,7 @@ import type { Delimiter, InlineRule, InlineState } from '../core/inline';
 import { nodeIndex, resolveSpan } from '../core/inline';
 import { point, skipLineEnding } from '../core/source';
 import { normalizeIdentifier } from '../core/state';
+import { imageFootnoteCall } from '../gfm/footnote';
 import { decodeString } from './decode';
 import {
   END,
@@ -467,6 +468,12 @@ function closeBracket(state: InlineState): boolean {
     kind = SHORTCUT;
   }
   if (kind === NONE) {
+    // GFM: `![^a]` is `!` and a footnote call.
+    if (bracket.marker === EXCLAMATION && imageFootnoteCall(state, bracket, labelRange, close)) {
+      delimiters.length = open;
+      popBracket();
+      return true;
+    }
     return failBracket(state, open);
   }
   if (kind === SHORTCUT || kind === COLLAPSED) {
