@@ -83,8 +83,6 @@ jobs:
     name: Publish to npm
     needs: pack
     runs-on: ubuntu-latest
-    # Add required reviewers to this environment to approve each release.
-    environment: npm
     permissions:
       contents: write
       # Trusted publishing to npm.

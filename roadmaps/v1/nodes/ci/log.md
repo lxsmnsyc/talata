@@ -11,3 +11,4 @@
 - Rebased onto main; oxlint and oxfmt clean.
 - Removed the 0.0.0 guard step: the user publishes 0.0.0 by hand before pushing, so select-mode returns none. Setup steps reordered.
 - release.yml replaced by a copy of brumate's (major tags, environment npm, no harden-runner, no repository guard).
+- Removed environment npm from the publish job. Name claimed with 0.0.0-stage; 0.1.0 changeset committed before the first push.
