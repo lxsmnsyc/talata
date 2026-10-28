@@ -1,7 +1,7 @@
 ---
 id: perf-pass
 title: Reach the speed target
-status: active
+status: done
 priority: must
 type: feature
 outline: false
@@ -18,8 +18,10 @@ added:
 # 2026-10-28: scope cut by the user. The speed target already holds (16.4x and 18.7x); see GOAL.md Decisions.
 owns:
   - packages/talata/test/perf-pass*.test.ts
+  - benchmark/RESULTS.md
 shared:
   - packages/talata/src/**
+  - packages/talata/test/inline.test.ts
   - packages/talata/package.json
   - pnpm-lock.yaml
   - packages/talata/test/fuzz/fixtures/**
