@@ -87,6 +87,7 @@ release:
 - 2026-10-28: `pnpm --filter benchmark interleaved` before perf-pass, on a fresh build, load average about 2: talata is 16.4x faster than "mdast + gfm" on the README corpus (33.5 ms against 550.1 ms), 18.7x on `node fs.md` (10.0 ms against 186.7 ms) and 21.1x on CHANGELOG_V22 (24.8 ms against 522.8 ms). The speed target is met on one run; perf-pass needs a second run and still owns the quadratic and garbage collection fixes in its brief.
 - 2026-10-28: extensions after 0.1, chosen by the user: first-party frontmatter, math and directives first. When those work without core changes, publish an experimental public rule API (`talata/extension`) with a test kit that compares an extension's output with its `mdast-util-*` counterpart. MDX stays a separate, later project. micromark extensions stay unsupported.
 - 2026-10-28: the benchmark and README compare talata only with the remark/mdast stack and HTML renderers, not md4x (the user's call). md4x measured about 2x faster than talata at its own AST, which is not mdast and has no positions.
+- 2026-10-28: HTML output stays a non-goal for 0.1 (`debate-html/debate.md`, decided by the orchestrator at the user's request). talata replaces mdast-util-from-markdown. The README shows the to-hast path for HTML: 6.5x to 7.5x faster than micromark's HTML, not byte-identical. A byte-identical `talata/html` is the parked outline node html-output.
 
 ## Gates
 

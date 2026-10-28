@@ -1,0 +1,13 @@
+2026-10-28 19:44, load 1.75, Apple M2, Node 26.12.1, median of 11 interleaved rounds
+identical HTML: 1/139, identical ignoring blank lines: 6/139
+readmes
+  micromark html + gfm             592.6 ms  1.0x
+  talata -> to-hast -> to-html      90.8 ms  6.5x faster than micromark html
+  talata parse only                 36.5 ms  16.2x
+  markdown-it html                  88.7 ms  6.7x
+node fs.md
+  micromark html + gfm             189.2 ms  1.0x
+  talata -> to-hast -> to-html      25.4 ms  7.5x
+  talata parse only                 10.4 ms  18.2x
+  markdown-it html                  36.7 ms  5.2x
+npm weekly downloads (api.npmjs.org, last week): micromark 58,056,964; mdast-util-from-markdown 56,469,626; remark-parse 50,813,405

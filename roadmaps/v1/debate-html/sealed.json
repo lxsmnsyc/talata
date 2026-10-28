@@ -1,0 +1,151 @@
+{
+  "round": 1,
+  "claims": {
+    "J1": {
+      "id": "J1",
+      "round": 1,
+      "by": "judge",
+      "kind": "fact",
+      "axis": "time",
+      "text": "talata's existing path (fromMarkdown, mdast-util-to-hast, hast-util-to-html) renders HTML 6.5x faster than micromark HTML + GFM on the READMEs and 7.5x on node fs.md.",
+      "evidence": {
+        "type": "measured",
+        "source": "node --expose-gc evidence/html-bench.mjs",
+        "detail": "evidence/html-bench.txt"
+      }
+    },
+    "J2": {
+      "id": "J2",
+      "round": 1,
+      "by": "judge",
+      "kind": "fact",
+      "axis": "scope",
+      "text": "That path gives the same HTML string as micromark for 1 of 139 READMEs (6 of 139 ignoring blank lines), so it is not a drop-in for micromark() callers.",
+      "evidence": {
+        "type": "measured",
+        "source": "node --expose-gc evidence/html-bench.mjs",
+        "detail": "evidence/html-bench.txt"
+      }
+    },
+    "J3": {
+      "id": "J3",
+      "round": 1,
+      "by": "judge",
+      "kind": "fact",
+      "axis": "scope",
+      "text": "micromark has 58.1M weekly downloads and mdast-util-from-markdown 56.5M, so at most about 1.6M a week (3%) reach micromark other than through mdast-util-from-markdown. Direct HTML callers are a subset of that.",
+      "evidence": {
+        "type": "measured",
+        "source": "api.npmjs.org/downloads/point/last-week",
+        "detail": "evidence/html-bench.txt"
+      }
+    },
+    "J4": {
+      "id": "J4",
+      "round": 1,
+      "by": "judge",
+      "kind": "fact",
+      "axis": "scope",
+      "text": "micromark-baseline/README.md, the origin of the idea, defines it as a rewrite of micromark and mdast-util-from-markdown that passes the same spec tests and produces the same mdast while parsing faster. HTML appears only as a baseline row.",
+      "evidence": {
+        "type": "source",
+        "source": "~/Documents/GitHub/micromark-baseline/README.md"
+      }
+    },
+    "P1": {
+      "id": "P1",
+      "round": 1,
+      "by": "proponent",
+      "kind": "proposal",
+      "text": "Add talata/html: toHtml(value, {gfm}) that returns the same HTML string as micromark with gfm and gfmHtml, built straight from talata's parse without an mdast tree, so talata is a full faster micromark.",
+      "estimate": {
+        "value": 15,
+        "unit": "x faster than micromark html (guess, near parse-only speed)"
+      },
+      "evidence": {
+        "type": "estimate",
+        "source": "J1: parse alone is 16.2x to 18.2x; a direct renderer skips to-hast and to-html"
+      }
+    },
+    "P2": {
+      "id": "P2",
+      "round": 1,
+      "by": "proponent",
+      "kind": "proposal",
+      "text": "Test it cheaply: the CommonMark and GFM spec examples are HTML, and micromark passes all 652, so the existing harness and fuzzer can compare HTML strings.",
+      "evidence": {
+        "type": "source",
+        "source": "micromark-baseline spec table; packages/talata/test/fuzz"
+      }
+    },
+    "P3": {
+      "id": "P3",
+      "round": 1,
+      "by": "proponent",
+      "kind": "alternative",
+      "text": "Keep HTML a non-goal for 0.1. Document the to-hast path in the README with its measured speed and the note that its HTML differs from micromark's. Park a byte-identical talata/html as an outline node, revisited when users ask for it after 0.1.",
+      "evidence": {
+        "type": "measured",
+        "source": "J1, J2"
+      }
+    },
+    "O1": {
+      "id": "O1",
+      "round": 1,
+      "by": "opponent",
+      "kind": "cost",
+      "axis": "time",
+      "severity": "high",
+      "answers": ["P1"],
+      "text": "A second output with a byte-exact contract against micromark's HTML (attribute order, escaping, footnote sections, raw HTML handling, line endings) is a second release-blocking differential target: new renderer, fuzzer mode, spec harness mode. It delays 0.1 by about one L node.",
+      "estimate": {
+        "value": 1,
+        "unit": "L node"
+      },
+      "evidence": {
+        "type": "calibration",
+        "source": "roadmaps/CALIBRATION.md: gfm-green and spec-green were S to L with several fuzz rounds each"
+      }
+    },
+    "O2": {
+      "id": "O2",
+      "round": 1,
+      "by": "opponent",
+      "kind": "cost",
+      "axis": "device",
+      "severity": "low",
+      "answers": ["P1"],
+      "text": "A renderer and its GFM parts add code to the bundle. The browser margin over the reference is about 1.4 KB gzip, but a separate talata/html entry would not reach users of the main entry.",
+      "evidence": {
+        "type": "source",
+        "source": "roadmaps/v1/nodes/bundle-size/outcome.md"
+      }
+    },
+    "O3": {
+      "id": "O3",
+      "round": 1,
+      "by": "opponent",
+      "kind": "risk",
+      "axis": "scope",
+      "severity": "medium",
+      "answers": ["P1"],
+      "text": "HTML output pulls toward HTML-only extensions (micromark htmlExtensions), a second extension surface that the extension plan in GOAL.md does not cover.",
+      "evidence": {
+        "type": "source",
+        "source": "roadmaps/v1/GOAL.md Decisions, extension plan of 2026-10-28"
+      }
+    },
+    "O4": {
+      "id": "O4",
+      "round": 1,
+      "by": "opponent",
+      "kind": "rebuttal",
+      "answers": ["P2"],
+      "text": "Spec examples are normalized HTML, while micromark callers depend on exact output, so spec passes do not prove byte equality on real documents; the fuzzer would still need an HTML mode.",
+      "evidence": {
+        "type": "source",
+        "source": "commonmark-spec compares normalized HTML"
+      }
+    }
+  }
+}
