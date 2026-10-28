@@ -27,6 +27,9 @@ shared:
 reserves: []
 provides: []
 depends_on:
+  - on: ci
+    kind: hard
+    why: the release workflow publishes 0.1.0 through changesets
   - on: bundle-size
     kind: hard
     why: GOAL.md requires the bundle to be smaller than the reference stack, and the README reports the size
@@ -45,7 +48,7 @@ depends_on:
 
 ## Goal
 
-Write the README (usage, options, the unified plugin, differences from the reference, benchmark numbers) and a changeset for 0.1.0. The user creates the GitHub repository and publishes to npm.
+Write the README (usage, options, the unified plugin, differences from the reference, benchmark numbers) and a changeset for 0.1.0. The release workflow from the ci node publishes 0.1.0 when the changesets "Version packages" pull request merges. The user does the npm setup listed in the ci outcome first.
 
 ## Context
 

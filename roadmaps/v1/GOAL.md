@@ -70,6 +70,7 @@ release:
 - GFM: tables, strikethrough, autolinks, task lists, footnotes -> gfm-tables, gfm-inline, gfm-tasks-footnotes
 - speed target -> perf-pass
 - remark compatibility -> unified-plugin
+- CI workflows for tests (no fuzz) and releases, added 2026-10-28 by the user -> ci
 - micromark extensions (MDX, directives, math) are not portable -> ext-frontmatter, ext-math, ext-directive, ext-mdx
 
 ## Decisions
