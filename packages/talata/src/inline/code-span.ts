@@ -14,7 +14,8 @@ const CR = 13;
 
 // Opening sizes with no closer up to the end of the leaf, by size: the
 // earliest such start. A later run of that size has no closer either.
-let exhaustedRanges: number[] | undefined;
+// Keyed on the inline state, which is new for every leaf.
+let exhaustedState: InlineState | undefined;
 let exhausted: (number | undefined)[] = [];
 
 function isPadding(code: number): boolean {
@@ -52,8 +53,8 @@ function parseCodeSpan(state: InlineState): boolean {
   }
   const size = pos - start;
   const open = pos;
-  if (exhaustedRanges !== ranges) {
-    exhaustedRanges = ranges;
+  if (exhaustedState !== state) {
+    exhaustedState = state;
     exhausted = [];
   }
   const known = exhausted[size];

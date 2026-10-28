@@ -43,43 +43,7 @@ const sections = new Set([
 ]);
 
 // Examples that need constructs other nodes build. Each node removes its own.
-const waiting = new Map<number, string>([
-  [80, 'emphasis (inline-core)'],
-  [81, 'emphasis (inline-core)'],
-  [82, 'emphasis (inline-core)'],
-  [102, 'backslash escapes (inline-core)'],
-  [106, 'backslash escapes (inline-core)'],
-  [121, 'code spans (inline-core)'],
-  [138, 'code spans (inline-core)'],
-  [145, 'code spans (inline-core)'],
-  [148, 'emphasis (inline-core)'],
-  [152, 'emphasis (inline-core)'],
-  [155, 'emphasis (inline-core)'],
-  [167, 'emphasis (inline-core)'],
-  [168, 'raw HTML (inline-core)'],
-  [176, 'emphasis (inline-core)'],
-  [177, 'emphasis (inline-core)'],
-  [187, 'raw HTML (inline-core)'],
-  [188, 'emphasis (inline-core)'],
-  [192, 'reference links (inline-core)'],
-  [193, 'reference links (inline-core)'],
-  [194, 'reference links (inline-core)'],
-  [195, 'reference links (inline-core)'],
-  [196, 'reference links (inline-core)'],
-  [198, 'reference links (inline-core)'],
-  [200, 'reference links (inline-core)'],
-  [201, 'raw HTML (inline-core)'],
-  [202, 'reference links (inline-core)'],
-  [203, 'reference links (inline-core)'],
-  [204, 'reference links (inline-core)'],
-  [205, 'reference links (inline-core)'],
-  [206, 'reference links (inline-core)'],
-  [214, 'reference links (inline-core)'],
-  [215, 'reference links (inline-core)'],
-  [216, 'reference links (inline-core)'],
-  [217, 'reference links (inline-core)'],
-  [218, 'reference links (inline-core)'],
-]);
+const waiting = new Map<number, string>([]);
 
 describe('spec sections built by blocks-leaf', () => {
   for (const example of specExamples) {
@@ -105,10 +69,7 @@ function blocksOnly(node: Root | RootContent): void {
 }
 
 // Named character references need inline-core's entity table.
-const blockWaiting = new Map<number, string>([
-  [33, 'named character references (inline-core)'],
-  [34, 'named character references (inline-core)'],
-]);
+const blockWaiting = new Map<number, string>([]);
 
 describe('block structure of every spec example', () => {
   for (const example of specExamples) {
@@ -338,18 +299,7 @@ const cases: Record<string, string[]> = {
 
 // Cases whose paragraphs hold raw HTML: until inline-core lands, only the
 // block structure is compared.
-const inlineWaiting = new Set([
-  'a\n<span>',
-  'a\n</span>',
-  '<a b=`c`>',
-  '<a b="c\nd">',
-  '<a> x',
-  '<del>*foo*</del>',
-  '[a]: <b\nc>',
-  '[a]: <a<b>',
-  '> a\n> <span>',
-  '[a]: /u\n<x>',
-]);
+const inlineWaiting = new Set<string>([]);
 
 function checkBlocks(markdown: string, actual: Root): void {
   const expected = reference(markdown);
@@ -371,8 +321,8 @@ for (const [name, inputs] of Object.entries(cases)) {
 }
 
 it('decodes escapes and numeric references', () => {
-  expect(decodeString('a\\*b\\c&#65;&#x42;&#X43;&#;&#x;&#12345678;&amp;')).toBe(
-    'a*b\\cABC&#;&#x;&#12345678;&amp;',
+  expect(decodeString('a\\*b\\c&#65;&#x42;&#X43;&#;&#x;&#12345678;&amp;&nope;')).toBe(
+    'a*b\\cABC&#;&#x;&#12345678;&&nope;',
   );
   expect(decodeString('&#0;&#xFFFE;&#127;')).toBe('\uFFFD\uFFFD\uFFFD');
 });
@@ -392,9 +342,9 @@ it('looks up label indentation in linear steps', () => {
   expect(steps(4000)).toBeLessThanOrEqual(4000);
 });
 
-// Named references (`&ouml;`) in info strings and definitions need the entity
-// table inline-core adds. Until then they stay raw; this documents the gap.
-it.fails('decodes named character references (waits for inline-core)', () => {
+// Named references (`&ouml;`) in info strings and definitions use the entity
+// table from inline-core.
+it('decodes named character references', () => {
   check('``` f&ouml;\n```');
 });
 

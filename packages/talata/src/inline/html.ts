@@ -62,7 +62,8 @@ const cursor: Cursor = { range: 0, pos: 0 };
 // Comments, CDATA, declarations and instructions that reach the end of the
 // leaf unclosed: the earliest start per kind. A later one of the same kind
 // cannot close either, so it fails at once instead of scanning again.
-let exhaustedRanges: number[] | undefined;
+// Keyed on the inline state, which is new for every leaf.
+let exhaustedState: InlineState | undefined;
 const exhausted = [-1, -1, -1, -1];
 
 function kindOf(current: number): number {
@@ -80,8 +81,8 @@ function kindOf(current: number): number {
 
 /** Fails a scan that reached the end of the leaf, and remembers it. */
 function exhaust(state: InlineState, current: number, start: number): number {
-  if (exhaustedRanges !== state.ranges) {
-    exhaustedRanges = state.ranges;
+  if (exhaustedState !== state) {
+    exhaustedState = state;
     exhausted.fill(-1);
   }
   const kind = kindOf(current);
@@ -92,7 +93,7 @@ function exhaust(state: InlineState, current: number, start: number): number {
 }
 
 function isExhausted(state: InlineState, current: number, start: number): boolean {
-  if (exhaustedRanges !== state.ranges) {
+  if (exhaustedState !== state) {
     return false;
   }
   const from = exhausted[kindOf(current)];

@@ -11,6 +11,8 @@ import { appendText, mergeText, pushNode } from './text';
 // with the nearest matching opener.
 
 const TILDE = 126;
+const EXCLAMATION = 33;
+const LEFT_BRACKET = 91;
 
 function parseRun(state: InlineState): boolean {
   const text = state.source.text;
@@ -106,7 +108,12 @@ function pair(state: InlineState, open: number, close: number): number {
   return next;
 }
 
-function resolveEmphasis(state: InlineState, bottom: number): void {
+/**
+ * The general path, for spans that also hold delimiters of other rules (GFM
+ * `~`): each pair first resolves what is between it with every rule, as
+ * micromark does. Quadratic on adversarial input.
+ */
+function resolveMixed(state: InlineState, bottom: number): void {
   const delimiters = state.delimiters;
   let index = bottom;
   while (index < delimiters.length) {
@@ -140,6 +147,198 @@ function resolveEmphasis(state: InlineState, bottom: number): void {
       continue;
     }
     index = pair(state, open, index);
+  }
+}
+
+/** Whether every delimiter from `bottom` up is a `*`/`_` run or a bracket left over from a failed link. */
+function onlyEmphasis(state: InlineState, bottom: number): boolean {
+  const delimiters = state.delimiters;
+  for (let i = bottom; i < delimiters.length; i++) {
+    const marker = delimiters[i].marker;
+    if (
+      marker !== ASTERISK &&
+      marker !== UNDERSCORE &&
+      marker !== LEFT_BRACKET &&
+      marker !== EXCLAMATION
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// Fields of one entry in the flat pair list.
+const PAIR_OPENER = 0;
+const PAIR_CLOSER = 1;
+const PAIR_USE = 2;
+const PAIR_START = 3;
+const PAIR_END = 4;
+const PAIR_SIZE = 5;
+
+/**
+ * The linear path. Pairs on the delimiters alone, then rebuilds the nodes in
+ * one pass. Delimiters between a pair drop out of a linked list instead of
+ * the stack, and `bottoms` (cmark's openers_bottom, per marker, closer size
+ * mod 3 and closer canOpen) keeps closers with no opener from searching
+ * again. micromark compares current run sizes, so an opener that shrinks
+ * lowers every bottom above it.
+ */
+function resolveLinear(state: InlineState, bottom: number): void {
+  const delimiters = state.delimiters;
+  const count = delimiters.length - bottom;
+  const previous = new Int32Array(count);
+  for (let i = 0; i < count; i++) {
+    previous[i] = i - 1;
+  }
+  const bottoms = new Int32Array(12);
+  const pairs: number[] = [];
+  let index = 0;
+  while (index < count) {
+    const closer = delimiters[bottom + index];
+    const marker = closer.marker;
+    if (!closer.canClose || (marker !== ASTERISK && marker !== UNDERSCORE)) {
+      index++;
+      continue;
+    }
+    const closeSize = closer.end - closer.start;
+    const key = (marker === ASTERISK ? 0 : 6) + (closeSize % 3) * 2 + (closer.canOpen ? 1 : 0);
+    const limit = bottoms[key];
+    let open = previous[index];
+    for (; open >= limit; open = previous[open]) {
+      const opener = delimiters[bottom + open];
+      if (opener.marker !== marker || !opener.canOpen) {
+        continue;
+      }
+      // The rule of three: when either side could do both, sizes that sum
+      // to a multiple of 3 do not pair unless both are multiples of 3.
+      const openSize = opener.end - opener.start;
+      if (
+        (opener.canClose || closer.canOpen) &&
+        closeSize % 3 !== 0 &&
+        (openSize + closeSize) % 3 === 0
+      ) {
+        continue;
+      }
+      break;
+    }
+    if (open < limit) {
+      // Later closers like this one need not look below it.
+      bottoms[key] = index;
+      index++;
+      continue;
+    }
+    const opener = delimiters[bottom + open];
+    const use = opener.end - opener.start > 1 && closeSize > 1 ? 2 : 1;
+    opener.end -= use;
+    closer.start += use;
+    pairs.push(open, index, use, opener.end, closer.start);
+    // Everything between the pair drops out.
+    if (opener.end > opener.start) {
+      previous[index] = open;
+      for (let k = 0; k < 12; k++) {
+        if (bottoms[k] > open) {
+          bottoms[k] = open;
+        }
+      }
+    } else {
+      previous[index] = previous[open];
+    }
+    if (closer.end === closer.start) {
+      if (index + 1 < count) {
+        previous[index + 1] = previous[index];
+      }
+      index++;
+    }
+  }
+  if (pairs.length > 0) {
+    rebuild(state, bottom, count, pairs);
+  }
+  delimiters.length = bottom;
+}
+
+/** Replaces the span's nodes with the emphasis and strong nodes of `pairs`. */
+function rebuild(state: InlineState, bottom: number, count: number, pairs: number[]): void {
+  const delimiters = state.delimiters;
+  const source = state.source;
+  const text = source.text;
+  const pairCount = pairs.length / PAIR_SIZE;
+  // Per delimiter: pairs it closes in pairing order (innermost first), and
+  // pairs it opens in reverse order (outermost first).
+  const closeHead = new Int32Array(count).fill(-1);
+  const closeTail = new Int32Array(count).fill(-1);
+  const openHead = new Int32Array(count).fill(-1);
+  const nextClose = new Int32Array(pairCount).fill(-1);
+  const nextOpen = new Int32Array(pairCount);
+  for (let p = 0; p < pairCount; p++) {
+    const opener = pairs[p * PAIR_SIZE + PAIR_OPENER];
+    const closer = pairs[p * PAIR_SIZE + PAIR_CLOSER];
+    nextOpen[p] = openHead[opener];
+    openHead[opener] = p;
+    if (closeTail[closer] === -1) {
+      closeHead[closer] = p;
+    } else {
+      nextClose[closeTail[closer]] = p;
+    }
+    closeTail[closer] = p;
+  }
+  const nodes = state.nodes;
+  const from = nodeIndex(state, delimiters[bottom].node);
+  const root: PhrasingContent[] = [];
+  const parents: PhrasingContent[][] = [];
+  let children = root;
+  let next = 0;
+  for (let n = from; n < nodes.length; n++) {
+    const node = nodes[n];
+    if (next >= count || node !== delimiters[bottom + next].node) {
+      children.push(node);
+      continue;
+    }
+    const delimiter = delimiters[bottom + next];
+    for (let p = closeHead[next]; p !== -1; p = nextClose[p]) {
+      const inner = children;
+      mergeText(inner);
+      children = parents.pop()!;
+      const base = p * PAIR_SIZE;
+      const wrapper: Emphasis | Strong = {
+        type: pairs[base + PAIR_USE] === 2 ? 'strong' : 'emphasis',
+        children: inner,
+        position: {
+          start: point(source, pairs[base + PAIR_START]),
+          end: point(source, pairs[base + PAIR_END]),
+        },
+      };
+      children.push(wrapper);
+    }
+    if (delimiter.end > delimiter.start) {
+      if (closeHead[next] !== -1 || openHead[next] !== -1) {
+        delimiter.node.value = text.slice(delimiter.start, delimiter.end);
+        delimiter.node.position = {
+          start: point(source, delimiter.start),
+          end: point(source, delimiter.end),
+        };
+      }
+      children.push(delimiter.node);
+    }
+    for (let p = openHead[next]; p !== -1; p = nextOpen[p]) {
+      parents.push(children);
+      children = [];
+    }
+    next++;
+  }
+  nodes.length = from;
+  for (const node of root) {
+    nodes.push(node);
+  }
+}
+
+function resolveEmphasis(state: InlineState, bottom: number): void {
+  if (state.delimiters.length <= bottom) {
+    return;
+  }
+  if (onlyEmphasis(state, bottom)) {
+    resolveLinear(state, bottom);
+  } else {
+    resolveMixed(state, bottom);
   }
 }
 

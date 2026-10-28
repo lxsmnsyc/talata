@@ -1,79 +1,19 @@
-import type { Definition } from 'mdast';
 import { fromMarkdown as reference } from 'mdast-util-from-markdown';
 import { gfmFromMarkdown } from 'mdast-util-gfm';
 import { gfm } from 'micromark-extension-gfm';
 import { describe, expect, it } from 'vitest';
-import { blockRules, paragraphPrefixRules } from '../src/blocks';
-import type { BlockState, ParagraphPrefixRule } from '../src/core/blocks';
-import parse from '../src/core/parse';
-import { createRegistry } from '../src/core/registry';
-import type { Registry } from '../src/core/registry';
-import { point } from '../src/core/source';
+import { fromMarkdown } from '../src';
 import { normalizeIdentifier } from '../src/core/state';
-import { transforms } from '../src/core/transform';
-import { inlineRules } from '../src/inline';
 import { specExamples, specText } from './parsers';
 import { describeDiff, firstDiff } from './tree-diff';
 
 // Inline rules compared to the reference parser, positions included.
-//
-// Link reference definitions belong to blocks-leaf. Until it lands, a
-// test-only paragraph prefix rule takes leading paragraph lines that the
-// reference parses, on their own, as one definition. It copies that node
-// (moved to the line's offset) and adds its label to `definitions`.
-// Multi-line definitions and definitions inside containers are not handled.
-
-const testDefinition: ParagraphPrefixRule = {
-  name: 'testDefinition',
-  priority: 0,
-  consume(state: BlockState, paragraph, out): void {
-    const text = state.source.text;
-    const lines = paragraph.lines;
-    let taken = 0;
-    while (taken < lines.length) {
-      const start = lines[taken];
-      const line = text.slice(start, lines[taken + 1]);
-      const tree = reference(line);
-      const node = tree.children[0];
-      if (tree.children.length !== 1 || node.type !== 'definition') {
-        break;
-      }
-      const definition: Definition = {
-        ...node,
-        position: {
-          start: point(state.source, start + node.position!.start.offset!),
-          end: point(state.source, start + node.position!.end.offset!),
-        },
-      };
-      out.push(definition);
-      state.definitions.add(node.identifier.toUpperCase());
-      taken += 2;
-    }
-    lines.splice(0, taken);
-  },
-};
-
-function registry(useGfm: boolean): Registry {
-  return createRegistry(
-    {
-      blockRules,
-      paragraphPrefixRules: [...paragraphPrefixRules, testDefinition],
-      inlineRules,
-      transforms,
-    },
-    { gfm: useGfm },
-  );
-}
-
-const commonmark = registry(false);
-const withGfm = registry(true);
 
 function compare(markdown: string, useGfm = false): string | undefined {
   const expected = useGfm
     ? reference(markdown, { extensions: [gfm()], mdastExtensions: [gfmFromMarkdown()] })
     : reference(markdown);
-  const actual = parse(markdown, { gfm: useGfm }, useGfm ? withGfm : commonmark);
-  return describeDiff(firstDiff(expected, actual));
+  return describeDiff(firstDiff(expected, fromMarkdown(markdown, { gfm: useGfm })));
 }
 
 const sections = new Set([
@@ -91,22 +31,9 @@ const sections = new Set([
   'Textual content',
 ]);
 
-// Examples that need block constructs other nodes build.
-const waiting = new Map<number, string>([
-  [18, 'indented code (blocks-leaf)'],
-  [19, 'fenced code (blocks-leaf)'],
-  [21, 'HTML blocks (blocks-leaf)'],
-  [24, 'fenced code (blocks-leaf)'],
-  [31, 'HTML blocks (blocks-leaf)'],
-  [34, 'fenced code (blocks-leaf)'],
-  [36, 'indented code (blocks-leaf)'],
-  [38, 'lists (blocks-container)'],
-  [541, 'multi-line definitions (blocks-leaf)'],
-]);
-
 describe('inline spec sections', () => {
   for (const example of specExamples) {
-    if (!sections.has(example.section) || waiting.has(example.number)) {
+    if (!sections.has(example.section)) {
       continue;
     }
     it(`example ${example.number} (${example.section})`, () => {
@@ -219,8 +146,7 @@ describe('inline edge cases with gfm', () => {
   }
 });
 
-// References against definitions the test rule reads. Re-check these once
-// blocks-leaf lands the real definition rule.
+// References against definitions, including ones in other blocks.
 const definitions = '[a]: /u\n[b c]: /v "t"\n[*]: /w\n[&amp;]: /x\n[\\]]: /y\n\n';
 const referenceCases = [
   '[a]',
@@ -260,4 +186,46 @@ describe('normalizeIdentifier and the test definitions agree', () => {
   it('uses the same normalized label', () => {
     expect(normalizeIdentifier('Foo  Bar')).toBe('foo bar'.toUpperCase());
   });
+});
+
+// Pathological inputs must grow about linearly. Make the input 8 times larger
+// and compare the best of five runs: linear work grows about 8 times,
+// quadratic work 64 times. The bound sits between them, with room for noise
+// from test files running in parallel.
+function bestTime(markdown: string): number {
+  let best = Number.POSITIVE_INFINITY;
+  for (let run = 0; run < 5; run++) {
+    const start = performance.now();
+    fromMarkdown(markdown);
+    best = Math.min(best, performance.now() - start);
+  }
+  return best;
+}
+
+const growthCases: [string, (size: number) => string][] = [
+  ['nested brackets', (size) => '['.repeat(size / 2) + ']'.repeat(size / 2)],
+  [
+    'nested brackets with a definition',
+    (size) => '[x]: /u\n\n' + '['.repeat(size / 2) + ']'.repeat(size / 2),
+  ],
+  ['`* a`', (size) => '* a'.repeat(size / 3)],
+  ['`_a*b `', (size) => '_a*b '.repeat(size / 5)],
+  ['`**_ a`', (size) => '**_ a'.repeat(size / 5)],
+  ['`a**b`', (size) => 'a**b'.repeat(size / 4)],
+  ['nested emphasis', (size) => '*a '.repeat(size / 6) + ' a*'.repeat(size / 6)],
+  ['`*a* `', (size) => '*a* '.repeat(size / 4)],
+  ['unclosed comments', (size) => 'a <!--\n'.repeat(size / 7)],
+  ['unclosed code spans', (size) => '`` a `b` '.repeat(size / 9)],
+];
+
+describe('growth on pathological inputs', () => {
+  for (const [name, build] of growthCases) {
+    it(name, () => {
+      const small = build(4000);
+      const large = build(32_000);
+      bestTime(small);
+      const ratio = bestTime(large) / Math.max(bestTime(small), 1);
+      expect(ratio).toBeLessThan(24);
+    });
+  }
 });
