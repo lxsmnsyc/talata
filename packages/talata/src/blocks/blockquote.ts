@@ -4,7 +4,6 @@ import { isSpaceOrTab } from '../core/chars';
 import { advanceLine, consumeColumns } from '../core/line';
 import type { Line } from '../core/line';
 import { point } from '../core/source';
-import type { Source } from '../core/source';
 
 const GREATER_THAN = 62;
 
@@ -98,15 +97,12 @@ export function lastChildEnd(children: RootContent[]): number {
   return position === undefined ? -1 : position.end.offset!;
 }
 
-// The source and line index of the last line a quote matched only through
-// the end-of-file rule below. micromark treats that line as lazy for the
-// quote, so a leaf inside ends before it (`> > ```\n> > a\n>`).
-let endOnlySource: Source | undefined;
-let endOnlyLine = -1;
-
-/** True when a quote above matched `line` only through the end-of-file rule. */
+/**
+ * True when a quote above matched `line` only through the end-of-file rule.
+ * A leaf inside then ends before the line (`> > ```\n> > a\n>`).
+ */
 export function matchedOnlyAtEnd(state: BlockState, line: Line): boolean {
-  return endOnlySource === state.source && endOnlyLine === line.index;
+  return state.endOnlyLine === line.index;
 }
 
 function consumeQuotePrefix(line: Line): boolean {
@@ -159,8 +155,7 @@ class OpenBlockquote implements TrackedContainer {
     ) {
       this.quoteLine = quoteLine;
       this.end = line.end;
-      endOnlySource = state.source;
-      endOnlyLine = line.index;
+      state.endOnlyLine = line.index;
       return true;
     }
     return false;

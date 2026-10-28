@@ -1,6 +1,6 @@
 import type { InlineRule, InlineState } from '../core/inline';
 import { point, skipLineEnding } from '../core/source';
-import { linePrefix, reach, splitColumnsAt, workSteps } from './lines';
+import { linePrefix, prefixSplitColumns, reach, workSteps } from './lines';
 import { appendText, pushNode } from './text';
 
 // Code spans: a run of backticks up to the next run of the same length,
@@ -117,7 +117,7 @@ function parseCodeSpan(state: InlineState): boolean {
     const lineEnd = ranges[r + 1];
     value += text.slice(from, lineEnd) + text.slice(lineEnd, skipLineEnding(text, lineEnd));
     const prefix = linePrefix(state, r + 2, 0);
-    const columns = splitColumnsAt(state, r + 2);
+    const columns = prefixSplitColumns();
     if (columns > 0) {
       virtual = true;
       virtualEnd = r + 2 === range && ranges[range] === close && prefix.length === columns;

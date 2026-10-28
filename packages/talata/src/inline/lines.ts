@@ -140,12 +140,11 @@ export function containerEnd(state: InlineState, range: number): number {
 }
 
 /**
- * Split-tab columns left after the container prefixes on the line of range
- * `range` (not the first). micromark reads them as virtual spaces, which
- * are data, not spaces.
+ * Split-tab columns at the start of what the last `linePrefix` call
+ * returned. micromark reads them as virtual spaces, which are data, not
+ * spaces.
  */
-export function splitColumnsAt(state: InlineState, range: number): number {
-  containerEnd(state, range);
+export function prefixSplitColumns(): number {
   return splitColumns;
 }
 

@@ -32,6 +32,13 @@ export interface BlockState extends DocumentState {
    */
   unmatched: boolean;
   /**
+   * Index of the last line a block quote matched only through its
+   * end-of-file rule (nothing after an outer quote prefix on a last line
+   * with no line ending), or -1. micromark treats that line as lazy for the
+   * quote, so fenced code and HTML inside end before it.
+   */
+  endOnlyLine: number;
+  /**
    * True while open blocks close because a container starts on the current
    * line, or because the document ends after a line ending that every open
    * container continues over. micromark then keeps the line ending after the
@@ -192,6 +199,7 @@ export class BlockParser implements BlockState {
   lazy = false;
   tip: OpenBlock | undefined = undefined;
   unmatched = false;
+  endOnlyLine = -1;
   closeKeepsLineEnding = false;
   /** Open blocks from the document to the tip. */
   stack: OpenBlock[] = [document];

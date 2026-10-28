@@ -35,3 +35,10 @@
 - seed 33, 50k: 0. seed 34 with GFM, 50k: 14, all GFM autolink literal text splits (gfm-inline).
 - seed 101, 50k: 1 (code span split tab), fixed. seed 202, 50k: 0. seed 303 `--no-corpus`, 50k: 0.
 - 81 fixed failures saved as fixtures in `test/fuzz/fixtures/`.
+
+## Review round 1 (gate approved, two should-fix items)
+
+- `test/corpus.test.ts`: the GFM corpus suite runs now; a `gfmWaiting` map lists the 23 files that need unbuilt GFM features, tagged by feature (table: gfm-tables; autolinkLiteral: gfm-inline; taskList: gfm-tasks-footnotes). 119 files already match with GFM. `gfmReady()` removed from `test/parsers.ts`.
+- End-of-file quote flag moved from module state in `blocks/blockquote.ts` into `BlockState.endOnlyLine` (per parse, holds no `Source`). Added to the v4 change request, with ext-math and ext-directive under Affected nodes.
+- Nits: `prefixSplitColumns()` in `inline/lines.ts` reads the columns the last `linePrefix` found (code spans no longer search twice). `test/fuzz/check.ts` skips links as literal autolinks only with GFM; a no-GFM run now skips nothing (20k, seed 404: 0 skipped, 0 failures). Stale comments in `test/parsers.ts` and `test/corpus.test.ts` fixed.
+- Fast check twice: 15 files, 4424 passed, 59 skipped; tsc and oxlint clean.

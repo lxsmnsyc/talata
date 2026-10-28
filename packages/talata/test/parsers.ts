@@ -13,7 +13,8 @@ import { fromMarkdown } from '../src';
 export const ready = {
   // The block and inline parser: CommonMark spec examples, with and without gfm.
   commonmark: true,
-  // Every file of the benchmark corpus, parsed with gfm.
+  // Every file of the benchmark corpus, parsed without and with gfm (files
+  // that need unbuilt GFM features wait in corpus.test.ts).
   corpus: true,
   // One flag per GFM feature. Each gates the spec examples of that section.
   gfm: {
@@ -24,14 +25,6 @@ export const ready = {
     footnote: false,
   },
 };
-
-// True when every GFM feature is on. The corpus is compared with GFM then.
-export function gfmReady(): boolean {
-  const flags = ready.gfm;
-  return (
-    flags.table && flags.strikethrough && flags.autolinkLiteral && flags.taskList && flags.footnote
-  );
-}
 
 export function parseReference(value: string, useGfm: boolean): Root {
   if (!useGfm) {

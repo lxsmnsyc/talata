@@ -75,7 +75,13 @@ const blockParents: Record<string, true> = {
   footnoteDefinition: true,
 };
 
-function nodeReason(node: Node, parent: string, value: string, on: Features): string | undefined {
+function nodeReason(
+  node: Node,
+  parent: string,
+  value: string,
+  on: Features,
+  gfm: boolean,
+): string | undefined {
   const { type } = node;
   if (type === 'html') {
     const feature = parent in blockParents ? 'html' : 'inline';
@@ -91,7 +97,7 @@ function nodeReason(node: Node, parent: string, value: string, on: Features): st
     }
     return on.setext ? undefined : 'setext';
   }
-  if (type === 'link') {
+  if (type === 'link' && gfm) {
     // A link that does not start with `[` or `<` is a GFM literal autolink.
     const code = value.charCodeAt(offset);
     if (code !== 91 && code !== 60 && !on.autolinkLiteral) {
@@ -112,7 +118,12 @@ function nodeReason(node: Node, parent: string, value: string, on: Features): st
  * Why a document is outside what talata supports now, or undefined. Walks the
  * reference tree without recursion, since the tree can be thousands deep.
  */
-export function unsupportedReason(tree: Root, value: string, on: Features): string | undefined {
+export function unsupportedReason(
+  tree: Root,
+  value: string,
+  on: Features,
+  gfm = true,
+): string | undefined {
   if (!on.inline && (value.includes('\\') || value.includes('&'))) {
     return 'inline';
   }
@@ -121,7 +132,7 @@ export function unsupportedReason(tree: Root, value: string, on: Features): stri
   while (stack.length > 0) {
     const node = stack.pop()!;
     const parent = parents.pop()!;
-    const reason = nodeReason(node, parent, value, on);
+    const reason = nodeReason(node, parent, value, on, gfm);
     if (reason !== undefined) {
       return reason;
     }
@@ -158,7 +169,7 @@ export function check(
   } catch {
     return { kind: 'skip', reason: 'reference threw' };
   }
-  const reason = unsupportedReason(expected, value, on);
+  const reason = unsupportedReason(expected, value, on, useGfm);
   if (reason !== undefined) {
     return { kind: 'skip', reason };
   }
