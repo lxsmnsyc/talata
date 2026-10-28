@@ -1,0 +1,8 @@
+{
+  "input": "* )\r<a f=\"\">\n",
+  "gfm": true,
+  "all": false,
+  "kind": "diff",
+  "seed": 1793430248,
+  "index": 317
+}
