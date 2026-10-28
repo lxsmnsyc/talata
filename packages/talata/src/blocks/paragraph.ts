@@ -2,8 +2,7 @@ import type { Paragraph } from 'mdast';
 import type { BlockState, OpenParagraph } from '../core/blocks';
 import type { Line } from '../core/line';
 import { point } from '../core/source';
-
-const LEFT_BRACKET = 91;
+import { lineIndents } from '../inline/lines';
 
 // Paragraphs are not a registered rule: the block parser opens one for any
 // non-blank line that no rule starts, and adds lazy continuation lines to it.
@@ -21,23 +20,25 @@ class OpenParagraphBlock implements OpenParagraph {
   /**
    * Lines with whitespace after their container prefixes, as flat triples:
    * line ending offset, start of the whitespace, split tab columns. Labels of
-   * definitions that span lines keep that whitespace. Only recorded when
-   * the paragraph starts with `[`, as only definitions read it.
+   * definitions that span lines keep that whitespace, and so do code spans,
+   * raw HTML and line ending positions (`lineIndents`). Created with the
+   * first continuation line.
    */
   indents: number[] | undefined = undefined;
-  bracket: boolean;
 
   constructor(line: Line) {
     this.lines = [line.nonBlank, line.end];
     this.start = line.nonBlank;
-    this.bracket = line.text.charCodeAt(line.nonBlank) === LEFT_BRACKET;
   }
 
   continue: (state: BlockState, line: Line) => boolean = continueParagraph;
 
   addLine(_state: BlockState, line: Line): void {
-    if (this.bracket && (line.nonBlank !== line.start || line.partialTab !== 0)) {
-      this.indents ??= [];
+    if (this.indents === undefined) {
+      this.indents = [];
+      lineIndents.set(this.lines, this.indents);
+    }
+    if (line.nonBlank !== line.start || line.partialTab !== 0) {
       this.indents.push(line.end, line.start, line.partialTab);
     }
     this.lines.push(line.nonBlank, line.end);
@@ -63,8 +64,7 @@ class OpenParagraphBlock implements OpenParagraph {
 /**
  * Whitespace after container prefixes on continuation lines, as flat triples
  * in line order: line ending offset, start of the whitespace, split tab
- * columns. Undefined when no line has any, or the paragraph does not start
- * with `[`.
+ * columns. Undefined for a paragraph of one line.
  */
 export function paragraphIndents(paragraph: OpenParagraph): number[] | undefined {
   return paragraph instanceof OpenParagraphBlock ? paragraph.indents : undefined;

@@ -2,6 +2,7 @@ import type { PhrasingContent } from 'mdast';
 import { SPACE, TAB } from '../core/chars';
 import type { InlineState } from '../core/inline';
 import { point, skipLineEnding } from '../core/source';
+import { containerEnd, wasReached } from './lines';
 
 // Plain text, soft line breaks and trailing-space hard breaks. These are not
 // a rule: the inline parser calls them for every character that no rule
@@ -97,7 +98,11 @@ export function endRange(state: InlineState): void {
   if (state.range + 2 >= state.ranges.length) {
     return;
   }
-  const next = skipLineEnding(text, end);
+  // After a lookahead reached the next line, micromark's line ending ends
+  // after that line's container prefixes, else at the start of the line.
+  const next = wasReached(state, state.range + 2)
+    ? containerEnd(state, state.range + 2)
+    : skipLineEnding(text, end);
   const nodes = state.nodes;
   if (
     whitespace === end &&
@@ -118,5 +123,5 @@ export function endRange(state: InlineState): void {
     });
     return;
   }
-  appendText(state, text.slice(end, next), end, next);
+  appendText(state, text.slice(end, skipLineEnding(text, end)), end, next);
 }
