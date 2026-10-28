@@ -20,7 +20,7 @@ import type { Delimiter, InlineRule, InlineState } from '../core/inline';
 import { nodeIndex } from '../core/inline';
 import { advanceLine, consumeColumns } from '../core/line';
 import type { Line } from '../core/line';
-import { point } from '../core/source';
+import { point, skipLineEnding } from '../core/source';
 import { normalizeIdentifier } from '../core/state';
 import { decodeString } from '../inline/decode';
 import { rangeText } from '../inline/lines';
@@ -340,17 +340,18 @@ export function imageFootnoteCall(
   }
   // The call string starts one character after `[`, wherever `^` is.
   // When `![` ends its line, that character is the line ending, and the
-  // string starts on the next line.
-  const ranges = state.ranges;
-  let range = labelRange;
-  let from = bracket.end + 1;
-  if (from > ranges[range + 1]) {
-    range += 2;
-    if (from < ranges[range]) {
-      from = ranges[range];
-    }
+  // string starts on the next line after its container prefix, whitespace
+  // kept.
+  const lineEnd = state.ranges[labelRange + 1];
+  let raw: string;
+  if (bracket.end + 1 > lineEnd) {
+    const text = state.source.text;
+    raw = rangeText(state, labelRange, lineEnd, close).slice(
+      skipLineEnding(text, lineEnd) - lineEnd,
+    );
+  } else {
+    raw = rangeText(state, labelRange, bracket.end + 1, close);
   }
-  const raw = rangeText(state, range, from, close);
   flushText(state);
   const nodes = state.nodes;
   nodes.length = nodeIndex(state, bracket.node) + 1;

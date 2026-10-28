@@ -25,3 +25,10 @@
 - Interaction bug, mine: strikethrough resolves the inside of its pairs by calling the later resolvers with bottom 0 on a swapped node list, so the task resolve trimmed the delete's content (`- [X] ~_~`). The task resolve now acts only on the leaf's own node list.
 - `![\n^a]`: the call string now starts on the next line, as in the reference (fuzz seed 5150, saved as a fixture). This was a known gap before.
 - Fast check twice: 18 files, 4922 passed, 2 expected fails. GFM fuzz, 30k documents each, seeds 5150 (1 failure, the `![\n^a]` one, fixed) and 6161 (0 failures, 30,000 compared, none skipped).
+
+## Review round 2
+
+- Should-fix: the label of `![` at a line end followed by an indented line lost that line's leading whitespace. The label now starts at the end of the container prefix on the next line (`rangeText` from the line ending, which keeps the whitespace the prefix leaves). Added the reviewer's five cases.
+- Nits: `test/corpus.test.ts` reformatted; gfm imports in `src/inline/index.ts` moved up with the other gfm imports.
+- The requested commit subject is 73 characters; the commit hook allows 72, so the subject says "image call labels".
+- Fast check twice: 18 files, 4927 passed, 2 expected fails. `oxfmt --check src test` and `oxlint` are clean.

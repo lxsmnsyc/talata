@@ -51,8 +51,7 @@ describe.skipIf(files.length === 0 || !ready.corpus)(
 // features they need: table (gfm-tables), autolinkLiteral and strikethrough
 // (gfm-inline), taskList and footnote (gfm-tasks-footnotes). A file runs with
 // GFM once all its flags are on; each GFM node turns its flag on.
-const gfmWaiting = new Map<string, GfmFeature[]>([
-]);
+const gfmWaiting = new Map<string, GfmFeature[]>([]);
 
 function waitsOnGfm(name: string): boolean {
   const features = gfmWaiting.get(name);
