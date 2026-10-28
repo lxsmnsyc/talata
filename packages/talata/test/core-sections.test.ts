@@ -1,31 +1,14 @@
-import { createRequire } from 'node:module';
 import { fromMarkdown as reference } from 'mdast-util-from-markdown';
 import { describe, expect, it } from 'vitest';
 import { fromMarkdown } from '../src';
+import { specExamples, specText } from './parsers';
 
 // The spec sections core-skeleton implements, compared to the reference
-// parser with positions. Runs while READY is false.
-
-interface Example {
-  markdown: string;
-  section: string;
-  number: number;
-}
-
-function isSpec(value: unknown): value is { tests: Example[] } {
-  return (
-    typeof value === 'object' && value != null && 'tests' in value && Array.isArray(value.tests)
-  );
-}
-
-const spec: unknown = createRequire(import.meta.url)('commonmark-spec');
-if (!isSpec(spec)) {
-  throw new Error('commonmark-spec did not export a tests array');
-}
+// parser with positions. Runs whatever the readiness flag says.
 
 const sections = new Set(['Thematic breaks', 'ATX headings', 'Paragraphs']);
 
-// Examples that need constructs other nodes build.
+// Examples that need constructs other nodes build. Each node removes its own.
 const waiting = new Map<number, string>([
   [48, 'indented code (blocks-leaf)'],
   [56, 'emphasis (inline-core)'],
@@ -41,12 +24,12 @@ const waiting = new Map<number, string>([
 ]);
 
 describe('spec sections built by core-skeleton', () => {
-  for (const example of spec.tests) {
+  for (const example of specExamples) {
     if (!sections.has(example.section) || waiting.has(example.number)) {
       continue;
     }
     it(`example ${example.number} (${example.section})`, () => {
-      const markdown = example.markdown.replaceAll('→', '\t');
+      const markdown = specText(example.markdown);
       expect(fromMarkdown(markdown)).toEqual(reference(markdown));
     });
   }

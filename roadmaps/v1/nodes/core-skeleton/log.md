@@ -15,3 +15,5 @@
 - Scratch fuzz: 300k random strings over `ab #-*_\t\r\n\0 BOM`, reference trees limited to supported node types: no differences. Removed afterwards.
 - Rough timing (vitest, not the benchmark): 345 KB of headings, paragraphs and breaks, talata 12 ms vs reference 264 ms. No inline rules yet.
 - The draft contract needed changes; wrote `contracts/parser-core.change-request.md` with the final TypeScript instead of editing the contract.
+- Gate review round: closed six contract gaps. Added `splitParagraph`, `interruptible`, `resolve(state, bottom)` with `resolveSpan`, `nodeIndex` and `mergeText`, `OpenParagraph.start`, `canContain` with `openContainer` and a no-progress guard, and the end-of-file container note. Also line restore around failed starts, the reworded takeParagraph doc and footnote sentence, `\uFEFF` escapes in tests, and `specExamples`/`specText` reuse. Each gap has a test-only rule in `test/core.test.ts`; inline span tests match the GFM reference.
+- Found while testing: `> a\n  ` closes the quote at 1:4, so the end-of-file extension applies only after an outer prefix consumed something.

@@ -15,9 +15,11 @@ class OpenParagraphBlock implements OpenParagraph {
   isContainer = false;
   acceptsLazy = false;
   lines: number[];
+  start: number;
 
   constructor(line: Line) {
     this.lines = [line.nonBlank, line.end];
+    this.start = line.nonBlank;
   }
 
   continue: (state: BlockState, line: Line) => boolean = continueParagraph;

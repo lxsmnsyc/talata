@@ -1,10 +1,15 @@
 import type { PhrasingContent, Text } from 'mdast';
-import { endRange, flushText, takeRun } from '../inline/text';
+import { endRange, flushText, mergeText, takeRun } from '../inline/text';
 import type { DocumentState } from './state';
 
 /**
  * A run of delimiter characters (`*`, `_`, `~`, `[`, `![`) waiting for the
  * resolve step. The rule that pushes it decides how to use the fields.
+ *
+ * While a delimiter is on `state.delimiters`, its node is a direct child in
+ * `state.nodes`: a resolve removes every delimiter it handles, and a link
+ * resolves the span inside it (`resolveSpan`) before it moves those nodes
+ * into the link. Find the node's index with `nodeIndex`.
  */
 export interface Delimiter {
   /** Character code of the marker. */
@@ -61,8 +66,14 @@ export interface InlineRule {
    * return true. On failure, return false and change nothing.
    */
   parse(state: InlineState): boolean;
-  /** Runs once after the whole leaf is scanned, in priority order. Emphasis uses it for its delimiter stack. */
-  resolve?(state: InlineState): void;
+  /**
+   * Pairs the delimiters at index `bottom` and above in `state.delimiters`,
+   * replacing nodes in `state.nodes`, and removes them all from the stack.
+   * `resolveSpan` calls it in priority order: for the whole leaf with
+   * `bottom` 0 after scanning, and for link text when a link closes, so
+   * delimiters never pair across a link boundary.
+   */
+  resolve?(state: InlineState, bottom: number): void;
 }
 
 export function createInlineState(state: DocumentState, ranges: number[]): InlineState {
@@ -85,6 +96,32 @@ export function createInlineState(state: DocumentState, ranges: number[]): Inlin
     textEnd: -1,
     delimiters: [],
   };
+}
+
+/**
+ * Resolves the delimiters at index `bottom` and above: emits the pending
+ * text, runs every rule's `resolve`, then drops what is left of the stack
+ * above `bottom`.
+ */
+export function resolveSpan(state: InlineState, bottom: number): void {
+  flushText(state);
+  for (const rule of state.rules.inlineResolvers) {
+    rule.resolve!(state, bottom);
+  }
+  if (state.delimiters.length > bottom) {
+    state.delimiters.length = bottom;
+  }
+}
+
+/** Index of `node` in `state.nodes`, searching from the end; -1 if absent. */
+export function nodeIndex(state: InlineState, node: PhrasingContent): number {
+  const nodes = state.nodes;
+  for (let i = nodes.length - 1; i >= 0; i--) {
+    if (nodes[i] === node) {
+      return i;
+    }
+  }
+  return -1;
 }
 
 function tryRules(inline: InlineState, candidates: InlineRule[], pos: number): boolean {
@@ -131,9 +168,7 @@ export function parseInline(state: DocumentState, ranges: number[]): PhrasingCon
       inline.run = inline.pos;
     }
   }
-  flushText(inline);
-  for (const rule of state.rules.inlineResolvers) {
-    rule.resolve!(inline);
-  }
+  resolveSpan(inline, 0);
+  mergeText(inline.nodes);
   return inline.nodes;
 }

@@ -20,12 +20,29 @@ export interface BlockState extends DocumentState {
   /** True when `paragraph` is set but the current line did not match all containers above it. */
   lazy: boolean;
   /**
-   * Removes the open paragraph so a rule can convert it (setext headings,
-   * GFM tables). Paragraph prefix rules run first, so definitions at its start
-   * become nodes. Returns undefined when there is no matched paragraph or no
-   * line is left. Call it only when the rule then returns a block.
+   * Removes the open paragraph so a rule can convert it (setext headings).
+   * Paragraph prefix rules run first, so definitions at its start become
+   * nodes. A rule calls it before it knows whether it starts: when it returns
+   * undefined (no matched paragraph, or definitions consumed every line), the
+   * rule returns undefined too. When it returns a paragraph, the rule must
+   * return a block.
    */
   takeParagraph(): OpenParagraph | undefined;
+  /**
+   * Removes the last `count` lines of the matched open paragraph and returns
+   * them as flat [start, end) pairs. The lines left close as a paragraph
+   * (prefix rules first), before the block the rule returns. GFM tables use it
+   * for the header row. Prefix rules do not see the removed lines. Returns
+   * undefined, changing nothing, when the paragraph is lazy or has fewer than
+   * `count` lines. When it returns lines, the rule must return a block.
+   */
+  splitParagraph(count: number): number[] | undefined;
+  /**
+   * Opens `block` as an extra container from inside `BlockRule.start`, before
+   * the block the rule returns. That block then goes inside it. List items use
+   * it to open the list. Only call it when the rule then returns a block.
+   */
+  openContainer(block: OpenBlock): void;
   /** Schedules inline parsing of `ranges` into `node.children` after all blocks close. */
   inline(node: { children: PhrasingContent[] }, ranges: number[]): void;
 }
@@ -46,9 +63,11 @@ export interface BlockRule {
   gfm?: boolean;
   /**
    * Tries to start a block on the rest of `line`. On success, consume the
-   * block's prefix from `line` (containers) or the whole line (leaves) and
-   * return the open block. On failure, return undefined and leave `line`
-   * unchanged.
+   * block's prefix from `line` (containers) or handle the whole line
+   * (leaves), and return the open block. On failure, return undefined; the
+   * parser restores `start`, `visualColumn` and `partialTab`.
+   * A container must consume at least one character or column: after a
+   * container that consumed nothing, no more rules run on the line.
    */
   start(state: BlockState, line: Line): OpenBlock | undefined;
 }
@@ -60,8 +79,22 @@ export interface OpenBlock {
   /** Containers: a paragraph inside may continue on a line that does not match this container. */
   acceptsLazy: boolean;
   /**
+   * Leaves other than paragraphs: when true, block rules run on each line
+   * this block continues on, and a block that starts closes it. Only lines
+   * no rule starts go to `addLine`. GFM table bodies use it.
+   */
+  interruptible?: boolean;
+  /**
+   * Containers: whether `block` may be a direct child. When a new block
+   * starts and the matched container refuses it, the container closes, and
+   * so on up. A list accepts only list items. Leave it out to accept all.
+   */
+  canContain?(block: OpenBlock): boolean;
+  /**
    * Whether the block continues on `line`. Containers consume their prefix.
    * Leaves return false to close. A leaf that returns true gets `addLine`.
+   * `line.end === line.text.length` means this is the last line and it has
+   * no line ending.
    */
   continue(state: BlockState, line: Line): boolean;
   /** Leaves that take more than their first line. */
@@ -77,6 +110,11 @@ export interface OpenBlock {
 export interface OpenParagraph extends OpenBlock {
   /** Flat pairs of [start, end) offsets, one pair per line: content start to line end. */
   lines: number[];
+  /**
+   * Content start of the first line as opened. Prefix rules do not change it.
+   * The reference starts a setext heading here, before any definitions.
+   */
+  start: number;
 }
 
 /**
@@ -123,6 +161,8 @@ export class BlockParser implements BlockState {
   stack: OpenBlock[] = [document];
   /** Closed child nodes of each open block, parallel to `stack`. */
   children: RootContent[][] = [[]];
+  /** Index in `stack` of `container`. */
+  containerIndex = 0;
   inlineNodes: { children: PhrasingContent[] }[] = [];
   inlineRanges: number[][] = [];
 
@@ -179,54 +219,47 @@ export class BlockParser implements BlockState {
       }
     }
     const deepest = stack[matched];
-    if (!deepest.isContainer && deepest.name !== 'paragraph') {
-      // A matched leaf such as a code block takes the line as content.
-      if (deepest.addLine !== undefined) {
-        deepest.addLine(this, line);
-      }
+    // A matched leaf other than a paragraph takes the line as content, unless
+    // it is interruptible and a block starts.
+    const leaf = !deepest.isContainer && !isParagraph(deepest);
+    if (leaf && deepest.interruptible !== true) {
+      deepest.addLine?.(this, line);
       return;
     }
 
     const top = stack.length - 1;
     const tip = stack[top];
-    const paragraph = isParagraph(tip) ? tip : undefined;
-    let containerIndex = deepest.isContainer ? matched : matched - 1;
-    this.container = stack[containerIndex];
+    const paragraph = !leaf && isParagraph(tip) ? tip : undefined;
+    this.containerIndex = deepest.isContainer ? matched : matched - 1;
+    this.container = stack[this.containerIndex];
     this.paragraph = paragraph;
     this.lazy = paragraph !== undefined && matched !== top;
 
     let started = false;
-    const text = line.text;
-    const rules = this.rules;
     while (!line.blank) {
-      const code = text.charCodeAt(line.nonBlank);
-      const candidates = code < 128 ? rules.blockByChar[code] : rules.blockOther;
-      let block: OpenBlock | undefined;
-      for (const rule of candidates) {
-        if (this.paragraph !== undefined && !rule.canInterruptParagraph) {
-          continue;
-        }
-        block = rule.start(this, line);
-        if (block !== undefined) {
-          break;
-        }
-      }
+      const start = line.start;
+      const partialTab = line.partialTab;
+      const block = this.tryStart(line);
       if (block === undefined) {
         break;
       }
       started = true;
-      this.closeTo(containerIndex);
-      stack.push(block);
-      this.children.push(block.isContainer ? [] : NO_CHILDREN);
+      this.attach(block);
       this.paragraph = undefined;
       this.lazy = false;
       if (!block.isContainer) {
         return;
       }
-      containerIndex = stack.length - 1;
-      this.container = block;
+      if (line.start === start && line.partialTab === partialTab) {
+        // The container consumed nothing; running rules again would loop.
+        break;
+      }
     }
 
+    if (!started && leaf) {
+      deepest.addLine?.(this, line);
+      return;
+    }
     if (
       !started &&
       paragraph !== undefined &&
@@ -241,12 +274,72 @@ export class BlockParser implements BlockState {
       this.closeTo(matched);
     }
     const last = stack[stack.length - 1];
-    if (last.name === 'paragraph') {
+    if (isParagraph(last)) {
       last.addLine!(this, line);
     } else if (!line.blank) {
-      stack.push(openParagraph(this, line));
-      this.children.push(NO_CHILDREN);
+      this.attach(openParagraph(this, line));
     }
+  }
+
+  /** Runs the candidate rules for the rest of `line`. Restores the line after each failure. */
+  tryStart(line: Line): OpenBlock | undefined {
+    const code = line.text.charCodeAt(line.nonBlank);
+    const rules = this.rules;
+    const candidates = code < 128 ? rules.blockByChar[code] : rules.blockOther;
+    const start = line.start;
+    const visualColumn = line.visualColumn;
+    const partialTab = line.partialTab;
+    for (const rule of candidates) {
+      if (this.paragraph !== undefined && !rule.canInterruptParagraph) {
+        continue;
+      }
+      const block = rule.start(this, line);
+      if (block !== undefined) {
+        return block;
+      }
+      if (
+        line.start !== start ||
+        line.visualColumn !== visualColumn ||
+        line.partialTab !== partialTab
+      ) {
+        line.start = start;
+        line.visualColumn = visualColumn;
+        line.partialTab = partialTab;
+        measureLine(line);
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * Adds `block` under the current container: closes unmatched blocks, then
+   * containers that refuse it.
+   */
+  attach(block: OpenBlock): void {
+    this.closeTo(this.containerIndex);
+    const stack = this.stack;
+    while (stack.length > 1) {
+      const parent = stack[stack.length - 1];
+      if (parent.canContain === undefined || parent.canContain(block)) {
+        break;
+      }
+      this.closeTip();
+    }
+    stack.push(block);
+    this.children.push(block.isContainer ? [] : NO_CHILDREN);
+    if (block.isContainer) {
+      this.containerIndex = stack.length - 1;
+      this.container = block;
+    } else {
+      this.containerIndex = stack.length - 2;
+      this.container = stack[this.containerIndex];
+    }
+  }
+
+  openContainer(block: OpenBlock): void {
+    this.attach(block);
+    this.paragraph = undefined;
+    this.lazy = false;
   }
 
   allowsLazy(matched: number, top: number): boolean {
@@ -269,6 +362,10 @@ export class BlockParser implements BlockState {
     const block = this.stack.pop()!;
     const children = this.children.pop()!;
     const parent = this.children[this.children.length - 1];
+    if (this.containerIndex >= this.stack.length) {
+      this.containerIndex = this.stack.length - 1;
+      this.container = this.stack[this.containerIndex];
+    }
     if (isParagraph(block)) {
       this.runPrefixRules(block, parent);
       if (block.lines.length === 0) {
@@ -300,6 +397,26 @@ export class BlockParser implements BlockState {
     this.paragraph = undefined;
     this.runPrefixRules(paragraph, this.children[this.children.length - 1]);
     return paragraph.lines.length === 0 ? undefined : paragraph;
+  }
+
+  splitParagraph(count: number): number[] | undefined {
+    const paragraph = this.paragraph;
+    if (paragraph === undefined || this.lazy || count < 1) {
+      return undefined;
+    }
+    const lines = paragraph.lines;
+    if (count * 2 > lines.length) {
+      return undefined;
+    }
+    const taken = lines.splice(lines.length - count * 2);
+    if (lines.length === 0) {
+      this.stack.pop();
+      this.children.pop();
+    } else {
+      this.closeTip();
+    }
+    this.paragraph = undefined;
+    return taken;
   }
 
   inline(node: { children: PhrasingContent[] }, ranges: number[]): void {

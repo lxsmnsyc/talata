@@ -6,4 +6,5 @@ import type { InlineRule } from '../core/inline';
 export const inlineRules: InlineRule[] = [];
 
 // Helpers for inline rules.
-export { appendText, flushText, pushNode } from './text';
+export { appendText, flushText, mergeText, pushNode } from './text';
+export { nodeIndex, resolveSpan } from '../core/inline';

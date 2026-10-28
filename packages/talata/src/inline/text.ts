@@ -42,6 +42,29 @@ export function flushText(state: InlineState): void {
   state.textStart = -1;
 }
 
+/**
+ * Merges adjacent text nodes in place, as the reference does. Delimiter runs
+ * left unpaired stay as separate text nodes until this runs. The inline
+ * parser runs it on the leaf's nodes; a link runs it on its children.
+ */
+export function mergeText(nodes: PhrasingContent[]): void {
+  let write = 0;
+  for (let read = 0; read < nodes.length; read++) {
+    const node = nodes[read];
+    const previous = write > 0 ? nodes[write - 1] : undefined;
+    if (node.type === 'text' && previous?.type === 'text') {
+      previous.value += node.value;
+      if (previous.position !== undefined && node.position !== undefined) {
+        previous.position.end = node.position.end;
+      }
+    } else {
+      nodes[write] = node;
+      write++;
+    }
+  }
+  nodes.length = write;
+}
+
 /** Emits the pending text, then `node`. */
 export function pushNode(state: InlineState, node: PhrasingContent): void {
   flushText(state);
