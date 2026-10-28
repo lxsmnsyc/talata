@@ -20,6 +20,7 @@ owns:
 shared:
   - packages/talata/src/**
   - packages/talata/test/fuzz/features.ts
+  - packages/talata/test/fuzz/fixtures/**
 reserves: []
 provides: []
 depends_on:

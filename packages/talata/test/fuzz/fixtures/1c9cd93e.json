@@ -1,0 +1,8 @@
+{
+  "input": ">>;||\n>>-|-\n>o|||\n>-|-|-",
+  "gfm": true,
+  "all": false,
+  "kind": "diff",
+  "seed": 101,
+  "index": 11570
+}

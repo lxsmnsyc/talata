@@ -39,7 +39,7 @@ export const supported: Features = {
   definition: true,
   inline: true,
   strikethrough: true,
-  table: false,
+  table: true,
   footnote: false,
   taskList: false,
   autolinkLiteral: true,
