@@ -33,11 +33,10 @@ class OpenParagraphBlock implements OpenParagraph {
   continue: (state: BlockState, line: Line) => boolean = continueParagraph;
 
   addLine(_state: BlockState, line: Line): void {
-    if (this.indents === undefined) {
-      this.indents = [];
-    }
+    const indents = this.indents ?? [];
+    this.indents = indents;
     if (line.nonBlank !== line.start || line.partialTab !== 0) {
-      this.indents.push(line.end, line.start, line.partialTab);
+      indents.push(line.end, line.start, line.partialTab);
     }
     this.lines.push(line.nonBlank, line.end);
   }
