@@ -3,7 +3,6 @@ import type { Root } from 'mdast';
 import { describe, expect, it } from 'vitest';
 import { check } from './check';
 import { allFeatures, featureNames, supported } from './features';
-import type { Features } from './features';
 import { generateDocument } from './generate';
 import { mutate } from './mutate';
 import { createRandom } from './random';
@@ -164,7 +163,7 @@ describe('fuzz parts', () => {
       expect(typeof mutate(random, doc)).toBe('string');
       seen += doc;
     }
-    const markers: Record<keyof Features, string> = {
+    const markers: Record<(typeof featureNames)[number], string> = {
       atx: '# ',
       thematicBreak: '***',
       setext: '===',

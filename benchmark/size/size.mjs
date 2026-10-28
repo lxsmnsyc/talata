@@ -72,9 +72,37 @@ for (const platform of platforms) {
   }
 }
 
+// Each subpath entry on its own, so a growing extension shows apart from the main entry.
+const subpaths = ['frontmatter', 'math', 'directive', 'unified'];
+const entryRows = [];
+for (const subpath of subpaths) {
+  const result = await build({
+    stdin: {
+      contents: `export * from 'talata/${subpath}';`,
+      resolveDir: benchmarkDir,
+      loader: 'js',
+    },
+    bundle: true,
+    minify: true,
+    format: 'esm',
+    target: 'es2020',
+    platform: 'neutral',
+    external: ['unified'],
+    write: false,
+    legalComments: 'none',
+    logLevel: 'error',
+  });
+  const code = result.outputFiles[0].contents;
+  entryRows.push({
+    entry: `talata/${subpath}`,
+    minified: code.length,
+    gzip: gzipSync(code, { level: 9 }).length,
+  });
+}
+
 const kb = (bytes) => (bytes / 1000).toFixed(1) + ' KB';
 if (json) {
-  console.log(JSON.stringify(rows, null, 2));
+  console.log(JSON.stringify({ rows, entries: entryRows }, null, 2));
 } else {
   console.log('\nMinified, one ESM file, ES2020, GFM on (1 KB = 1000 bytes)\n');
   console.log('build    stack          minified     gzip        brotli');
@@ -92,5 +120,17 @@ if (json) {
     const ratio = (ours.gzip / theirs.gzip).toFixed(2);
     const verdict = ours.gzip < theirs.gzip ? 'smaller' : 'LARGER';
     console.log(`\n${platform}: talata gzip is ${ratio}x the reference (${verdict})`);
+  }
+  const main = rows.find((row) => row.platform === 'node' && row.name === 'talata');
+  console.log(`\nmain entry (node): ${main.minified} bytes minified, ${main.gzip} bytes gzip`);
+  console.log('\nsubpath entries on their own (they include the shared extension helper)\n');
+  console.log('entry                 minified     gzip');
+  for (const row of entryRows) {
+    console.log(
+      row.entry.padEnd(18),
+      kb(row.minified).padStart(10),
+      kb(row.gzip).padStart(10),
+      `(${row.gzip} bytes gzip)`,
+    );
   }
 }

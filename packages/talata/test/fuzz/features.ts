@@ -1,3 +1,6 @@
+import type { ExtensionName } from '../parsers';
+import { readyExtensions } from './ext';
+
 /**
  * What the fuzzer may generate and compare. Talata is built in steps, so a
  * feature stays off until its roadmap node lands. A document is skipped when
@@ -26,6 +29,9 @@ export interface Features {
   footnote: boolean;
   taskList: boolean;
   autolinkLiteral: boolean;
+  // Extensions in use, in call order. Both parsers get them. An extension
+  // joins once its `ext-<name>.ts` file sets `ready`.
+  extensions: ExtensionName[];
 }
 
 export const supported: Features = {
@@ -43,6 +49,7 @@ export const supported: Features = {
   footnote: true,
   taskList: true,
   autolinkLiteral: true,
+  extensions: readyExtensions(),
 };
 
 export function allFeatures(): Features {
@@ -61,10 +68,11 @@ export function allFeatures(): Features {
     footnote: true,
     taskList: true,
     autolinkLiteral: true,
+    extensions: readyExtensions(),
   };
 }
 
-export const featureNames: (keyof Features)[] = [
+export const featureNames: Exclude<keyof Features, 'extensions'>[] = [
   'atx',
   'thematicBreak',
   'setext',

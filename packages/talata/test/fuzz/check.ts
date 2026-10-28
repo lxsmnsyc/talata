@@ -1,6 +1,7 @@
 import type { Root } from 'mdast';
 import { parseReference, parseTalata } from '../parsers';
 import { describeDiff, firstDiff } from '../tree-diff';
+import { fuzzExtensions } from './ext';
 import type { Features } from './features';
 
 export type Outcome =
@@ -107,6 +108,11 @@ function nodeReason(
   if (type === 'listItem' && node.checked != null && !on.taskList) {
     return 'taskList';
   }
+  for (const extension of fuzzExtensions) {
+    if (extension.nodeTypes.includes(type)) {
+      return on.extensions.includes(extension.name) ? undefined : extension.name;
+    }
+  }
   if (!(type in typeFeature)) {
     return `type ${type}`;
   }
@@ -155,17 +161,17 @@ export function check(
   value: string,
   useGfm: boolean,
   on: Features,
-  parse: (value: string, useGfm: boolean) => Root = parseTalata,
+  parse: (value: string, useGfm: boolean, extensions: Features['extensions']) => Root = parseTalata,
 ): Outcome {
   let actual: Root;
   try {
-    actual = parse(value, useGfm);
+    actual = parse(value, useGfm, on.extensions);
   } catch (error) {
     return { kind: 'throw', message: messageOf(error) };
   }
   let expected: Root;
   try {
-    expected = parseReference(value, useGfm);
+    expected = parseReference(value, useGfm, on.extensions);
   } catch {
     return { kind: 'skip', reason: 'reference threw' };
   }
