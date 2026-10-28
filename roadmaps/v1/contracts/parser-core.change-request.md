@@ -1,7 +1,7 @@
 # Change request: parser-core v1 to v2
 
 - From node: core-skeleton
-- Status: open
+- Status: accepted
 
 ## Problem
 
@@ -232,3 +232,4 @@ core-skeleton implements v2 as written above. The contract file still says v1.
 
 ## Decision
 
+Accepted by the orchestrator on 2026-10-28 and copied into parser-core.md as v2, pending the user's gate review of core-skeleton.
