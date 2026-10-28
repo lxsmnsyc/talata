@@ -4,6 +4,7 @@ import { CR, LF, TAB, isSpaceOrTab } from '../core/chars';
 import type { InlineRule, InlineState } from '../core/inline';
 import type { Line } from '../core/line';
 import type { Source } from '../core/source';
+import { reach } from '../inline/lines';
 
 // GFM task list items (`- [ ] a`, `- [x] a`), as
 // micromark-extension-gfm-task-list-item and mdast-util-gfm-task-list-item
@@ -210,6 +211,8 @@ function parse(state: InlineState): boolean {
     }
     range = 2;
     close = ranges[2];
+    // The check read into the next line, even when it fails.
+    reach(state, 2);
   }
   const rangeEnd = ranges[range + 1];
   if (close >= rangeEnd || text.charCodeAt(close) !== RIGHT_BRACKET) {
