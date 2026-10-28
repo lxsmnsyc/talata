@@ -10,3 +10,4 @@
 - check.yml: nits applied, brumate style (persist-credentials false, package-manager-cache false). smoke.mjs loads unified entries.
 - Rebased onto main; oxlint and oxfmt clean.
 - Removed the 0.0.0 guard step: the user publishes 0.0.0 by hand before pushing, so select-mode returns none. Setup steps reordered.
+- release.yml replaced by a copy of brumate's (major tags, environment npm, no harden-runner, no repository guard).
