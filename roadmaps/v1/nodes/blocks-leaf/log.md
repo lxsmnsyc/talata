@@ -1,0 +1,28 @@
+# Log: blocks-leaf
+
+- 2026-10-28: branch renamed to feat/blocks-leaf. No earlier work existed for these rules.
+- Read micromark-core-commonmark sources (setext-underline, code-indented, code-fenced, html-flow, definition, factory-label, factory-title, factory-destination). Each rule follows them state for state.
+- Reference findings:
+  - Indented code starts at `line.start`, so the indentation is in its position. Lines with 4 columns but nothing after them are part of the code, and the value drops one trailing line ending (`    a\n    \nb` gives value "a", end 2:5).
+  - Fenced code starts at the fence. HTML starts at the line start and its value keeps the indentation.
+  - Fenced code meta keeps trailing whitespace. Lang ends at whitespace.
+  - The trailing line ending stays in fenced code and in HTML kinds 1 to 5 when the next line is not lazy (a new container, or EOF that the containers continue over). This needed `BlockState.closeKeepsLineEnding`; see `contracts/parser-core-v3-blocks-leaf.change-request.md`.
+  - An empty last line after container prefixes (`> ```\n> a\n>`) ends fenced code and HTML 1 to 5 right after the previous line ending, with no content line.
+  - The CDATA end follows micromark's states, so `]]]>` does not end it. `<!-->` and `<?>` end at once.
+  - Kind 7 HTML may interrupt a lazy paragraph (`> a\n<span>` gives html at the root).
+  - Definition labels keep the whitespace at the start of continuation lines (`[Foo\n  bar]` gives label "Foo\n  bar"); titles do not. Labels after a split tab get spaces. Paragraphs now record that whitespace (`indents` in paragraph.ts, `lineIndent()`).
+  - Paren titles may contain `(` (`[a]: b (c (d)` gives title "c (d").
+- Named character references need inline-core's entity table; decodeString leaves them raw for now.
+- Fuzz (scratch, not committed): 200k random documents built from leaf-block fragments, compared with inline content stripped and container documents skipped. No differences.
+- Review round 1:
+  - Merged main (blocks-container). The `blocks/index.ts` conflict was resolved by keeping both rule sets.
+  - Fixed fenced code: an unclosed fence that ends without keeping its line ending, and whose last content line is empty, now drops one trailing line ending from the value, as mdast-util-from-markdown does (`> ```\n> a\n>\nb` gives "a").
+  - Fixed quadratic definition label lookup: the scanner now keeps a forward-only cursor into the paragraph's indents, and paragraphs record indents only when they start with `[`. Added a linear-growth timing test.
+  - Nits: `hasRawEnd` compares names with char codes; `decodeString` moved to `blocks/decode.ts`.
+  - With the real containers, every example in blocks-container's waiting list and 57, 60, 61 in core-sections pass and were removed. The block-structure suite now runs on every spec example.
+  - (round 1, continued below)
+- Review round 2:
+  - `[a]: /u\n-` gave definition plus an empty list item; the reference gives a paragraph "-". Setext called `takeParagraph`, definitions took every line, and the list rule then saw no paragraph. Fix in `core/blocks.ts`: when definitions take every line, `takeParagraph` returns undefined but leaves `state.paragraph` set (now empty) for the rest of the line, so later rules still see an interruption; a second `takeParagraph` on the empty paragraph returns undefined without popping. No list change. Tests: `[a]: /u\n-`, `- `, `[a]: "t"\n- `, `===`, `    b`, `<x>`, `2. b`, `1. b`, `- b`, inside a quote and a list.
+  - Replaced the flaky timing test with a step count: `indentSteps` in definition.ts counts indent entries the scanner steps over; the test asserts at most one step per line.
+  - Added `packages/talata/.vitest/` to `.gitignore`.
+- Round 1 cross cases: `- ```\n  a\n` and `- [a]: /u\n\n  b` match. `- ```\n  a\n- b` matches for the code node, but the reference ends the list item at 3:3 (after the next marker) and talata at 3:1. That is the list item end rule, for spec-green.

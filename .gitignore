@@ -7,3 +7,4 @@ coverage
 benchmark/corpus
 benchmark/profiles
 .claude/
+packages/talata/.vitest/
