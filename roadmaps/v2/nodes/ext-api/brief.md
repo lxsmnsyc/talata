@@ -13,7 +13,7 @@ spike: false
 verify:
 exclusive: []
 fulfilled_by:
-gate: true
+gate: false
 added: 2026-10-28
 owns:
   - packages/talata/src/ext/api.ts

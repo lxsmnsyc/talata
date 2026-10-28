@@ -4,7 +4,7 @@ merge:
   mode: auto
   method: merge
   max_size: L
-  exclude: [release, hotfix, contract, gate]
+  exclude: [release]
 branches:
 release:
   publish: changesets
@@ -74,8 +74,8 @@ release:
 ## Decisions
 
 - 2026-10-28: the user chose subpaths of the `talata` package for extensions, so they do not need separate npm packages. This includes MDX later.
+- 2026-10-28: the user switched to auto-merge. The orchestrator merges every node pull request that passes review and CI, contract nodes included. Only the release, which publishes to npm, stays with the user.
 
 ## Gates
 
-- ext-api: the user reviews the extension contract before the three extension nodes start.
-- release-0.2: the user merges the Version Packages pull request.
+- release-0.2: the user merges the Version Packages pull request, which publishes to npm.
