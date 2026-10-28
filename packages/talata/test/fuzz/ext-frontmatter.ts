@@ -1,15 +1,26 @@
 import type { ExtensionFuzz } from './ext';
 
-/**
- * Fuzz hook for `talata/frontmatter`. The extension node fills it in: it turns
- * `ready` on once talata matches the reference, and adds generators for the
- * syntax (see `ExtensionFuzz`). While `ready` is false the fuzzer leaves the
- * extension out of both parsers.
- */
+const FENCES = ['---', '---', '---', '+++', '---  ', '--- ', '----', '---a', '-- -', '+++ '];
+const CLOSES = ['---', '---', '+++', '--- ', '----', '', '  ---', '---a', '+++\t'];
+const BODY = ['title: a', '', 'a: [b]', '# h', '> q', '- x', '---', '+++', '  ', '\tz', '***'];
+
+/** Fuzz hook for `talata/frontmatter`: a matter at the start of a document. */
 const fuzz: ExtensionFuzz = {
   name: 'frontmatter',
-  ready: false,
+  ready: true,
   nodeTypes: ['yaml', 'toml'],
+  start(random) {
+    const lines = [random.pick(FENCES)];
+    const count = random.int(4);
+    for (let i = 0; i < count; i++) {
+      lines.push(random.pick(BODY));
+    }
+    const close = random.pick(CLOSES);
+    if (close !== '') {
+      lines.push(close);
+    }
+    return lines;
+  },
 };
 
 export default fuzz;

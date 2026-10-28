@@ -1,0 +1,8 @@
+# Log: ext-frontmatter
+
+- Reference inputs: the 23 inputs of `micromark-extension-frontmatter` 2.0.0 `test/index.js` (MIT, Titus Wormer) are in `test/frontmatter.test.ts` with 33 inputs of our own. Each runs with and without GFM against `parseReference`.
+- First fuzz run: 3.8% of documents differed. `---\n>` gives a thematic break and a paragraph `>` in the reference, not a quote. Cause: micromark tries an opening fence without a closing one until the end of the document, and a concrete construct in progress stops new containers from starting. So no quote, list item or footnote definition starts on any line after such a fence.
+- Fix without a core change: when the rule sees an opening fence with no closing fence, it swaps `state.rules` (the block parser's own copy of the registry) for a copy without the container rules (`blockquote`, `listItem`, `footnoteDefinition`, `directiveContainer`). The copy is cached per registry in a WeakMap. Inline parsing uses the original registry.
+- `anywhere` inside a lazy paragraph of a quote or list (`> a\n---\nb\n---`): the reference puts the matter inside the quote. The rule only starts in the root, so this case differs. The block's `keepsLazyContainers` was tried and did not help, because the quote does not match the next lines. Left as a known gap, with a test that pins it.
+- `test/ext-api.test.ts` ("same tree for the stub extensions") and `test/ext-api-bundle.test.ts` ("does not bundle the parser", limit 5000 characters, now 7955 for frontmatter) assume stubs. They fail now and belong to ext-api. Not edited.
+- Main entry: 32780 bytes gzip against 32777 on main. The core helpers the rule imports are now exported from the shared chunk.

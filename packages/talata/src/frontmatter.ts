@@ -1,5 +1,7 @@
 import { cachedExtension } from './ext/api';
 import type { Extension } from './ext/api';
+import { matterRule } from './ext/frontmatter/matter';
+import type { ResolvedMatter } from './ext/frontmatter/matter';
 
 /** Name of a frontmatter style: `'yaml'` uses `---` fences, `'toml'` uses `+++`. */
 export type Preset = 'toml' | 'yaml';
@@ -30,7 +32,52 @@ export type Options = Matter | Preset | (Matter | Preset)[];
  * Matches `micromark-extension-frontmatter` with `mdast-util-frontmatter`.
  */
 export function frontmatter(options?: Options | null): Extension {
-  return cachedExtension(`frontmatter:${JSON.stringify(options ?? 'yaml')}`, () => ({
-    name: 'talata:frontmatter',
-  }));
+  return cachedExtension(`frontmatter:${JSON.stringify(options ?? 'yaml')}`, () => {
+    const list = Array.isArray(options) ? options : [options ?? 'yaml'];
+    const matters: ResolvedMatter[] = [];
+    for (const item of list) {
+      matters.push(resolve(item));
+    }
+    return { name: 'talata:frontmatter', blockRules: [matterRule(matters)] };
+  });
+}
+
+function pick(schema: Info | string, prop: 'close' | 'open'): string {
+  return typeof schema === 'string' ? schema : schema[prop];
+}
+
+/** A matter as checked at run time, where a caller without types may leave fields out. */
+interface Loose {
+  type?: string | undefined;
+  marker?: Info | string | undefined;
+  fence?: Info | string | undefined;
+  anywhere?: boolean | null | undefined;
+}
+
+function resolve(option: Loose | string): ResolvedMatter {
+  let matter: Loose;
+  if (typeof option === 'string') {
+    if (option !== 'yaml' && option !== 'toml') {
+      throw new Error(`Missing matter definition for \`${option}\``);
+    }
+    matter = { type: option, marker: option === 'yaml' ? '-' : '+' };
+  } else {
+    matter = option;
+  }
+  if (matter.type === undefined) {
+    throw new Error('Missing `type` in matter');
+  }
+  let open: string;
+  let close: string;
+  if (matter.marker === undefined && matter.fence === undefined) {
+    throw new Error('Missing `marker` or `fence` in matter');
+  }
+  if (matter.marker === undefined) {
+    open = pick(matter.fence ?? '', 'open');
+    close = pick(matter.fence ?? '', 'close');
+  } else {
+    open = pick(matter.marker, 'open').repeat(3);
+    close = pick(matter.marker, 'close').repeat(3);
+  }
+  return { type: matter.type, open, close, anywhere: matter.anywhere === true };
 }
