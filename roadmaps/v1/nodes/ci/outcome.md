@@ -39,8 +39,12 @@
 
 1. Create the GitHub repository `lxsmnsyc/talata` and push `main`.
 2. Settings, Actions, General, Workflow permissions: "Read and write permissions", and tick "Allow GitHub Actions to create and approve pull requests". The `version` job cannot open its pull request without it.
-3. On npm, the package `talata` must exist before a trusted publisher can be added (npm only configures one for an existing package). Then: package Settings, Trusted Publisher, GitHub Actions, owner `lxsmnsyc`, repository `talata`, workflow `release.yml`, no environment.
-4. Open question for the user: how to do the first 0.1.0 publish, since the trusted publisher needs the package to exist. Options are a manual `npm publish --access public` from `packages/talata` once, or publishing a placeholder, then adding the trusted publisher. After that every release goes through the workflow. The workflow carries no token path; a token would need a workflow change.
+3. First publish of 0.1.0 is manual (the user's decision). Order matters:
+   1. Push `main`. The release run finds `talata@0.0.0`, the guard sets mode `none`, and nothing is published.
+   2. Add a changeset and merge it. The `version` job opens the "chore: version packages" pull request. Do not merge it yet.
+   3. Check out that pull request branch (or run `pnpm cs:ver` locally so `packages/talata/package.json` says 0.1.0), then `pnpm --filter talata build` and, in `packages/talata`, `npm publish --access public` while logged in with `npm login` and 2FA. This publish has no provenance.
+   4. Merge the pull request. select-mode sees 0.1.0 on npm, returns `none`, and no job publishes. If the pull request is merged before the manual publish, the `publish` job runs without a trusted publisher and fails at the publish step; nothing is lost, but the failure is confusing.
+4. On npmjs.com, package `talata`, Settings, Trusted Publisher, GitHub Actions: owner `lxsmnsyc`, repository `talata`, workflow `release.yml`, no environment. From then on every release is made by the workflow with no token.
 5. Optional: protect `main` and require `Check (Node 22)`, `Check (Node 24)` and `Smoke test built package (Node 20)`.
 
 ## Proposed learnings
