@@ -105,9 +105,9 @@ Parse time grows linearly with input size, including on inputs that are quadrati
 | Build   | talata                | `mdast-util-from-markdown` + GFM |
 | ------- | --------------------- | -------------------------------- |
 | Node    | 92.1 KB, 32.6 KB gzip | 118.2 KB, 35.9 KB gzip           |
-| Browser | 68.9 KB, 22.4 KB gzip | 82.5 KB, 23.8 KB gzip            |
+| Browser | 92.1 KB, 32.6 KB gzip | 82.5 KB, 23.8 KB gzip            |
 
-The browser build decodes named character references with the DOM instead of shipping a table, as the reference does. Bundlers pick it through the `browser` export condition. Workers, Deno, edge runtimes (`worker`, `workerd`, `edge-light`, `deno`), React Native and Convex get the table build. A bundle built for `browser` and run where there is no `document` throws on the first named character reference.
+talata ships one build for every runtime, with a table of the 2,125 named character references (about 9.5 KB gzip). In browser bundles, the reference decodes those names through the DOM and ships no table, so it is smaller there.
 
 ## How it is tested
 
