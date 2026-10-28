@@ -8,7 +8,7 @@ import type {
   Text,
 } from 'mdast';
 import type { Delimiter, InlineRule, InlineState } from '../core/inline';
-import { nodeIndex, resolveSpan } from '../core/inline';
+import { DEAD_BRACKET, nodeIndex, resolveSpan } from '../core/inline';
 import { point, skipLineEnding } from '../core/source';
 import { normalizeIdentifier } from '../core/state';
 import { imageFootnoteCall } from '../gfm/footnote';
@@ -191,9 +191,10 @@ function isDefined(state: InlineState, range: number, from: number, to: number):
   return state.definitions.has(result.toLowerCase().toUpperCase());
 }
 
-/** A `]` that closes nothing: drops the bracket and keeps `]` as text. */
+/** A `]` that closes nothing: kills the bracket and keeps `]` as text. */
 function failBracket(state: InlineState, open: number): boolean {
-  state.delimiters.splice(open, 1);
+  // Kept in place and made inert: a splice moves every delimiter above it.
+  state.delimiters[open].marker = DEAD_BRACKET;
   popBracket();
   appendText(state, ']', state.pos, state.pos + 1);
   state.pos++;
