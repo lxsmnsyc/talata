@@ -89,6 +89,8 @@ function open(
   from: number,
   end: number,
   matter: ResolvedMatter,
+  noClose: number[],
+  index: number,
 ): OpenMatter | null | undefined {
   if (!fenceAt(text, from, end, matter.open)) {
     return undefined;
@@ -97,6 +99,10 @@ function open(
     return null;
   }
   const contentStart = skipLineEnding(text, end);
+  // An earlier scan from `noClose[index]` found no closing fence, so a later one cannot either.
+  if (noClose[index] <= contentStart) {
+    return null;
+  }
   let lineStart = contentStart;
   let previousEnd = contentStart;
   while (lineStart < text.length) {
@@ -107,8 +113,12 @@ function open(
     previousEnd = eol;
     lineStart = skipLineEnding(text, eol);
   }
+  noClose[index] = contentStart;
   return null;
 }
+
+/** Per parse: for each matter, the offset from which a scan found no closing fence. Keyed by the parse's source. */
+const noCloseByParse = new WeakMap<object, number[]>();
 
 /**
  * Rules that start containers. micromark does not look for new containers
@@ -175,9 +185,18 @@ export function matterRule(matters: ResolvedMatter[]): BlockRule {
       }
       const text = line.text;
       let unclosed = false;
-      for (const matter of matters) {
+      let noClose = noCloseByParse.get(state.source);
+      if (noClose === undefined) {
+        noClose = [];
+        for (let i = 0; i < matters.length; i++) {
+          noClose.push(Infinity);
+        }
+        noCloseByParse.set(state.source, noClose);
+      }
+      for (let i = 0; i < matters.length; i++) {
+        const matter = matters[i];
         if (line.index === 0 || matter.anywhere) {
-          const block = open(text, line.start, line.end, matter);
+          const block = open(text, line.start, line.end, matter, noClose, i);
           if (block === null) {
             unclosed = true;
           } else if (block !== undefined) {

@@ -154,6 +154,23 @@ test('anywhere inside a lazy container is a known gap', () => {
   expect(describeDiff(firstDiff(expected, actual))).toBeDefined();
 });
 
+test('open fences without a closing fence stay linear with anywhere', () => {
+  const options: Options = { type: 'f', fence: { open: '<<', close: '>>' }, anywhere: true };
+  const small = '<<\n'.repeat(300);
+  const large = '<<\n'.repeat(33_000);
+  expect(
+    describeDiff(
+      firstDiff(
+        parseReference(small, false, ['frontmatter'], { frontmatter: options }),
+        parseTalata(small, false, ['frontmatter'], { frontmatter: options }),
+      ),
+    ),
+  ).toBeUndefined();
+  const start = performance.now();
+  parseTalata(large, false, ['frontmatter'], { frontmatter: options });
+  expect(performance.now() - start).toBeLessThan(1500);
+});
+
 describe('frontmatter factory', () => {
   test('equal options give the same object', () => {
     expect(frontmatter()).toBe(frontmatter(null));

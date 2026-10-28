@@ -20,9 +20,9 @@
 
 ## Gotchas
 
-- `test/ext-api.test.ts` ("same tree for the stub extensions") and `test/ext-api-bundle.test.ts` ("does not bundle the parser", under 5000 characters; frontmatter is 7955) fail now. They assume empty stubs and need an update by the orchestrator.
-- `npx oxlint` reports errors in `.github/scripts/smoke.mjs` that are not from this node.
-- Main entry is 32780 bytes gzip, 3 bytes over main (32777): the core helpers the rule imports are exported from the shared chunk.
+- `npx oxlint` reports errors in `.github/scripts/smoke.mjs` only when `packages/talata/dist` is missing. Build first.
+- The main entry is unchanged (92646 bytes minified on main and here). The gzip difference of a few bytes is noise.
+- The closing-fence scan is memoized per parse, so many unclosed open fences with `anywhere` stay linear.
 
 ## Proposed learnings
 
