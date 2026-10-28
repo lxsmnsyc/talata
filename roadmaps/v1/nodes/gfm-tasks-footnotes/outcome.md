@@ -35,11 +35,12 @@ Paths are under `packages/talata/`.
 ## Remaining differences
 
 - In `-\n[ ] a` and `> -\n> [ ] a`, the reference sets `checked: false` on the root or block quote and drops `[ ]`. The same happens in `-\n[x]\n-|-`, from gfm-tables. Talata leaves the text alone. Fixing this needs a transform or a hook on block quote nodes; see the change request. Paragraphs whose parent is a list item work (`- -\n  [ ] a`).
-- `![\n^a]`: the label starts on a later line. The reference reads it as a call; talata does not. No fuzz run found this.
+- `![\n^a]`, a call whose label starts on the next line: fixed after the gfm-inline merge.
 
 ## Gotchas
 
 - When the marker line has nothing after the marker, the "first content" can lie outside the item, on a lazy line.
+- Strikethrough calls later resolvers with bottom 0 on the inside of its pairs. A resolver that must run once per leaf has to check `state.nodes`.
 - Per-document state in `src/gfm/` lives in `WeakMap`s keyed by `BlockState` or `Source`, so a finished parse is not kept alive (review round 1).
 - A tab check value only works when the tab is one column wide.
 - A footnote definition directly inside another one continues with no indent of its own: micromark checks the last token (`followsIndent`).
@@ -57,6 +58,8 @@ Paths are under `packages/talata/`.
 - `npx tsc --noEmit -p .`, `npx oxlint` and `npx oxfmt --check src test` passed.
 - Fuzz with GFM, 50k documents for each of seeds 101, 202, 303 and 404: the only failures left are gfm-inline's literal autolink text splits.
 - Final run, seed 2027, 100,000 documents, GFM: 97,855 compared, 2,145 skipped (autolinkLiteral, strikethrough), 62 failures, all literal autolink text splits for gfm-inline (`[a@b.c`, `<\+@b.e`). This run started before the `- [\n  *x*` fix, which is covered by tests.
+
+- After merging gfm-inline (12efa70): fast check twice gave 18 files, 4922 passed, 2 expected fails. GFM fuzz, 30,000 documents, seed 6161: 0 failures, none skipped.
 
 ## Size
 

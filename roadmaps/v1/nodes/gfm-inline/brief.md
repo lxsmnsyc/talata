@@ -1,7 +1,7 @@
 ---
 id: gfm-inline
 title: GFM strikethrough and autolink literals
-status: active
+status: done
 priority: must
 type: feature
 outline: false

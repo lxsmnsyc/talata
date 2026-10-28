@@ -52,12 +52,6 @@ describe.skipIf(files.length === 0 || !ready.corpus)(
 // (gfm-inline), taskList and footnote (gfm-tasks-footnotes). A file runs with
 // GFM once all its flags are on; each GFM node turns its flag on.
 const gfmWaiting = new Map<string, GfmFeature[]>([
-  ['readmes/10.md', ['table', 'autolinkLiteral']],
-  ['readmes/114.md', ['autolinkLiteral']],
-  ['readmes/19.md', ['autolinkLiteral']],
-  ['readmes/38.md', ['autolinkLiteral']],
-  ['readmes/40.md', ['autolinkLiteral']],
-  ['readmes/91.md', ['table', 'autolinkLiteral']],
 ]);
 
 function waitsOnGfm(name: string): boolean {

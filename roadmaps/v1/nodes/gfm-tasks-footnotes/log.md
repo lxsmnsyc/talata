@@ -18,3 +18,10 @@
 - Should-fix: module-level `indentState` (footnote.ts) and `pendingState`/`pendingItem` (task-list.ts) kept the last parse alive. Both are now `WeakMap`s keyed by `BlockState`. `taskState` in task-list.ts is cleared by the same leaf's final resolve, so it only holds an object during that leaf's inline parse.
 - No test for retention: a `WeakMap` entry cannot be observed without a heap measurement or a test-only hook, so I skipped it.
 - Nit: list items call `footnoteIndentAt` only with GFM on.
+
+## Merge of gfm-inline (main 12efa70)
+
+- Conflicts in `src/inline/index.ts`, `test/parsers.ts`, `test/fuzz/features.ts` and `test/corpus.test.ts`; kept both sides. Every GFM flag is on, and `gfmWaiting` in the corpus test is empty.
+- Interaction bug, mine: strikethrough resolves the inside of its pairs by calling the later resolvers with bottom 0 on a swapped node list, so the task resolve trimmed the delete's content (`- [X] ~_~`). The task resolve now acts only on the leaf's own node list.
+- `![\n^a]`: the call string now starts on the next line, as in the reference (fuzz seed 5150, saved as a fixture). This was a known gap before.
+- Fast check twice: 18 files, 4922 passed, 2 expected fails. GFM fuzz, 30k documents each, seeds 5150 (1 failure, the `![\n^a]` one, fixed) and 6161 (0 failures, 30,000 compared, none skipped).

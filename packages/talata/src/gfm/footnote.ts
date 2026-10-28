@@ -339,11 +339,18 @@ export function imageFootnoteCall(
     return false;
   }
   // The call string starts one character after `[`, wherever `^` is.
-  const from = bracket.end + 1;
-  if (from > state.ranges[labelRange + 1]) {
-    return false;
+  // When `![` ends its line, that character is the line ending, and the
+  // string starts on the next line.
+  const ranges = state.ranges;
+  let range = labelRange;
+  let from = bracket.end + 1;
+  if (from > ranges[range + 1]) {
+    range += 2;
+    if (from < ranges[range]) {
+      from = ranges[range];
+    }
   }
-  const raw = rangeText(state, labelRange, from, close);
+  const raw = rangeText(state, range, from, close);
   flushText(state);
   const nodes = state.nodes;
   nodes.length = nodeIndex(state, bracket.node) + 1;

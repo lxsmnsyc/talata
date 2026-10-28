@@ -1,4 +1,4 @@
-import type { ListItem, Paragraph, RootContent } from 'mdast';
+import type { ListItem, Paragraph, PhrasingContent, RootContent } from 'mdast';
 import type { BlockRule, BlockState, OpenBlock } from '../core/blocks';
 import { CR, LF, TAB, isSpaceOrTab } from '../core/chars';
 import type { InlineRule, InlineState } from '../core/inline';
@@ -157,6 +157,7 @@ export function taskCandidates(
 // The leaf whose check matched, until its final resolve.
 let taskState: InlineState | undefined;
 let taskCandidate: Candidate | undefined;
+let taskNodes: PhrasingContent[] | undefined;
 
 function isCheckValue(code: number): boolean {
   return isSpaceOrTab(code) || code === LOWER_X || code === UPPER_X;
@@ -227,6 +228,7 @@ function parse(state: InlineState): boolean {
   candidate.item.checked = checked;
   taskState = state;
   taskCandidate = candidate;
+  taskNodes = state.nodes;
   state.range = range;
   state.pos = close + 1;
   return true;
@@ -239,12 +241,15 @@ function parse(state: InlineState): boolean {
  * that empties hands its start to the text node it would have merged with.
  */
 function resolve(state: InlineState, bottom: number): void {
-  if (state !== taskState || bottom !== 0) {
+  // Strikethrough resolves the inside of its pairs with bottom 0 on other
+  // node lists; only the leaf's own list counts.
+  if (state !== taskState || bottom !== 0 || state.nodes !== taskNodes) {
     return;
   }
   const candidate = taskCandidate!;
   taskState = undefined;
   taskCandidate = undefined;
+  taskNodes = undefined;
   const nodes = state.nodes;
   if (!candidate.slice || nodes.length === 0) {
     return;

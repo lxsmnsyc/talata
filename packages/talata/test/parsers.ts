@@ -19,8 +19,8 @@ export const ready = {
   // One flag per GFM feature. Each gates the spec examples of that section.
   gfm: {
     table: true,
-    strikethrough: false,
-    autolinkLiteral: false,
+    strikethrough: true,
+    autolinkLiteral: true,
     taskList: true,
     footnote: true,
   },
