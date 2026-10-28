@@ -11,7 +11,12 @@ const timeout = 30_000;
 
 describe.skipIf(files.length === 0)('benchmark corpus through the reference parser', () => {
   // One test per file, so a slow machine cannot push the total past a timeout.
+  // The large files only check the reference itself and take most of the
+  // fast check's time, so this sanity suite covers the readmes only.
   for (const file of files) {
+    if (file.name.startsWith('large/')) {
+      continue;
+    }
     it(`parses ${file.name} into a root with positions`, () => {
       const tree = parseReference(readFileSync(file.path, 'utf8'), true);
       expect(tree.type).toBe('root');
