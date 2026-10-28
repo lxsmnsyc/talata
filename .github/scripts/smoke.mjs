@@ -17,4 +17,10 @@ for (const mod of [esm, cjs]) {
   assert.equal(tree.children[0].position.start.line, 1);
 }
 assert.deepEqual(esm.fromMarkdown(source, { gfm: true }), cjs.fromMarkdown(source, { gfm: true }));
+const unifiedEsm = await import('../../packages/talata/dist/unified.js');
+const unifiedCjs = await import('../../packages/talata/dist/unified.cjs');
+for (const mod of [unifiedEsm, unifiedCjs]) {
+  assert.equal(typeof mod.talata, 'function');
+}
+assert.equal(typeof unifiedEsm.default, 'function');
 process.stdout.write(`smoke ok (major ${major})\n`);
