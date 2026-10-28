@@ -10,36 +10,7 @@ import { describeDiff, firstDiff } from './tree-diff';
 const sections = new Set(['Block quotes', 'List items', 'Lists']);
 
 // Examples that need constructs other nodes build. Each node removes its own.
-const waiting = new Map<number, string>([
-  [231, 'indented code (blocks-leaf)'],
-  [236, 'indented code (blocks-leaf)'],
-  [237, 'fenced code (blocks-leaf)'],
-  [252, 'indented code (blocks-leaf)'],
-  [253, 'indented code (blocks-leaf)'],
-  [254, 'indented code (blocks-leaf)'],
-  [257, 'indented code (blocks-leaf)'],
-  [263, 'fenced code (blocks-leaf)'],
-  [264, 'indented code (blocks-leaf)'],
-  [270, 'indented code (blocks-leaf)'],
-  [271, 'indented code (blocks-leaf)'],
-  [272, 'indented code (blocks-leaf)'],
-  [273, 'indented code (blocks-leaf)'],
-  [274, 'indented code (blocks-leaf)'],
-  [278, 'fenced and indented code (blocks-leaf)'],
-  [286, 'indented code (blocks-leaf)'],
-  [287, 'indented code (blocks-leaf)'],
-  [288, 'indented code (blocks-leaf)'],
-  [289, 'indented code (blocks-leaf)'],
-  [290, 'indented code (blocks-leaf)'],
-  [300, 'setext headings (blocks-leaf)'],
-  [308, 'HTML blocks (blocks-leaf)'],
-  [309, 'HTML blocks and indented code (blocks-leaf)'],
-  [313, 'indented code (blocks-leaf)'],
-  [317, 'definitions (blocks-leaf)'],
-  [318, 'fenced code (blocks-leaf)'],
-  [321, 'fenced code (blocks-leaf)'],
-  [324, 'fenced code (blocks-leaf)'],
-]);
+const waiting = new Map<number, string>([]);
 
 function check(markdown: string): void {
   expect(describeDiff(firstDiff(reference(markdown), fromMarkdown(markdown)))).toBeUndefined();

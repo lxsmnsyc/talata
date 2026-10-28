@@ -1,7 +1,7 @@
 ---
 id: blocks-leaf
 title: Leaf blocks: setext headings, code, HTML and definitions
-status: active
+status: done
 priority: must
 type: feature
 outline: false

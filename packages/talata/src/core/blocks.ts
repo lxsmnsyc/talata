@@ -20,6 +20,13 @@ export interface BlockState extends DocumentState {
   /** True when `paragraph` is set but the current line did not match all containers above it. */
   lazy: boolean;
   /**
+   * True while open blocks close because a container starts on the current
+   * line, or because the document ends after a line ending that every open
+   * container continues over. micromark then keeps the line ending after the
+   * last line of a fenced code or HTML block (kinds 1 to 5) in that block.
+   */
+  closeKeepsLineEnding: boolean;
+  /**
    * Removes the open paragraph so a rule can convert it (setext headings).
    * Paragraph prefix rules run first, so definitions at its start become
    * nodes. A rule calls it before it knows whether it starts: when it returns
@@ -158,6 +165,7 @@ export class BlockParser implements BlockState {
   container: OpenBlock = document;
   paragraph: OpenParagraph | undefined = undefined;
   lazy = false;
+  closeKeepsLineEnding = false;
   /** Open blocks from the document to the tip. */
   stack: OpenBlock[] = [document];
   /** Closed child nodes of each open block, parallel to `stack`. */
@@ -201,8 +209,39 @@ export class BlockParser implements BlockState {
       measureLine(line);
       this.processLine(line);
     }
+    if (count < starts.length) {
+      this.closeKeepsLineEnding = this.continuesOverEnd(line);
+    }
     this.closeTo(0);
+    this.closeKeepsLineEnding = false;
     return this.children[0];
+  }
+
+  /**
+   * After a final line ending: whether every open container continues on the
+   * empty line after it. Only asked when the tip is a leaf other than a
+   * paragraph, the only blocks that read the answer.
+   */
+  continuesOverEnd(line: Line): boolean {
+    const stack = this.stack;
+    const tip = stack[stack.length - 1];
+    if (tip.isContainer || isParagraph(tip)) {
+      return false;
+    }
+    const end = this.source.text.length;
+    line.index = this.source.lineStarts.length - 1;
+    line.start = end;
+    line.end = end;
+    line.visualColumn = 0;
+    line.partialTab = 0;
+    measureLine(line);
+    for (let i = 1; i < stack.length - 1; i++) {
+      this.container = stack[i - 1];
+      if (!stack[i].continue(this, line)) {
+        return false;
+      }
+    }
+    return true;
   }
 
   processLine(line: Line): void {
@@ -317,6 +356,7 @@ export class BlockParser implements BlockState {
    * containers that refuse it.
    */
   attach(block: OpenBlock): void {
+    this.closeKeepsLineEnding = block.isContainer;
     this.closeTo(this.containerIndex);
     const stack = this.stack;
     while (stack.length > 1) {
@@ -326,6 +366,7 @@ export class BlockParser implements BlockState {
       }
       this.closeTip();
     }
+    this.closeKeepsLineEnding = false;
     stack.push(block);
     this.children.push(block.isContainer ? [] : NO_CHILDREN);
     if (block.isContainer) {
@@ -390,14 +431,21 @@ export class BlockParser implements BlockState {
 
   takeParagraph(): OpenParagraph | undefined {
     const paragraph = this.paragraph;
-    if (paragraph === undefined || this.lazy) {
+    // An empty paragraph was already taken on this line (see below).
+    if (paragraph === undefined || this.lazy || paragraph.lines.length === 0) {
       return undefined;
     }
     this.stack.pop();
     this.children.pop();
-    this.paragraph = undefined;
     this.runPrefixRules(paragraph, this.children[this.children.length - 1]);
-    return paragraph.lines.length === 0 ? undefined : paragraph;
+    if (paragraph.lines.length === 0) {
+      // Definitions took every line. The rules after this one still see a
+      // paragraph being interrupted, as in micromark (`[a]: /u\n-` gives a
+      // paragraph "-", not an empty list item).
+      return undefined;
+    }
+    this.paragraph = undefined;
+    return paragraph;
   }
 
   splitParagraph(count: number): number[] | undefined {
