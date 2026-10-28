@@ -1,4 +1,4 @@
-import type { Emphasis, PhrasingContent, Strong, Text } from 'mdast';
+import type { Delete, Emphasis, PhrasingContent, Strong, Text } from 'mdast';
 import { ASTERISK, UNDERSCORE } from '../core/chars';
 import type { Delimiter, InlineRule, InlineState } from '../core/inline';
 import { nodeIndex, resolveSpan } from '../core/inline';
@@ -193,13 +193,14 @@ function onlyEmphasis(state: InlineState, bottom: number): boolean {
   return true;
 }
 
-// Fields of one entry in the flat pair list.
+// Fields of one entry in the flat pair list. A use of 0 is a GFM delete.
 const PAIR_OPENER = 0;
 const PAIR_CLOSER = 1;
 const PAIR_USE = 2;
 const PAIR_START = 3;
 const PAIR_END = 4;
 const PAIR_SIZE = 5;
+const WRAPPERS = ['delete', 'emphasis', 'strong'] as const;
 
 /**
  * The linear path. Pairs on the delimiters alone, then rebuilds the nodes in
@@ -242,6 +243,7 @@ function pairList(
   ids: Int32Array,
   pairs: number[],
   queue: Int32Array[],
+  rest?: number[],
 ): void {
   const delimiters = state.delimiters;
   const count = ids.length;
@@ -324,9 +326,18 @@ function pairList(
       index++;
     }
   }
+  if (rest !== undefined) {
+    // The tildes outside every pair, in order.
+    for (let k = count - 1; k >= 0; k = previous[k]) {
+      if (delimiters[bottom + ids[k]].marker === TILDE) {
+        rest.push(ids[k]);
+      }
+    }
+    rest.reverse();
+  }
 }
 
-/** Replaces the span's nodes with the emphasis and strong nodes of `pairs`. */
+/** Replaces the span's nodes with the emphasis, strong and delete nodes of `pairs`. */
 function rebuild(state: InlineState, bottom: number, count: number, pairs: number[]): void {
   const delimiters = state.delimiters;
   const source = state.source;
@@ -368,8 +379,8 @@ function rebuild(state: InlineState, bottom: number, count: number, pairs: numbe
       mergeText(inner);
       children = parents.pop()!;
       const base = p * PAIR_SIZE;
-      const wrapper: Emphasis | Strong = {
-        type: pairs[base + PAIR_USE] === 2 ? 'strong' : 'emphasis',
+      const wrapper: Emphasis | Strong | Delete = {
+        type: WRAPPERS[pairs[base + PAIR_USE]],
         children: inner,
         position: {
           start: point(source, pairs[base + PAIR_START]),
@@ -398,6 +409,126 @@ function rebuild(state: InlineState, bottom: number, count: number, pairs: numbe
   for (const node of root) {
     nodes.push(node);
   }
+}
+
+function isTildeList(state: InlineState, bottom: number, ids: Int32Array): boolean {
+  const delimiters = state.delimiters;
+  for (let i = 0; i < ids.length; i++) {
+    if (delimiters[bottom + ids[i]].marker === TILDE) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Pairs the tildes of `ids` as strikethrough does (see `pairTildes` in
+ * gfm/strikethrough.ts), appending delete pairs to `pairs`. With `queue`,
+ * the other delimiters go there as lists to pair as emphasis: one per delete
+ * inside and one for what is outside every delete. Unpaired tildes are text.
+ */
+function pairTildeList(
+  state: InlineState,
+  bottom: number,
+  ids: ArrayLike<number>,
+  pairs: number[],
+  queue: Int32Array[] | undefined,
+): void {
+  const delimiters = state.delimiters;
+  const count = ids.length;
+  // Per position: 1 opens a delete, 2 closes one, 0 otherwise.
+  const role = new Uint8Array(count);
+  const partner = new Int32Array(count);
+  const single: number[] = [];
+  const double: number[] = [];
+  for (let i = 0; i < count; i++) {
+    const delimiter = delimiters[bottom + ids[i]];
+    if (delimiter.marker !== TILDE) {
+      continue;
+    }
+    workSteps.count++;
+    const size = delimiter.end - delimiter.start;
+    const same = size === 1 ? single : double;
+    if (delimiter.canClose && same.length > 0) {
+      const open = same.pop()!;
+      role[open] = 1;
+      role[i] = 2;
+      partner[i] = open;
+      const other = size === 1 ? double : single;
+      while (other.length > 0 && other[other.length - 1] > open) {
+        workSteps.count++;
+        other.pop();
+      }
+      continue;
+    }
+    if (delimiter.canOpen) {
+      same.push(i);
+    }
+  }
+  // Delete pairs go in closing order, inner first, as rebuild expects.
+  const regions: number[][] = [];
+  let region: number[] = [];
+  for (let i = 0; i < count; i++) {
+    const kind = role[i];
+    if (kind === 1) {
+      regions.push(region);
+      region = [];
+    } else if (kind === 2) {
+      const opener = delimiters[bottom + ids[partner[i]]];
+      const closer = delimiters[bottom + ids[i]];
+      pairs.push(ids[partner[i]], ids[i], 0, opener.start, closer.end);
+      opener.end = opener.start;
+      closer.start = closer.end;
+      if (queue !== undefined && region.length > 1) {
+        queue.push(Int32Array.from(region));
+      }
+      region = regions.pop()!;
+    } else if (delimiters[bottom + ids[i]].marker !== TILDE) {
+      region.push(ids[i]);
+    }
+  }
+  if (queue !== undefined && region.length > 1) {
+    queue.push(Int32Array.from(region));
+  }
+}
+
+/**
+ * GFM, when a `*` or `_` run came before the first `~` of the leaf and a
+ * tilde pair is possible. micromark then resolves attention first over the
+ * whole leaf, and strikethrough first inside each emphasis pair (insideSpan).
+ * Emphasis pairs at the top level ignore tildes, so they are paired as on
+ * the linear path. A pair's inside that holds tildes pairs them first, then
+ * pairs its emphasis runs per delete and outside them. Leftover runs at the
+ * top level are text before the top-level tildes pair. Linear, like
+ * `resolveLinear`, and builds the nodes in one pass.
+ */
+export function resolveAttentionFirst(state: InlineState, bottom: number): void {
+  const delimiters = state.delimiters;
+  const count = delimiters.length - bottom;
+  if (count <= 0) {
+    return;
+  }
+  const all = new Int32Array(count);
+  for (let i = 0; i < count; i++) {
+    all[i] = i;
+  }
+  const pairs: number[] = [];
+  const queue: Int32Array[] = [];
+  const rest: number[] = [];
+  pairList(state, bottom, all, pairs, queue, rest);
+  while (queue.length > 0) {
+    const list = queue.pop()!;
+    if (isTildeList(state, bottom, list)) {
+      pairTildeList(state, bottom, list, pairs, queue);
+    } else {
+      pairList(state, bottom, list, pairs, queue);
+    }
+  }
+  pairTildeList(state, bottom, rest, pairs, undefined);
+  if (pairs.length > 0) {
+    rebuild(state, bottom, count, pairs);
+  }
+  delimiters.length = bottom;
 }
 
 function resolveEmphasis(state: InlineState, bottom: number): void {

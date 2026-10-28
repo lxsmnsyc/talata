@@ -1,9 +1,11 @@
-import type { ListItem, Paragraph, PhrasingContent, RootContent } from 'mdast';
+import type { ListItem, Paragraph, PhrasingContent, Root, RootContent } from 'mdast';
 import type { BlockRule, BlockState, OpenBlock } from '../core/blocks';
 import { CR, LF, TAB, isSpaceOrTab } from '../core/chars';
 import type { InlineRule, InlineState } from '../core/inline';
 import type { Line } from '../core/line';
 import type { Source } from '../core/source';
+import type { DocumentState } from '../core/state';
+import type { Transform } from '../core/transform';
 import { reach } from '../inline/lines';
 
 // GFM task list items (`- [ ] a`, `- [x] a`), as
@@ -27,6 +29,27 @@ interface Candidate {
 
 // Candidate paragraphs per document, by the offset of their first `[`.
 const candidates = new WeakMap<Source, Map<number, Candidate>>();
+
+// Lazy first content outside any list item, by offset. Read by the
+// `outsideChecks` transform. Only paragraphs get the check (not setext
+// headings or table headers), so a start waits for its paragraph to close.
+const REGISTERED = 0;
+const PARAGRAPH = 1;
+const UNCHECKED = 2;
+const CHECKED = 3;
+const outside = new WeakMap<Source, Map<number, number>>();
+
+/**
+ * Called when a paragraph closes, with the start of its first line as opened
+ * and of its content after definitions. The check runs on that content.
+ */
+export function paragraphClosed(state: BlockState, opened: number, content: number): void {
+  const map = outside.get(state.source);
+  if (map?.get(opened) === REGISTERED) {
+    map.delete(opened);
+    map.set(content, PARAGRAPH);
+  }
+}
 
 /**
  * A list item that may hold paragraphs where the check runs. The flow after
@@ -82,10 +105,22 @@ export const taskListStart: BlockRule = {
     const container = state.container;
     if (container === item) {
       item.contentStart = line.start;
-    } else if (state.unmatched && isTarget(container)) {
+    } else if (state.unmatched) {
       // No container started on the line, so the same flow goes on.
-      container.lazyStarts ??= [];
-      container.lazyStarts.push(line.start);
+      if (isTarget(container)) {
+        container.lazyStarts ??= [];
+        container.lazyStarts.push(line.start);
+      } else {
+        // Outside any list item: the check still runs, and
+        // mdast-util-gfm-task-list-item sets `checked` on whatever node holds
+        // the paragraph (the root, a block quote). See `outsideChecks`.
+        let map = outside.get(state.source);
+        if (map === undefined) {
+          map = new Map();
+          outside.set(state.source, map);
+        }
+        map.set(line.start, REGISTERED);
+      }
     }
     return undefined;
   },
@@ -189,7 +224,8 @@ function parse(state: InlineState): boolean {
   }
   const map = candidates.get(state.source);
   const candidate = map?.get(pos);
-  if (candidate === undefined) {
+  const others = candidate === undefined ? outside.get(state.source) : undefined;
+  if (candidate === undefined && others?.get(pos) !== PARAGRAPH) {
     return false;
   }
   const text = state.source.text;
@@ -223,6 +259,13 @@ function parse(state: InlineState): boolean {
   }
   if (after === rangeEnd ? range + 2 >= ranges.length : after === close + 1) {
     return false;
+  }
+  if (candidate === undefined) {
+    // No first character to drop: the leaf's parent is not a list item.
+    others!.set(pos, checked ? CHECKED : UNCHECKED);
+    state.range = range;
+    state.pos = close + 1;
+    return true;
   }
   map!.delete(pos);
   candidate.item.checked = checked;
@@ -291,3 +334,64 @@ const taskListCheck: InlineRule = {
 };
 
 export default taskListCheck;
+
+interface Holder {
+  type: string;
+  checked?: boolean | null;
+  children?: Holder[];
+  position?: { start: { offset?: number }; end: { offset?: number } };
+}
+
+/**
+ * Sets `checked` on the parent of the paragraph whose content starts at
+ * `offset`. mdast-util-gfm-task-list-item sets it on the node under the
+ * innermost open one when the check exits, whatever its type.
+ */
+function setOnParent(tree: Root, offset: number, checked: boolean): void {
+  let parent: Holder = tree;
+  for (;;) {
+    const children = parent.children;
+    if (children === undefined) {
+      return;
+    }
+    let next: Holder | undefined;
+    for (const child of children) {
+      const position = child.position;
+      if (
+        position !== undefined &&
+        position.start.offset! <= offset &&
+        offset < position.end.offset!
+      ) {
+        next = child;
+        break;
+      }
+    }
+    if (next === undefined) {
+      return;
+    }
+    const type = next.type;
+    if (type === 'paragraph') {
+      parent.checked = checked;
+      return;
+    }
+    parent = next;
+  }
+}
+
+/** Applies the checks `taskListStart` found outside list items. */
+export const outsideChecks: Transform = {
+  name: 'taskListOutside',
+  gfm: true,
+  transform(tree: Root, state: DocumentState): void {
+    const map = outside.get(state.source);
+    if (map === undefined) {
+      return;
+    }
+    outside.delete(state.source);
+    for (const [offset, value] of map) {
+      if (value === CHECKED || value === UNCHECKED) {
+        setOnParent(tree, offset, value === CHECKED);
+      }
+    }
+  },
+};

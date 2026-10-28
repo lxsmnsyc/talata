@@ -2,6 +2,7 @@ import type { Paragraph } from 'mdast';
 import type { BlockState, OpenParagraph } from '../core/blocks';
 import type { Line } from '../core/line';
 import { point } from '../core/source';
+import { paragraphClosed } from '../gfm/task-list';
 
 // Paragraphs are not a registered rule: the block parser opens one for any
 // non-blank line that no rule starts, and adds lazy continuation lines to it.
@@ -54,6 +55,9 @@ class OpenParagraphBlock implements OpenParagraph {
       },
     };
     state.inline(node, lines, this.indents);
+    if (state.options.gfm) {
+      paragraphClosed(state, this.start, lines[0]);
+    }
     return node;
   }
 }

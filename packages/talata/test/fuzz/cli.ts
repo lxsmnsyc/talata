@@ -3,11 +3,15 @@
 // Usage, from packages/talata:
 //   pnpm fuzz --count 100000 [--seed N] [--start I] [--no-gfm] [--all]
 //             [--max-failures K] [--shrink-ms MS] [--no-save] [--no-corpus]
+//             [--timeout-ms MS]
 //
 // --seed       run seed (default: random, printed). Document I of seed S is the
 //              same every time, so `--seed S --start I --count 1` replays it.
 // --all        compare every feature, not only the ones talata supports now.
 // --no-save    do not write minimized failures to test/fuzz/fixtures.
+// --timeout-ms time limit per document (default 5000). Each document runs in a
+//              worker thread; a reference parse past the limit is skipped as
+//              "reference timed out", a talata parse past it is a failure.
 //
 // Exit code 0 when no difference was found, 1 on a difference or a throw,
 // 2 on bad arguments. Needs a Node version that strips TypeScript types.
@@ -61,6 +65,7 @@ const known = new Set([
   '--all',
   '--no-save',
   '--no-corpus',
+  '--timeout-ms',
 ]);
 for (let i = 0; i < args.length; i++) {
   const arg = args[i];
@@ -75,12 +80,18 @@ const base = import.meta.url;
 const { supported, allFeatures } = await import('./features');
 const { hashText } = await import('./random');
 const { runFuzz } = await import('./run');
+const { createTimedCheck } = await import('./timed-check');
 
 const count = readNumber(args, '--count', 10000);
 const seed = readNumber(args, '--seed', Math.floor(Math.random() * 0xffffffff));
 const start = readNumber(args, '--start', 0);
 const maxFailures = readNumber(args, '--max-failures', 3);
 const shrinkBudget = readNumber(args, '--shrink-ms', 5000);
+const timeout = readNumber(args, '--timeout-ms', 5000);
+if (timeout < 1) {
+  console.error('--timeout-ms needs a positive integer');
+  process.exit(2);
+}
 const gfm = !args.includes('--no-gfm');
 const features = args.includes('--all') ? allFeatures() : supported;
 
@@ -88,7 +99,9 @@ console.log(
   `fuzz: ${count} documents, seed ${seed}, start ${start}, gfm ${gfm}${args.includes('--all') ? ', all features' : ''}`,
 );
 const began = Date.now();
+const timed = createTimedCheck(timeout);
 const report = runFuzz({
+  check: timed.check,
   count,
   seed,
   start,
@@ -105,7 +118,9 @@ const report = runFuzz({
 // Every option that changes generation or comparison, for the replay line.
 const all = args.includes('--all');
 const corpus = !args.includes('--no-corpus');
-const flags = `${gfm ? '' : ' --no-gfm'}${all ? ' --all' : ''}${corpus ? '' : ' --no-corpus'}`;
+const flags =
+  `${gfm ? '' : ' --no-gfm'}${all ? ' --all' : ''}${corpus ? '' : ' --no-corpus'}` +
+  (timeout === 5000 ? '' : ` --timeout-ms ${timeout}`);
 
 for (const failure of report.reported) {
   console.log(`\nfailure at document ${failure.index} (${failure.kind})`);
@@ -127,6 +142,14 @@ for (const failure of report.reported) {
     writeFileSync(new URL(name, dir), `${JSON.stringify(body, null, 2)}\n`);
     console.log(`  saved: test/fuzz/fixtures/${name}`);
   }
+}
+
+timed.close();
+
+for (const skip of report.skippedAt) {
+  console.log(
+    `skipped document ${skip.index} (${skip.reason}): --seed ${seed} --start ${skip.index} --count 1${flags}`,
+  );
 }
 
 const skipped: string[] = [];
