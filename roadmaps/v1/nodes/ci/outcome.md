@@ -23,6 +23,7 @@
 
 - Node 20 is not in the test matrix. vitest 5 requires Node ^22.12 and tsdown ^22.18, so tests and build cannot run on 20. Node 20 gets the built-`dist` smoke test instead. `engines` still says `>=20`.
 - The `unified` default export is checked only for the ESM entry. Importing the CJS file from ESM exposes `module.exports` as `default`.
+- `package-manager-cache: false` on every `setup-node` step follows brumate. The brief asked for the pnpm store to be cached; the workflows do not cache it.
 
 ## Stubs left
 
@@ -55,10 +56,11 @@ Unverified until the 0.1.0 run: whether pnpm 12 with `changesets/action/publish`
 ## Verification
 
 - `actionlint` 1.7.12: no output.
-- After rebasing onto main: `npx oxlint` and `npx oxfmt --check` are clean; `npx tsc --noEmit -p .` passes; `pnpm --filter talata test` passes (5003 tests, Node 22.16); build passes.
-- Smoke script passes on Node 20.20.2 (`npx -y node@20`).
+- After rebasing onto main, on Node 26.12.1 (the shell default): `npx oxlint`, `npx oxfmt --check`, `npx tsc --noEmit -p .` and `pnpm --filter talata build`; all pass.
+- `pnpm --filter talata test` on Node 22.16.0 (the nvm install): 5003 tests pass.
+- Smoke script on Node 20.20.2 (`npx -y node@20`): passes. It also passes on 26.12.1.
 - `changeset publish-plan` run locally (before `talata@0.0.0` was on npm) lists `talata@0.0.0`, as described above.
-- Node 24 and a GitHub-hosted runner were not available locally. The first real run is the orchestrator's check.
+- Node 24 was not run locally; it is covered only by CI. No GitHub-hosted runner was available either. The first real run is the orchestrator's check.
 
 ## Size
 
