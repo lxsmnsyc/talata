@@ -55,8 +55,8 @@
   "scripts": {
     "prepublishOnly": "tsdown",
     "build": "tsdown",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "NODE_ENV=production vitest run",
+    "test:watch": "NODE_ENV=production vitest",
     "fuzz": "node test/fuzz/cli.ts"
   },
   "dependencies": {

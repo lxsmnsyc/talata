@@ -75,6 +75,9 @@ branches:
 - 2026-10-28: Talata stays in TypeScript. A Go version was considered and rejected: compiling Go to WebAssembly, a native addon or a separate process all add a boundary that costs about what the rewrite saves, and none fit the bundle-size goal. A native batch CLI may become a separate roadmap after 0.1, measured against Talata.
 - 2026-10-28: the user switched merges to auto. With no remote, the orchestrator merges locally (`git merge --no-ff`) when `plan.py can-merge` allows it, after a clean fresh-context review and a passing fast check on the branch merged onto current main. Gated, contract, release and hotfix nodes still go to the user.
 
+- 2026-10-28: tests run with `NODE_ENV=production` (the `test` script in `packages/talata/package.json`), so vitest resolves the reference's published build. Its development build throws an assertion on valid input such as `-\n[ ] a`. Running `npx vitest run` directly still picks the development build; use `pnpm --filter talata test`.
+- 2026-10-28: gfm-green merged with the 1,000,000-document fuzz run pending for a quiet machine after a restart: `pnpm --filter talata fuzz --count 1000000 --seed 20261028 --max-failures 10` (12 to 20 minutes).
+
 ## Gates
 
 - core-skeleton: the user reviews the parser-core contract before the parallel block and inline work starts.
