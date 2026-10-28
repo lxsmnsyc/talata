@@ -8,13 +8,14 @@ import { describeDiff, firstDiff } from './tree-diff';
 const files = corpusFiles();
 
 describe.skipIf(files.length === 0)('benchmark corpus through the reference parser', () => {
-  it('parses every file into a root with positions', () => {
-    for (const file of files) {
+  // One test per file, so a slow machine cannot push the total past a timeout.
+  for (const file of files) {
+    it(`parses ${file.name} into a root with positions`, () => {
       const tree = parseReference(readFileSync(file.path, 'utf8'), true);
-      expect(tree.type, file.name).toBe('root');
-      expect(tree.position, file.name).toBeDefined();
-    }
-  });
+      expect(tree.type).toBe('root');
+      expect(tree.position).toBeDefined();
+    });
+  }
 });
 
 describe.skipIf(files.length === 0 || !ready.corpus)('benchmark corpus through talata', () => {
