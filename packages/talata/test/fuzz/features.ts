@@ -40,8 +40,8 @@ export const supported: Features = {
   inline: true,
   strikethrough: true,
   table: true,
-  footnote: false,
-  taskList: false,
+  footnote: true,
+  taskList: true,
   autolinkLiteral: true,
 };
 

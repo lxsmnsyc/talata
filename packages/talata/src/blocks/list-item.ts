@@ -13,12 +13,15 @@ import {
   parentQuoteLine,
 } from './blockquote';
 import type { TrackedContainer } from './blockquote';
+import { footnoteBlankLine, footnoteIndentAt } from '../gfm/footnote';
+import { flowAfterMarker, taskCandidates } from '../gfm/task-list';
+import type { TaskTarget } from '../gfm/task-list';
 import OpenList, { readMarker } from './list';
 import type { ItemState } from './list';
 
 const DIGIT_1 = 49;
 
-class OpenListItem implements TrackedContainer, ItemState {
+class OpenListItem implements TrackedContainer, ItemState, TaskTarget {
   name = 'listItem';
   isContainer = true;
   acceptsLazy = true;
@@ -41,6 +44,11 @@ class OpenListItem implements TrackedContainer, ItemState {
   nextLineStart = -1;
   /** The item continued on the last line, which has no line ending. */
   matchedEnd = false;
+  /** GFM: where the item's first flow content starts, or -1 (`TaskTarget`). */
+  contentStart = -1;
+  lazyStarts: number[] | undefined = undefined;
+  /** End of the last line where a quote prefix and a GFM footnote indent above matched, or -1. */
+  indentEnd = -1;
 
   constructor(start: number, firstEnd: number, size: number, initialBlank: boolean) {
     this.start = start;
@@ -51,6 +59,14 @@ class OpenListItem implements TrackedContainer, ItemState {
 
   continue(state: BlockState, line: Line): boolean {
     this.quoteLine = parentQuoteLine(state.container);
+    if (
+      this.quoteLine === line.index &&
+      state.options.gfm &&
+      footnoteIndentAt(state, state.source.lineStarts[line.index])
+    ) {
+      // The walk back from the list's end stops at that indent.
+      this.indentEnd = line.end;
+    }
     if (line.blank) {
       this.furtherBlank = this.furtherBlank || this.initialBlank;
       consumeColumns(line, this.size);
@@ -80,7 +96,7 @@ class OpenListItem implements TrackedContainer, ItemState {
         flow.push(child);
       }
     }
-    let end = this.firstEnd;
+    let end = this.indentEnd > this.firstEnd ? this.indentEnd : this.firstEnd;
     const childEnd = lastChildEnd(children);
     if (childEnd > end) {
       end = childEnd;
@@ -102,13 +118,33 @@ class OpenListItem implements TrackedContainer, ItemState {
     for (let i = 1; i < flow.length && !spread; i++) {
       spread = flow[i].position!.start.line - flow[i - 1].position!.end.line >= 2;
     }
-    return {
+    if (!spread && state.options.gfm) {
+      spread = footnoteBlankLine(flow);
+    }
+    // In a GFM footnote definition, an item closed on a line where the
+    // definition's indent matched ends at the closing event, and blank lines
+    // before it make it spread.
+    if (
+      this.nextLineStart !== -1 &&
+      state.options.gfm &&
+      footnoteIndentAt(state, this.nextLineStart)
+    ) {
+      end = this.nextEnd;
+      const last =
+        flow.length > 0
+          ? flow[flow.length - 1].position!.end.line
+          : point(state.source, this.start).line;
+      spread = spread || point(state.source, this.nextLineStart).line - last >= 2;
+    }
+    const node: ListItem = {
       type: 'listItem',
       spread,
       checked: null,
       children: flow,
       position: { start: point(state.source, this.start), end: point(state.source, end) },
     };
+    taskCandidates(state, node, flow, this);
+    return node;
   }
 }
 
@@ -170,6 +206,11 @@ const listItem: BlockRule = {
       state.openContainer(list);
     }
     const item = new OpenListItem(start, line.end, size, initialBlank);
+    if (!initialBlank) {
+      item.contentStart = line.start;
+    } else if (line.start === line.end) {
+      flowAfterMarker(state, item, line.index + 1);
+    }
     if (interrupt) {
       item.interruptLine = line.index;
     }

@@ -3,6 +3,8 @@ import blockquote from './blockquote';
 import codeFenced from './code-fenced';
 import codeIndented from './code-indented';
 import definition from './definition';
+import footnoteDefinition from '../gfm/footnote';
+import { taskListStart } from '../gfm/task-list';
 import headingAtx from './heading-atx';
 import headingSetext from './heading-setext';
 import html from './html';
@@ -23,6 +25,8 @@ export const blockRules: BlockRule[] = [
   html,
   headingSetext,
   codeIndented,
+  footnoteDefinition,
+  taskListStart,
   table,
 ];
 

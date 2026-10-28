@@ -1,6 +1,8 @@
 import type { InlineRule } from '../core/inline';
 import autolinkLiteral from '../gfm/autolink-literal';
+import { footnoteCall } from '../gfm/footnote';
 import strikethrough, { attentionOrder } from '../gfm/strikethrough';
+import taskListCheck from '../gfm/task-list';
 import autolink from './autolink';
 import characterReference from './character-reference';
 import codeSpan from './code-span';
@@ -23,6 +25,8 @@ export const inlineRules: InlineRule[] = [
   strikethrough,
   attentionOrder,
   autolinkLiteral,
+  footnoteCall,
+  taskListCheck,
 ];
 
 // Helpers for inline rules.
