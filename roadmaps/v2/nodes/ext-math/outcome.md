@@ -13,8 +13,7 @@ Not an experiment node.
 ## Deviations
 
 - Priorities are the contract values (flow 350, text 100). No change.
-- The main entry grew by 49 bytes gzip (32826 against 32777), 7 bytes minified. Within the 0.2 KB tolerance of GOAL.md, not "unchanged". Cause: chunk splitting once math imports core helpers.
-- `test/ext-api.test.ts` ("stub extensions give the same tree as none") and `test/ext-api-bundle.test.ts` ("talata/math does not bundle the parser", under 5000 bytes) fail now. They assume the stub. Not edited, they are not owned by this node.
+- The main entry grew by 49 bytes gzip (32826 against 32777), 7 bytes minified. The limit is 0.5 KB over 0.1.1 (GOAL.md, changed 2026-10-28), so this is within it. Cause: chunk splitting once math imports core helpers.
 
 ## Stubs left
 
@@ -23,16 +22,16 @@ Not an experiment node.
 ## Gotchas
 
 - Math text is a code span with another character; a fix in `code-span.ts` probably applies to `text.ts` too.
-- `oxlint` reports errors in `.github/scripts/smoke.mjs` on this base. Not from this node.
 
 ## Proposed learnings
 
 - Extension rules that copy a core rule should be re-checked when the core rule changes | the copy does not follow | packages/talata/src/ext | no
+- `strip`, the closing-fence test and the exhausted cache in `src/ext/math/` are copies of core helpers. Export them from core and import them when core is next touched | the copies drift from the originals | packages/talata/src | no
 
 ## Verification
 
 - `pnpm fuzz --count 200000 --seed 8202 --no-save`: 200000 documents, 200000 compared, 0 skipped, 0 failures.
-- `pnpm --filter talata test`: 5290 passed, 2 failed (the two stub tests above). `tsc --noEmit` clean. `oxfmt --check` clean. `oxlint`: only `.github/scripts/smoke.mjs` errors.
+- `pnpm --filter talata test`: 5291 passed after the rebase. `tsc --noEmit`, `oxlint` and `oxfmt --check` are clean (build first).
 
 ## Size
 
