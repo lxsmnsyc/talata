@@ -1,0 +1,40 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
+
+jobs:
+  release:
+    name: Release
+    if: github.repository == 'lxsmnsyc/talata'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      # Node 24 ships npm 11, which npm trusted publishing (OIDC) needs.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: changesets/action@v2
+        with:
+          version: pnpm cs:ver
+          publish: pnpm cs:pub
+          title: 'Version packages'
+          commit: 'Version packages'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_CONFIG_PROVENANCE: 'true'
+          # For token publishing instead of trusted publishing, uncomment:
+          # NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
