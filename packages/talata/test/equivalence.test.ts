@@ -5,13 +5,7 @@ import { describeDiff, firstDiff } from './tree-diff';
 
 // Spec examples that hold a GFM construct when parsed with GFM. Each GFM node
 // turns on its flag, which runs them.
-const gfmWaiting = new Map<number, GfmFeature>([
-  [602, 'autolinkLiteral'],
-  [606, 'autolinkLiteral'],
-  [608, 'autolinkLiteral'],
-  [611, 'autolinkLiteral'],
-  [612, 'autolinkLiteral'],
-]);
+const gfmWaiting = new Map<number, GfmFeature>([]);
 
 // The mdast tree, positions included, must equal mdast-util-from-markdown's.
 describe.skipIf(!ready.commonmark)('mdast equivalence with mdast-util-from-markdown', () => {

@@ -38,11 +38,11 @@ export const supported: Features = {
   html: true,
   definition: true,
   inline: true,
-  strikethrough: false,
+  strikethrough: true,
   table: true,
   footnote: false,
   taskList: false,
-  autolinkLiteral: false,
+  autolinkLiteral: true,
 };
 
 export function allFeatures(): Features {
