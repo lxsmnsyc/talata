@@ -9,6 +9,7 @@ Branch `feat/gfm-green`. Paths are under `packages/talata/`.
   - `RunOptions.check` is the new hook, and `Report.skippedAt` lists those skipped documents.
   - The smoke test still runs in the test process.
   - `test/fuzz/fuzz.test.ts` checks that `[^n]: x\n\n![ \n^n]` is skipped with a 1 s limit and that the next document still runs.
+  - Review round 1: a comparison that throws in the worker is a `throw` failure, `comparison threw: <message>`, not a timeout. For example, `'>'.repeat(12000) + ' a\n'` overflows the stack in tree-diff's recursive `walk`. A worker that exits during a check wakes the main thread and is reported as `fuzz worker died during the check`. An out-of-memory kill runs no JavaScript, so that case still waits for the limit and reads as a timeout. Replay lines carry `--timeout-ms` when it is not the default, and values below 1 exit with code 2.
 - Lazy task check outside list items (`-\n[ ] a`, `> -\n> [ ] a`, `-\n[x]\n-|-`, `9.\r[ ] #`), in `src/gfm/task-list.ts`:
   - `taskListStart` records the line in a per-`Source` map when the innermost matched container is not a list item.
   - `paragraphClosed` moves the entry to the paragraph's content start after definitions. It is called from `src/blocks/paragraph.ts`, with GFM only. Only paragraphs get the check: setext headings and table headers keep `[ ]` in the reference.
@@ -72,7 +73,7 @@ Cases where the reference differs from the spec, or behaves in a surprising way.
 
 ## Verification
 
-- `npx vitest run` in packages/talata, corpus present: 19 files, 4972 tests passed, 0 skipped.
+- `npx vitest run` in packages/talata, corpus present: 19 files, 4972 tests passed, 0 skipped. After review round 1: 4973 passed.
 - `npx tsc --noEmit -p packages/talata`: no errors. `npx oxlint`: no findings. `npx oxfmt --check src test`: clean.
 - GFM fuzz, 50,000 documents per seed: seeds 2101, 2202, 2303 (`--no-corpus`) and 2404 gave 0 failures and 0 skipped. Seed 1001, 20,000 documents before the fixes, gave 1 failure (`9.\r[ ] #`).
 - Final runs, two processes at once, load average 6.4 to 8.7:

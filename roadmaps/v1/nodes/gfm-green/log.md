@@ -12,3 +12,10 @@
 - Scratch GFM interaction fuzzer (container prefixes times table, task, footnote, strikethrough and autolink lines, both modes): 120k documents, 0 differences.
 - Final runs, two processes at once, load average 6.4 to 8.7: seed 3031 `--no-gfm` 200,000 documents: 0 failures, 0 skipped, 150 s. Seed 3032 GFM 200,000 documents with corpus mutation: 0 failures, 0 skipped, 225 s.
 - The 1,000,000-document run is left for after the machine restart (orchestrator's change of plan).
+
+## Review round 1
+
+- Should-fix: when the comparison threw in the worker (`'>'.repeat(12000) + ' a\n'` overflows the stack in tree-diff's `walk`), the worker died and the main thread reported "reference timed out" after the full limit. Now `check-worker.ts` catches it and replies `throw` with `comparison threw: <message>`, a failure. The worker also sets `flags[3]` in `process.on('exit')` and wakes the main thread, which reports `fuzz worker died during the check`. `error`/`exit` events set `Running.dead` between documents. An out-of-memory kill runs no JavaScript, so that case still waits for the limit. `walk` stays recursive.
+- Test in `fuzz.test.ts`: the deep input is not a skip, and the next document still compares.
+- Nits: replay lines include `--timeout-ms` when it is not 5000. `--timeout-ms 0` exits with code 2.
+- Fast check: 19 files, 4973 tests passed; tsc, oxlint, oxfmt clean. CLI seed 9, 5,000 documents with `--timeout-ms 3000`: 0 failures.

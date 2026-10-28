@@ -5,8 +5,10 @@
 // flags[0]: id of the last document whose check finished.
 // flags[1]: id of the last document talata finished parsing.
 // flags[2]: 1 once the modules are loaded.
+// flags[3]: 1 once the worker is exiting (an uncaught error, for one).
 import { registerHooks } from 'node:module';
 import type { MessagePort } from 'node:worker_threads';
+import type { Outcome } from './check';
 import type { Features } from './features';
 import { workerData } from 'node:worker_threads';
 
@@ -46,14 +48,31 @@ const data = workerData as { flags: SharedArrayBuffer; port: MessagePort };
 const flags = new Int32Array(data.flags);
 const port = data.port;
 
+function messageOf(error: unknown): string {
+  return error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+}
+
 port.on('message', (request: Request) => {
-  const outcome = check(request.value, request.gfm, request.features, (value, gfm) => {
-    const tree = parseTalata(value, gfm);
-    Atomics.store(flags, 1, request.id);
-    return tree;
-  });
+  let outcome: Outcome;
+  try {
+    outcome = check(request.value, request.gfm, request.features, (value, gfm) => {
+      const tree = parseTalata(value, gfm);
+      Atomics.store(flags, 1, request.id);
+      return tree;
+    });
+  } catch (error) {
+    // `check` catches parser throws; this is the comparison itself (a deep
+    // tree can overflow the stack in tree-diff.ts). A failure, not a skip.
+    outcome = { kind: 'throw', message: `comparison threw: ${messageOf(error)}` };
+  }
   port.postMessage({ id: request.id, outcome });
   Atomics.store(flags, 0, request.id);
+  Atomics.notify(flags, 0);
+});
+// Wakes the main thread at once when the worker dies, so its wait does not
+// end as a timeout. An out-of-memory kill runs no JavaScript and is not seen.
+process.on('exit', () => {
+  Atomics.store(flags, 3, 1);
   Atomics.notify(flags, 0);
 });
 Atomics.store(flags, 2, 1);

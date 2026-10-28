@@ -88,6 +88,10 @@ const start = readNumber(args, '--start', 0);
 const maxFailures = readNumber(args, '--max-failures', 3);
 const shrinkBudget = readNumber(args, '--shrink-ms', 5000);
 const timeout = readNumber(args, '--timeout-ms', 5000);
+if (timeout < 1) {
+  console.error('--timeout-ms needs a positive integer');
+  process.exit(2);
+}
 const gfm = !args.includes('--no-gfm');
 const features = args.includes('--all') ? allFeatures() : supported;
 
@@ -114,7 +118,9 @@ const report = runFuzz({
 // Every option that changes generation or comparison, for the replay line.
 const all = args.includes('--all');
 const corpus = !args.includes('--no-corpus');
-const flags = `${gfm ? '' : ' --no-gfm'}${all ? ' --all' : ''}${corpus ? '' : ' --no-corpus'}`;
+const flags =
+  `${gfm ? '' : ' --no-gfm'}${all ? ' --all' : ''}${corpus ? '' : ' --no-corpus'}` +
+  (timeout === 5000 ? '' : ` --timeout-ms ${timeout}`);
 
 for (const failure of report.reported) {
   console.log(`\nfailure at document ${failure.index} (${failure.kind})`);

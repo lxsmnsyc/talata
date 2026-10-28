@@ -134,6 +134,19 @@ describe('fuzz time limit', () => {
       timed.close();
     }
   }, 60000);
+
+  it('reports a comparison that throws as a failure, not a timeout', () => {
+    const timed = createTimedCheck(30_000);
+    try {
+      // Both parsers finish; the tree is too deep for tree-diff's recursion.
+      const outcome = timed.check(`${'>'.repeat(12000)} a\n`, true, supported);
+      expect(outcome.kind === 'skip' ? outcome.reason : outcome.kind).not.toBe(referenceTimeout);
+      expect(outcome.kind).not.toBe('skip');
+      expect(timed.check('# a\n', true, supported)).toEqual({ kind: 'equal' });
+    } finally {
+      timed.close();
+    }
+  }, 60000);
 });
 
 describe('fuzz parts', () => {
