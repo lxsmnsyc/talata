@@ -17,7 +17,9 @@ gate: false
 added:
 owns:
   - benchmark/size/**
-shared: []
+shared:
+  - package.json
+  - pnpm-lock.yaml
 reserves: []
 provides: []
 depends_on:
@@ -33,6 +35,8 @@ depends_on:
 Measure the minified and gzipped size of talata against `mdast-util-from-markdown` with GFM, and add a size check to the benchmark package.
 
 ## Context
+
+From the inline-core review: `src/inline/entities.ts` (2,125 named references) is 24.6 KB raw, 11.3 KB gzip, more than half of talata's gzip size at that point (browser build 47.9 KB / 19.5 KB gzip against 82.0 KB / 22.5 KB gzip for the reference stack). The reference's browser build decodes names through the DOM (`decode-named-character-reference/index.dom.js`) and ships no table. Measure a compact encoding and a DOM decoder under a `browser` export condition.
 
 A bundler build of each entry point with esbuild is enough.
 

@@ -17,10 +17,12 @@ gate: false
 added:
 owns:
   - packages/talata/src/gfm/table.ts
+  - packages/talata/test/gfm-tables*.test.ts
 shared:
   - packages/talata/src/blocks/index.ts
   - packages/talata/src/blocks/paragraph.ts
   - packages/talata/test/parsers.ts
+  - packages/talata/test/fuzz/features.ts
 reserves: []
 provides: []
 depends_on:
@@ -39,6 +41,8 @@ depends_on:
 Add GFM tables: delimiter row, alignment, escaped pipes, and rows that end the table, producing `table`, `tableRow` and `tableCell` with `align`.
 
 ## Context
+
+Turn on `table` in `test/fuzz/features.ts` too, so the differential fuzzer covers it.
 
 The header row is the open paragraph's last line; take it with `splitParagraph(1)`, which leaves earlier lines to close as a paragraph and returns undefined under a lazy paragraph. Mark the open table `interruptible`, so any block start ends the body; body rows are never lazy. `test/core.test.ts` has a test-only table that shows both (parser-core v2). Turn on `ready.gfm.table` when done.
 

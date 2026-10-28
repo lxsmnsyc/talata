@@ -1,7 +1,7 @@
 ---
 id: differential-fuzz
 title: Differential fuzzer against the reference parser
-status: todo
+status: active
 priority: should
 type: feature
 outline: false

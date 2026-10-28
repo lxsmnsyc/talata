@@ -1,7 +1,7 @@
 ---
 id: unified-plugin
 title: Unified plugin for remark
-status: active
+status: done
 priority: must
 type: feature
 outline: false
