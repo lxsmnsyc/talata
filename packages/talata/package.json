@@ -26,6 +26,7 @@
   "types": "./dist/index.d.cts",
   "exports": {
     ".": {
+      "browser": "./dist/browser/index.js",
       "import": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
@@ -37,6 +38,7 @@
       "default": "./dist/index.js"
     },
     "./unified": {
+      "browser": "./dist/browser/unified.js",
       "import": {
         "types": "./dist/unified.d.ts",
         "default": "./dist/unified.js"
