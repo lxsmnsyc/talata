@@ -63,3 +63,20 @@ export function allFeatures(): Features {
     autolinkLiteral: true,
   };
 }
+
+export const featureNames: (keyof Features)[] = [
+  'atx',
+  'thematicBreak',
+  'setext',
+  'code',
+  'blockquote',
+  'list',
+  'html',
+  'definition',
+  'inline',
+  'strikethrough',
+  'table',
+  'footnote',
+  'taskList',
+  'autolinkLiteral',
+];

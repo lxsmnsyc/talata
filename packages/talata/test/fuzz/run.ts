@@ -19,6 +19,8 @@ export interface RunOptions {
   maxFailures: number;
   // Time budget for minimizing one failure, in milliseconds.
   shrinkBudget: number;
+  // Mutate corpus files too. Off, the seeds are the spec examples only.
+  corpus: boolean;
   onProgress?: (done: number) => void;
 }
 
@@ -40,13 +42,15 @@ export interface Report {
 }
 
 /** Starting texts for mutation: the spec examples and, when downloaded, the corpus files. */
-export function loadSeeds(): string[] {
+export function loadSeeds(corpus: boolean): string[] {
   const seeds: string[] = [];
   for (const example of specExamples) {
     seeds.push(specText(example.markdown));
   }
-  for (const file of corpusFiles()) {
-    seeds.push(readFileSync(file.path, 'utf8'));
+  if (corpus) {
+    for (const file of corpusFiles()) {
+      seeds.push(readFileSync(file.path, 'utf8'));
+    }
   }
   return seeds;
 }
@@ -79,7 +83,7 @@ function failureKind(outcome: Outcome): 'diff' | 'throw' | undefined {
 
 export function runFuzz(options: RunOptions): Report {
   const { count, seed, start, gfm, features } = options;
-  const seeds = loadSeeds();
+  const seeds = loadSeeds(options.corpus);
   const report: Report = {
     documents: 0,
     compared: 0,

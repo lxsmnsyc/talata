@@ -2,7 +2,7 @@
 //
 // Usage, from packages/talata:
 //   pnpm fuzz --count 100000 [--seed N] [--start I] [--no-gfm] [--all]
-//             [--max-failures K] [--shrink-ms MS] [--no-save]
+//             [--max-failures K] [--shrink-ms MS] [--no-save] [--no-corpus]
 //
 // --seed       run seed (default: random, printed). Document I of seed S is the
 //              same every time, so `--seed S --start I --count 1` replays it.
@@ -60,6 +60,7 @@ const known = new Set([
   '--no-gfm',
   '--all',
   '--no-save',
+  '--no-corpus',
 ]);
 for (let i = 0; i < args.length; i++) {
   const arg = args[i];
@@ -95,23 +96,34 @@ const report = runFuzz({
   features,
   maxFailures,
   shrinkBudget,
+  corpus: !args.includes('--no-corpus'),
   onProgress: (done: number) => {
     console.error(`  ${done} documents`);
   },
 });
 
+// Every option that changes generation or comparison, for the replay line.
+const all = args.includes('--all');
+const corpus = !args.includes('--no-corpus');
+const flags = `${gfm ? '' : ' --no-gfm'}${all ? ' --all' : ''}${corpus ? '' : ' --no-corpus'}`;
+
 for (const failure of report.reported) {
   console.log(`\nfailure at document ${failure.index} (${failure.kind})`);
   console.log(`  input: ${JSON.stringify(failure.minimized)}`);
   console.log(`  ${failure.message.split('\n').join('\n  ')}`);
-  console.log(
-    `  replay: --seed ${seed} --start ${failure.index} --count 1${gfm ? '' : ' --no-gfm'}`,
-  );
+  console.log(`  replay: --seed ${seed} --start ${failure.index} --count 1${flags}`);
   if (!args.includes('--no-save')) {
     const dir = new URL('./fixtures/', base);
     mkdirSync(dir, { recursive: true });
-    const name = `${hashText(failure.minimized)}.json`;
-    const body = { input: failure.minimized, gfm, kind: failure.kind, seed, index: failure.index };
+    const name = `${hashText(failure.minimized)}${gfm ? '' : '-nogfm'}${all ? '-all' : ''}.json`;
+    const body = {
+      input: failure.minimized,
+      gfm,
+      all,
+      kind: failure.kind,
+      seed,
+      index: failure.index,
+    };
     writeFileSync(new URL(name, dir), `${JSON.stringify(body, null, 2)}\n`);
     console.log(`  saved: test/fuzz/fixtures/${name}`);
   }

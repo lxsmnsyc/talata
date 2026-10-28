@@ -4,14 +4,14 @@
 
 All paths are under `packages/talata/test/fuzz/`.
 
-- Command: `pnpm --filter talata fuzz --count N [--seed S] [--start I] [--no-gfm] [--all] [--max-failures K] [--shrink-ms MS] [--no-save]` (script `fuzz` in `packages/talata/package.json`, runs `node test/fuzz/cli.ts`; needs Node 22.15+ like `test/diff.ts`). It prints the seed, minimized failures, a replay line and a summary (documents, compared, skipped by reason, failures, seconds). Exit 0 with no failure, 1 on a difference or a talata throw, 2 on bad arguments. Document I of seed S is rebuilt by `--seed S --start I --count 1`.
+- Command: `pnpm --filter talata fuzz --count N [--seed S] [--start I] [--no-gfm] [--all] [--max-failures K] [--shrink-ms MS] [--no-save] [--no-corpus]` (script `fuzz` in `packages/talata/package.json`, runs `node test/fuzz/cli.ts`; needs Node 22.15+ like `test/diff.ts`). `--no-corpus` uses spec examples only as mutation seeds. It prints the seed, minimized failures, a replay line with every option that changes generation or comparison (`--all`, `--no-gfm`, `--no-corpus`) and a summary (documents, compared, skipped by reason, failures, seconds). Exit 0 with no failure, 1 on a difference or a talata throw, 2 on bad arguments. Document I of seed S is rebuilt by `--seed S --start I --count 1`.
 - `features.ts`: `Features` flags and `supported`, the features talata handles now (atx, thematicBreak on; everything else off). `allFeatures()` is what `--all` uses.
 - `check.ts`: `check(value, gfm, features)` returns equal, skip, throw or diff. Talata runs first and a throw is always a failure. A document is skipped when the reference threw, or when the reference tree has a node type whose feature is off (including setext headings, literal autolinks, task list items, and any `\` or `&` while `inline` is off). Differences come from `firstDiff` and `describeDiff`.
 - `generate.ts`: a grammar of block constructs (paragraphs, ATX and setext headings, thematic breaks, indented and fenced code, HTML blocks, definitions, tables, footnote definitions, block quotes and lists with nesting, lazy lines, task items) and inline atoms (emphasis, code spans, links, images, references, autolinks, raw HTML, entities, escapes, strikethrough, literal autolinks), with random indentation, tabs, CRLF/CR/mixed line endings, BOM and NUL. Only the features that are on are generated. `generatePathological` makes deep nesting and long runs of `>`, `*`, `[`, backticks, `<`, `_`, `\` and others.
 - `mutate.ts`: `mutate` (delete, duplicate, insert token, replace, move) and `sliceLines` for big files. Seeds are the CommonMark spec examples plus the corpus files when downloaded.
 - `shrink.ts`: removes lines, then characters, in halving chunks, until nothing more goes or the time budget ends (5 s by default).
 - `run.ts`: `runFuzz`, `documentAt`. About 3% pathological, 52% grammar, 25% grammar then mutation, 20% mutation of seeds.
-- Fixtures: a failure is saved to `fuzz/fixtures/<hash>.json` (`input`, `gfm`, `kind`, `seed`, `index`) unless `--no-save`. `fuzz.test.ts` replays every fixture, runs 1500 documents with a fixed seed, and tests the generator, mutator and shrinker.
+- Fixtures: a failure is saved to `fuzz/fixtures/<hash>[-nogfm][-all].json` (`input`, `gfm`, `all`, `kind`, `seed`, `index`) unless `--no-save`. `fuzz.test.ts` replays every fixture with its stored options and all features (a fixture whose feature is still off is an expected failure, so it stays visible), runs 1500 documents with a fixed seed and spec-example seeds only, checks that `check` reports a changed value and a position-only change, and tests the generator, mutator and shrinker.
 
 ## Deviations
 
@@ -21,7 +21,7 @@ All paths are under `packages/talata/test/fuzz/`.
 ## Stubs left
 
 - `supported` in `features.ts` lists only ATX headings, thematic breaks, paragraphs and text. Each node that lands a feature sets its flag to true in the same branch (blocks-container: blockquote, list, taskList; blocks-leaf: setext, code, html, definition; inline-core: inline; the GFM nodes: table, strikethrough, autolinkLiteral, footnote). If a node forgets, the fuzzer keeps skipping that feature, which hides bugs instead of raising false alarms.
-- The 1,000,000-document run is not done. Run it once after gfm-green with every flag on: `pnpm --filter talata fuzz --count 1000000` (about 6 minutes at the current speed, one process).
+- The 1,000,000-document run is not done. Run it once after gfm-green with every flag on: `pnpm --filter talata fuzz --count 1000000` (about 10 to 15 minutes at the speed the reviewer measured, 11 to 20 s per 20,000 documents on the shared machine, one process).
 - Corpus mutation was not exercised here because the corpus is not downloaded in this worktree.
 
 ## Gotchas

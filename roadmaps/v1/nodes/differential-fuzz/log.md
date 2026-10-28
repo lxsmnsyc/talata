@@ -7,3 +7,10 @@
 - `--all` run: generators for every feature produce text without crashing; talata differs, as expected.
 - Corpus not downloaded in this worktree, so corpus mutation was not exercised. Spec examples are the seed set.
 - No 1,000,000 run: the brief ties it to gfm-green.
+
+## Review round 1
+
+- Replay line now prints `--all`, `--no-gfm`, `--no-corpus`. Added `--no-corpus` and `RunOptions.corpus`; the smoke test uses it.
+- Fixture replay uses all features; fixtures skipped under `supported` run as `it.fails`. Fixture names carry `-nogfm` and `-all`.
+- Added negative controls (`check` takes an optional parser) and feature marker asserts.
+- Fixed the 1,000,000 estimate to 10 to 15 minutes.

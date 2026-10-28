@@ -126,10 +126,15 @@ function messageOf(error: unknown): string {
 }
 
 /** Runs both parsers on one document. A talata throw is always a failure. */
-export function check(value: string, useGfm: boolean, on: Features): Outcome {
+export function check(
+  value: string,
+  useGfm: boolean,
+  on: Features,
+  parse: (value: string, useGfm: boolean) => Root = parseTalata,
+): Outcome {
   let actual: Root;
   try {
-    actual = parseTalata(value, useGfm);
+    actual = parse(value, useGfm);
   } catch (error) {
     return { kind: 'throw', message: messageOf(error) };
   }
