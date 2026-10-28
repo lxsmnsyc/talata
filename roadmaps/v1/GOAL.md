@@ -85,6 +85,8 @@ release:
 - 2026-10-28: gfm-green merged with the 1,000,000-document fuzz run pending for a quiet machine after a restart: `pnpm --filter talata fuzz --count 1000000 --seed 20261028 --max-failures 10` (12 to 20 minutes).
 - 2026-10-28: the 1,000,000-document fuzz run passed: seed 20261028, GFM and corpus mutation on, 1,000,000 compared, 0 skipped, 0 failures, 546 s. The fuzz acceptance item is met.
 - 2026-10-28: `pnpm --filter benchmark interleaved` before perf-pass, on a fresh build, load average about 2: talata is 16.4x faster than "mdast + gfm" on the README corpus (33.5 ms against 550.1 ms), 18.7x on `node fs.md` (10.0 ms against 186.7 ms) and 21.1x on CHANGELOG_V22 (24.8 ms against 522.8 ms). The speed target is met on one run; perf-pass needs a second run and still owns the quadratic and garbage collection fixes in its brief.
+- 2026-10-28: extensions after 0.1, chosen by the user: first-party frontmatter, math and directives first. When those work without core changes, publish an experimental public rule API (`talata/extension`) with a test kit that compares an extension's output with its `mdast-util-*` counterpart. MDX stays a separate, later project. micromark extensions stay unsupported.
+- 2026-10-28: the benchmark and README compare talata only with the remark/mdast stack and HTML renderers, not md4x (the user's call). md4x measured about 2x faster than talata at its own AST, which is not mdast and has no positions.
 
 ## Gates
 
