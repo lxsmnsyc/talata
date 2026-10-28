@@ -39,7 +39,8 @@
     "prepublishOnly": "tsdown",
     "build": "tsdown",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "fuzz": "node test/fuzz/cli.ts"
   },
   "dependencies": {
     "@types/mdast": "^4.0.4"
