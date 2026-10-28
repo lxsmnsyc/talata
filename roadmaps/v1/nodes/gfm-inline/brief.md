@@ -25,6 +25,9 @@ shared:
   - packages/talata/src/core/transform.ts
   - packages/talata/test/parsers.ts
   - packages/talata/test/fuzz/features.ts
+  - packages/talata/test/corpus.test.ts
+  - packages/talata/test/equivalence.test.ts
+  - packages/talata/test/gfm.test.ts
 reserves: []
 provides: []
 depends_on:
