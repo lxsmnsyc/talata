@@ -6,6 +6,8 @@ const shared = {
   target: 'es2020',
   // Keep `exports.default` next to the named export, as the .d.cts says.
   cjsDefault: false,
+  // Strips the `workSteps` test counters from the bundle.
+  define: { __TALATA_TEST__: 'false' },
 } as const;
 
 export default defineConfig([

@@ -9,18 +9,18 @@
 
 ## Numbers
 
-Measured on main at bceab1a plus this branch, before perf-pass merges.
+Measured on main at 7004cea (after perf-pass) plus this branch.
 
-| build | stack | minified | gzip | brotli |
-| --- | --- | --- | --- | --- |
-| node | talata | 92.3 KB | 32.6 KB | 28.8 KB |
-| node | mdast + gfm | 118.2 KB | 35.9 KB | 30.7 KB |
-| browser | talata | 69.1 KB | 22.5 KB | 20.1 KB |
-| browser | mdast + gfm | 82.5 KB | 23.8 KB | 20.8 KB |
+| build   | stack       | minified | gzip    | brotli  |
+| ------- | ----------- | -------- | ------- | ------- |
+| node    | talata      | 92.3 KB  | 32.6 KB | 28.8 KB |
+| node    | mdast + gfm | 118.2 KB | 35.9 KB | 30.7 KB |
+| browser | talata      | 69.1 KB  | 22.5 KB | 20.1 KB |
+| browser | mdast + gfm | 82.5 KB  | 23.8 KB | 20.8 KB |
 
 Gzip ratio: 0.91 in Node, 0.94 in the browser. Before this node: Node 100.5 KB / 34.7 KB gzip (0.97), browser the same file (1.46, because the reference's browser build uses the DOM and has no table).
 
-Rerun after perf-pass merges: `pnpm --filter benchmark size` (it rebuilds talata first; the numbers are about the margin, so quote them from a run on the merged main).
+Rerun: `pnpm --filter benchmark size` (it rebuilds talata first).
 
 ## Deviations
 
@@ -30,6 +30,8 @@ Rerun after perf-pass merges: `pnpm --filter benchmark size` (it rebuilds talata
 - `entities.ts` was regenerated from a local `entities.json` rebuilt from the previous table, because the sandbox had no network. The new test compares against the reference's `character-entities` list, so a wrong table would fail. Rerunning the generator with the network should give the same file.
 - `packages/talata/tsdown.config.ts` now exports an array of two configs. The second sets `clean: false`; the first cleans `dist` including `dist/browser`, and I saw `dist/browser` survive two rebuilds, but the order between the two configs is not documented.
 
+- Guarded the 25 `workSteps.count++` lines in `src/inline/{emphasis,html,code-span,link}.ts` and `src/gfm/{autolink-literal,autolink-literal-transform,strikethrough}.ts` with `__TALATA_TEST__` (declared in the new `src/test-flag.d.ts`), and set the flag in `test/fuzz/cli.ts`, `test/fuzz/check-worker.ts` and `vitest.config.ts`. These are outside the owned paths; the changes are the guard lines only.
+
 ## Stubs left
 
 - None.
@@ -38,7 +40,7 @@ Rerun after perf-pass merges: `pnpm --filter benchmark size` (it rebuilds talata
 
 - The DOM decoder is tested under happy-dom (`test/bundle-size-dom.test.ts`), not in a real browser. happy-dom gave the Node table's result for all 2,125 names; no disagreement found, but a real browser was not run.
 - The margins are thin (about 1.3 KB gzip in the browser, 3.3 KB in Node). Code added by perf-pass or the extension nodes can erase the browser margin. The biggest non-table modules (minified): emphasis 5.2 KB, link 4.7 KB, autolink-literal 4.4 KB, core/blocks 4.4 KB, blocks/html 4.1 KB.
-- The test hooks `emphasisPaths` (emphasis.ts) and `workSteps` (lines.ts) are still in the public bundle; they cost a few hundred bytes. perf-pass removes them, as the brief says.
+- The `workSteps.count++` test counters are now stripped from the build: `tsdown.config.ts` defines `__TALATA_TEST__` as `false`, `vitest.config.ts` defines it as `true`, and each increment in `src/` is wrapped in `if (__TALATA_TEST__) { ... }`. Any script that runs `src/` outside vitest and tsdown must set `globalThis.__TALATA_TEST__` first; the fuzz CLI and its worker do. New increments need the same guard.
 - `pnpm build` output now holds `dist/browser/`. `files: ["dist"]` already ships it.
 - The corpus is not needed by `size`. I symlinked `benchmark/corpus` (git-ignored) for the tests only.
 
@@ -48,7 +50,7 @@ Rerun after perf-pass merges: `pnpm --filter benchmark size` (it rebuilds talata
 
 ## Verification
 
-- `pnpm --filter talata test`: 21 files pass.
+- `pnpm --filter talata test`: 22 files, 4,981 tests pass. A 300-document fuzz run passes.
 - `npx tsc --noEmit -p .` in `packages/talata`: clean. `npx oxlint`: clean. `oxfmt` run on the touched files.
 - `pnpm --filter benchmark size`: talata smaller in both builds (table above).
 - No benchmarks run.

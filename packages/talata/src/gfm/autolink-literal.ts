@@ -91,7 +91,9 @@ function isTrail(text: string, index: number, end: number): boolean {
   }
   let k = index;
   for (;;) {
-    workSteps.count++;
+    if (__TALATA_TEST__) {
+      workSteps.count++;
+    }
     if (k >= end) {
       return true;
     }
@@ -172,7 +174,9 @@ function scanDomain(text: string, index: number, end: number): number {
   let dotBefore = -1;
   let i = index;
   while (i < end) {
-    workSteps.count++;
+    if (__TALATA_TEST__) {
+      workSteps.count++;
+    }
     const code = text.charCodeAt(i);
     if (code === DOT || code === UNDERSCORE) {
       if (isTrail(text, i, end)) {
@@ -385,12 +389,16 @@ function parseEmail(state: InlineState): boolean {
   const rangeStart = state.ranges[state.range];
   let start = pos;
   while (start > rangeStart && isGfmAtext(text.charCodeAt(start - 1))) {
-    workSteps.count++;
+    if (__TALATA_TEST__) {
+      workSteps.count++;
+    }
     start--;
   }
   let at = pos;
   while (at < end && isGfmAtext(text.charCodeAt(at))) {
-    workSteps.count++;
+    if (__TALATA_TEST__) {
+      workSteps.count++;
+    }
     at++;
   }
   emailState = state;

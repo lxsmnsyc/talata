@@ -75,6 +75,10 @@ for (let i = 0; i < args.length; i++) {
   }
 }
 
+// The sources guard their test counters with this flag, which the bundler
+// and vitest define.
+Object.assign(globalThis, { __TALATA_TEST__: false });
+
 const base = import.meta.url;
 // Loaded here, after the hook above is in place.
 const { supported, allFeatures } = await import('./features');

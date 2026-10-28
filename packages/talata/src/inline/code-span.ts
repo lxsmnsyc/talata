@@ -78,7 +78,9 @@ function parseCodeSpan(state: InlineState): boolean {
   let close = -1;
   for (;;) {
     while (pos < end) {
-      workSteps.count++;
+      if (__TALATA_TEST__) {
+        workSteps.count++;
+      }
       if (text.charCodeAt(pos) !== BACKTICK) {
         pos++;
         continue;
