@@ -27,6 +27,9 @@ shared:
 reserves: []
 provides: []
 depends_on:
+  - on: bundle-size
+    kind: hard
+    why: GOAL.md requires the bundle to be smaller than the reference stack, and the README reports the size
   - on: perf-pass
     kind: hard
     why: the README reports the final numbers

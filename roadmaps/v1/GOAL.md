@@ -6,6 +6,10 @@ merge:
   max_size: L
   exclude: [release, hotfix, contract, gate]
 branches:
+release:
+  publish: changesets
+  paths: [packages/**]
+  fence: merge
 ---
 
 # Talata 0.1: remark-compatible mdast, several times faster
