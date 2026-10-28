@@ -1,0 +1,8 @@
+{
+  "input": ">r\n>-|\na||\n-|-",
+  "gfm": true,
+  "all": false,
+  "kind": "diff",
+  "seed": 101,
+  "index": 18176
+}

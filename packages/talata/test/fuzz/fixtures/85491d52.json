@@ -1,0 +1,8 @@
+{
+  "input": ">F\n>\t日\n>-|",
+  "gfm": true,
+  "all": false,
+  "kind": "diff",
+  "seed": 101,
+  "index": 15652
+}
