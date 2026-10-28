@@ -6,14 +6,11 @@ import { gfm } from 'micromark-extension-gfm';
 import type { Root } from 'mdast';
 import { toHast } from 'mdast-util-to-hast';
 import { toHtml } from 'hast-util-to-html';
-import { directiveFromMarkdown } from 'mdast-util-directive';
 import { frontmatterFromMarkdown } from 'mdast-util-frontmatter';
 import { mathFromMarkdown } from 'mdast-util-math';
-import { directive } from 'micromark-extension-directive';
 import { frontmatter } from 'micromark-extension-frontmatter';
 import { math } from 'micromark-extension-math';
 import { fromMarkdown } from '../src';
-import { directive as talataDirective } from '../src/directive';
 import type { Extension } from '../src/ext/api';
 import { frontmatter as talataFrontmatter } from '../src/frontmatter';
 import { math as talataMath } from '../src/math';
@@ -36,7 +33,7 @@ export const ready = {
   },
 };
 
-export type ExtensionName = 'frontmatter' | 'math' | 'directive';
+export type ExtensionName = 'frontmatter' | 'math';
 
 /** Options a test may pass to an extension. Both sides get the same value. */
 export interface ExtensionOptions {
@@ -60,12 +57,9 @@ function referenceExtensions(
     if (name === 'frontmatter') {
       extensions.push(frontmatter(options.frontmatter));
       mdastExtensions.push(frontmatterFromMarkdown(options.frontmatter));
-    } else if (name === 'math') {
+    } else {
       extensions.push(math(options.math));
       mdastExtensions.push(mathFromMarkdown());
-    } else {
-      extensions.push(directive());
-      mdastExtensions.push(directiveFromMarkdown());
     }
   }
   return { extensions, mdastExtensions };
@@ -80,10 +74,8 @@ export function talataExtensions(
   for (const name of names) {
     if (name === 'frontmatter') {
       result.push(talataFrontmatter(options.frontmatter));
-    } else if (name === 'math') {
-      result.push(talataMath(options.math));
     } else {
-      result.push(talataDirective());
+      result.push(talataMath(options.math));
     }
   }
   return result;

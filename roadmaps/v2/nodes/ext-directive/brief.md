@@ -1,11 +1,11 @@
 ---
 id: ext-directive
 title: Directive extension
-status: active
-priority: must
+status: todo
+priority: later
 type: feature
 outline: false
-milestone: m2-extensions
+milestone: m4-mdx
 target:
 from:
 size: M
@@ -25,6 +25,9 @@ shared:
 reserves: []
 provides: []
 depends_on:
+  - on: core-hooks
+    kind: hard
+    why: the first build reached into private block parser state; it needs real hooks
   - on: ext-api
     kind: contract
     via: extension
@@ -52,3 +55,7 @@ Test inputs: the reference package's own test cases (copy the inputs from its re
 ## Sizing
 
 M: block and inline rules plus their interaction with containers.
+
+## Parked (2026-10-28)
+
+A first build is on the branch `feat/ext-directive` (c85cccf). It matched all 260 reference inputs, but it reads private block parser state through casts, parses text directive labels in a separate pass, and two 100,000-document fuzz runs (seed 77 without GFM, seed 5 with GFM) each found one failure with tabs or deep indent in a quote or list. See `roadmaps/v2/contracts/extension-directive.change-request.md` on that branch. The user chose to ship 0.2 without it. Its container rule is named `directiveFence`; frontmatter's container list must include it when this lands.
