@@ -1,7 +1,7 @@
 ---
 id: ext-math
 title: Math extension
-status: active
+status: done
 priority: must
 type: feature
 outline: false
