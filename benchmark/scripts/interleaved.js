@@ -8,6 +8,7 @@ import { fromMarkdown } from 'mdast-util-from-markdown';
 import { gfmFromMarkdown } from 'mdast-util-gfm';
 import MarkdownIt from 'markdown-it';
 import { marked } from 'marked';
+import { loadTalata } from './talata.js';
 
 const rounds = Number(process.argv[2] ?? 15);
 const readmeDir = new URL('../corpus/readmes/', import.meta.url);
@@ -39,6 +40,11 @@ const pipelines = {
   'marked html': (doc) => marked.parse(doc, { async: false }),
 };
 
+const talata = await loadTalata();
+if (talata) {
+  pipelines.talata = (doc) => talata(doc, { gfm: true });
+}
+
 function median(values) {
   const sorted = values.toSorted((a, b) => a - b);
   return sorted[Math.floor(sorted.length / 2)];
@@ -66,5 +72,10 @@ for (const [inputName, docs] of Object.entries(inputs)) {
     console.log(
       `  ${name.padEnd(22)} ${value.toFixed(1).padStart(8)} ms   ${(value / baseline).toFixed(2)}x markdown-it`,
     );
+  }
+  // The release target: talata at least 4 times faster than mdast + gfm.
+  if (times.has('talata')) {
+    const speedup = median(times.get('mdast + gfm')) / median(times.get('talata'));
+    console.log(`  talata is ${speedup.toFixed(2)}x faster than mdast + gfm`);
   }
 }

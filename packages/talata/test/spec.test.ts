@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
-  READY,
   normalizeHtml,
   parseReference,
   parseTalata,
+  ready,
   specExamples,
   specText,
   toHtmlString,
@@ -25,7 +25,7 @@ describe('CommonMark spec through the reference parser', () => {
   });
 });
 
-describe.skipIf(!READY)('CommonMark spec through talata', () => {
+describe.skipIf(!ready.commonmark)('CommonMark spec through talata', () => {
   for (const example of specExamples) {
     it(`example ${example.number} (${example.section})`, () => {
       const markdown = specText(example.markdown);
