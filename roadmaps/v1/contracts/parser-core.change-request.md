@@ -23,7 +23,7 @@ Gate review round (a reviewer probed v2 against the reference):
 11. The reference resolves emphasis and strikethrough inside link text when the link closes (`*[a*](b)`, `~~[a~~](b)` keep the outer delimiter as text). One resolve per leaf cannot do that. `resolve` now takes `bottom`, the core exposes `resolveSpan`, `nodeIndex` and `mergeText`, and delimiters keep a stated invariant.
 12. `[a]: /u\nb\n===` gives a heading starting at 1:1, before the definition. Added `OpenParagraph.start`.
 13. Lists: a rule could only close blocks above `state.container`, and a list item rule could not open the list and the item in one start. Added `OpenBlock.canContain` and `BlockState.openContainer`, plus a guard: after a container that consumed nothing, no more rules run on the line.
-14. `> > a\n> ` at the end of the file closes the inner quote at 2:3; with a final `\n` at 1:6. Documented the check a container makes in `continue`.
+14. `> > a\n> ` at the end of the file closes the inner quote at 2:3; with a final `\n` at 1:6. Documented the check a container makes in `continue` (corrected in review round 2: only when nothing is left, and the container returns true so deeper containers stay matched).
 15. A failing `start` could leave `line` changed. The core now saves and restores `start`, `visualColumn` and `partialTab` around each call.
 
 ## Proposed change
@@ -85,7 +85,8 @@ interface BlockState extends DocumentState {
   // the new block. Undefined, changing nothing, when lazy or too few lines.
   splitParagraph(count: number): number[] | undefined;
   // From inside start(): opens an extra container (a list) before the block the
-  // rule returns, which then goes inside it. Only when the rule returns a block.
+  // rule returns, which then goes inside it. A rule that calls it must return
+  // a block: the line restore after a failed start does not undo it.
   openContainer(block: OpenBlock): void;
   inline(node: { children: PhrasingContent[] }, ranges: number[]): void; // parse after all blocks close
 }
@@ -218,7 +219,7 @@ Add to Positions:
 - A split tab: the next node starts at the offset after the tab (micromark keeps the tab's virtual spaces after it).
 - A leading BOM is dropped before counting offsets. The root spans 1:1/0 to the end of the text.
 - A setext heading after definitions starts at `paragraph.start`, before the definitions (`[a]: /u\nb\n===` gives a heading at 1:1).
-- A nested container stays open over a last line that has no line ending and only whitespace after an outer prefix (`> > a\n> ` closes the inner quote at 2:3; with a final `\n` at 1:6; `> a\n  ` closes at 1:4). The container checks it in `continue`: `line.blank && line.end === line.text.length && line.start > source.lineStarts[line.index]`. The test quote in `test/core.test.ts` does this; blocks-container owns the exact rule.
+- Nested containers stay open over a last line that has no line ending and nothing left after an outer prefix: no whitespace and no split-tab columns. `> > a\n> ` ends the inner quote at 2:3, and `> > > a\n> ` ends all three there. With a final `\n`, or with whitespace left (`> > a\n>  `, `> > a\n>\t`), the inner quote ends at 1:6. `> a\n  ` ends at 1:4. When its prefix does not match, the container checks `line.start === line.end && line.partialTab === 0 && line.end === line.text.length && line.start > source.lineStarts[line.index]` in `continue`. If that holds, it sets its end to `line.end` and returns true, so it stays matched and deeper containers see the line too. The test quote in `test/core.test.ts` does this; blocks-container owns the exact rule. No core change is needed.
 - A paragraph ends at the end of its last line, trailing whitespace included; its last text node stops before that whitespace. ATX headings and thematic breaks end at the line end, trailing whitespace included.
 
 ## Affected nodes

@@ -133,14 +133,17 @@ class TestQuote implements OpenBlock {
 
   continue(state: BlockState, line: Line): boolean {
     if (!consumeQuotePrefix(line)) {
-      // The reference keeps a nested quote open over a last line that has
-      // no line ending and only whitespace left after an outer prefix.
+      // The reference keeps nested quotes open over a last line that has no
+      // line ending and nothing at all left after an outer prefix. Staying
+      // matched lets deeper quotes see the line too.
       if (
-        line.blank &&
+        line.start === line.end &&
+        line.partialTab === 0 &&
         line.end === line.text.length &&
         line.start > state.source.lineStarts[line.index]
       ) {
         this.end = line.end;
+        return true;
       }
       return false;
     }
@@ -688,6 +691,12 @@ describe('container stack with a test-only block quote', () => {
     '> > a\n>',
     '> > a\n> b',
     '> a\n  ',
+    '> > > a\n> ',
+    '> > a\n>  ',
+    '> > a\n> \t',
+    '> > a\n>\t',
+    '> > a\n>\t ',
+    '>\t> >\t>\n> ',
     '# a\n#b',
   ];
   for (const markdown of cases) {

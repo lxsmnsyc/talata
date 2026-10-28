@@ -40,7 +40,8 @@ export interface BlockState extends DocumentState {
   /**
    * Opens `block` as an extra container from inside `BlockRule.start`, before
    * the block the rule returns. That block then goes inside it. List items use
-   * it to open the list. Only call it when the rule then returns a block.
+   * it to open the list. A rule that calls it must return a block: the line
+   * restore after a failed start does not undo it.
    */
   openContainer(block: OpenBlock): void;
   /** Schedules inline parsing of `ranges` into `node.children` after all blocks close. */
