@@ -157,7 +157,6 @@ test('anywhere inside a lazy container is a known gap', () => {
 test('open fences without a closing fence stay linear with anywhere', () => {
   const options: Options = { type: 'f', fence: { open: '<<', close: '>>' }, anywhere: true };
   const small = '<<\n'.repeat(300);
-  const large = '<<\n'.repeat(33_000);
   expect(
     describeDiff(
       firstDiff(
@@ -166,9 +165,20 @@ test('open fences without a closing fence stay linear with anywhere', () => {
       ),
     ),
   ).toBeUndefined();
-  const start = performance.now();
-  parseTalata(large, false, ['frontmatter'], { frontmatter: options });
-  expect(performance.now() - start).toBeLessThan(1500);
+  // Growth, not wall time: doubling the input must not much more than double the time.
+  const best = (lines: number): number => {
+    const text = '<<\n'.repeat(lines);
+    let fastest = Infinity;
+    for (let run = 0; run < 5; run++) {
+      const start = performance.now();
+      parseTalata(text, false, ['frontmatter'], { frontmatter: options });
+      fastest = Math.min(fastest, performance.now() - start);
+    }
+    return fastest;
+  };
+  best(5000);
+  const ratio = best(60_000) / best(30_000);
+  expect(ratio).toBeLessThan(3);
 });
 
 describe('frontmatter factory', () => {

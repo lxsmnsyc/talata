@@ -131,7 +131,13 @@ const CONTAINER_RULES = ['blockquote', 'listItem', 'footnoteDefinition', 'direct
 
 const withoutContainers = new WeakMap<Registry, Registry>();
 
+/** Registries made by `dropContainers`, so a second call on one returns it as is. */
+const dropped = new WeakSet<Registry>();
+
 function dropContainers(rules: Registry): Registry {
+  if (dropped.has(rules)) {
+    return rules;
+  }
   let result = withoutContainers.get(rules);
   if (result === undefined) {
     const blockByChar: BlockRule[][] = [];
@@ -152,6 +158,7 @@ function dropContainers(rules: Registry): Registry {
     }
     result = { ...rules, blockByChar, blockOther };
     withoutContainers.set(rules, result);
+    dropped.add(result);
   }
   return result;
 }
