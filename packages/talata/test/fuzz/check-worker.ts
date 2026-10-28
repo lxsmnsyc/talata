@@ -58,8 +58,8 @@ function messageOf(error: unknown): string {
 port.on('message', (request: Request) => {
   let outcome: Outcome;
   try {
-    outcome = check(request.value, request.gfm, request.features, (value, gfm) => {
-      const tree = parseTalata(value, gfm);
+    outcome = check(request.value, request.gfm, request.features, (value, gfm, extensions) => {
+      const tree = parseTalata(value, gfm, extensions);
       Atomics.store(flags, 1, request.id);
       return tree;
     });

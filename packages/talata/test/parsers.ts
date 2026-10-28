@@ -6,7 +6,17 @@ import { gfm } from 'micromark-extension-gfm';
 import type { Root } from 'mdast';
 import { toHast } from 'mdast-util-to-hast';
 import { toHtml } from 'hast-util-to-html';
+import { directiveFromMarkdown } from 'mdast-util-directive';
+import { frontmatterFromMarkdown } from 'mdast-util-frontmatter';
+import { mathFromMarkdown } from 'mdast-util-math';
+import { directive } from 'micromark-extension-directive';
+import { frontmatter } from 'micromark-extension-frontmatter';
+import { math } from 'micromark-extension-math';
 import { fromMarkdown } from '../src';
+import { directive as talataDirective } from '../src/directive';
+import type { Extension } from '../src/ext/api';
+import { frontmatter as talataFrontmatter } from '../src/frontmatter';
+import { math as talataMath } from '../src/math';
 
 // Talata's suites stay skipped until the matching part of the parser exists.
 // The roadmap node that lands a feature turns its flag on.
@@ -26,15 +36,85 @@ export const ready = {
   },
 };
 
-export function parseReference(value: string, useGfm: boolean): Root {
-  if (!useGfm) {
-    return reference(value);
-  }
-  return reference(value, { extensions: [gfm()], mdastExtensions: [gfmFromMarkdown()] });
+export type ExtensionName = 'frontmatter' | 'math' | 'directive';
+
+/** Options a test may pass to an extension. Both sides get the same value. */
+export interface ExtensionOptions {
+  frontmatter?: Parameters<typeof frontmatter>[0];
+  math?: Parameters<typeof math>[0];
 }
 
-export function parseTalata(value: string, useGfm: boolean): Root {
-  return fromMarkdown(value, { gfm: useGfm });
+type ReferenceOptions = NonNullable<Parameters<typeof reference>[1]>;
+type SyntaxExtensions = NonNullable<ReferenceOptions['extensions']>;
+type MdastExtensions = NonNullable<ReferenceOptions['mdastExtensions']>;
+
+// The reference side of each extension: the micromark and mdast extensions.
+// `names` order is the order of the lists, as in a real call.
+function referenceExtensions(
+  names: readonly ExtensionName[],
+  options: ExtensionOptions,
+): { extensions: SyntaxExtensions; mdastExtensions: MdastExtensions } {
+  const extensions: SyntaxExtensions = [];
+  const mdastExtensions: MdastExtensions = [];
+  for (const name of names) {
+    if (name === 'frontmatter') {
+      extensions.push(frontmatter(options.frontmatter));
+      mdastExtensions.push(frontmatterFromMarkdown(options.frontmatter));
+    } else if (name === 'math') {
+      extensions.push(math(options.math));
+      mdastExtensions.push(mathFromMarkdown());
+    } else {
+      extensions.push(directive());
+      mdastExtensions.push(directiveFromMarkdown());
+    }
+  }
+  return { extensions, mdastExtensions };
+}
+
+/** The talata side of each extension, from the subpath modules. */
+export function talataExtensions(
+  names: readonly ExtensionName[],
+  options: ExtensionOptions = {},
+): Extension[] {
+  const result: Extension[] = [];
+  for (const name of names) {
+    if (name === 'frontmatter') {
+      result.push(talataFrontmatter(options.frontmatter));
+    } else if (name === 'math') {
+      result.push(talataMath(options.math));
+    } else {
+      result.push(talataDirective());
+    }
+  }
+  return result;
+}
+
+/**
+ * The reference parser. `names` lists the extensions to turn on, after GFM.
+ */
+export function parseReference(
+  value: string,
+  useGfm: boolean,
+  names: readonly ExtensionName[] = [],
+  options: ExtensionOptions = {},
+): Root {
+  const added = referenceExtensions(names, options);
+  if (!useGfm && names.length === 0) {
+    return reference(value);
+  }
+  return reference(value, {
+    extensions: [...(useGfm ? [gfm()] : []), ...added.extensions],
+    mdastExtensions: [...(useGfm ? [gfmFromMarkdown()] : []), ...added.mdastExtensions],
+  });
+}
+
+export function parseTalata(
+  value: string,
+  useGfm: boolean,
+  names: readonly ExtensionName[] = [],
+  options: ExtensionOptions = {},
+): Root {
+  return fromMarkdown(value, { gfm: useGfm, extensions: talataExtensions(names, options) });
 }
 
 export function toHtmlString(tree: Root): string {

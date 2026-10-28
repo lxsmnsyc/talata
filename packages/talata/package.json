@@ -47,6 +47,39 @@
       },
       "default": "./dist/unified.js"
     },
+    "./frontmatter": {
+      "import": {
+        "types": "./dist/frontmatter.d.ts",
+        "default": "./dist/frontmatter.js"
+      },
+      "require": {
+        "types": "./dist/frontmatter.d.cts",
+        "default": "./dist/frontmatter.cjs"
+      },
+      "default": "./dist/frontmatter.js"
+    },
+    "./math": {
+      "import": {
+        "types": "./dist/math.d.ts",
+        "default": "./dist/math.js"
+      },
+      "require": {
+        "types": "./dist/math.d.cts",
+        "default": "./dist/math.cjs"
+      },
+      "default": "./dist/math.js"
+    },
+    "./directive": {
+      "import": {
+        "types": "./dist/directive.d.ts",
+        "default": "./dist/directive.js"
+      },
+      "require": {
+        "types": "./dist/directive.d.cts",
+        "default": "./dist/directive.cjs"
+      },
+      "default": "./dist/directive.js"
+    },
     "./package.json": "./package.json"
   },
   "publishConfig": {
@@ -66,10 +99,16 @@
     "@types/node": "^26.6.5",
     "commonmark-spec": "^0.31.2",
     "hast-util-to-html": "^9.0.5",
+    "mdast-util-directive": "^3.1.1",
     "mdast-util-from-markdown": "^2.0.2",
+    "mdast-util-frontmatter": "^2.0.1",
     "mdast-util-gfm": "^3.1.0",
+    "mdast-util-math": "^3.0.0",
     "mdast-util-to-hast": "^13.2.0",
+    "micromark-extension-directive": "^4.0.0",
+    "micromark-extension-frontmatter": "^2.0.0",
     "micromark-extension-gfm": "^3.0.0",
+    "micromark-extension-math": "^3.1.0",
     "rehype-stringify": "^10.0.1",
     "remark-gfm": "^4.0.1",
     "remark-parse": "^11.0.0",

@@ -1,3 +1,5 @@
+import { fuzzExtensions } from './ext';
+import type { ExtensionFuzz } from './ext';
 import type { Features } from './features';
 import type { Random } from './random';
 
@@ -5,6 +7,17 @@ const WORDS = ['a', 'foo', 'bar', 'baz qux', 'Hello', 'x1', 'tab', 'é', '日本
 // Characters that mean something to a Markdown parser. Used as noise.
 const NOISE = ['*', '_', '[', ']', '(', ')', '!', '<', '>', '`', '~', '|', ':', '#', '-', '+', '='];
 const SPACES = ['', ' ', '  ', '   ', '\t'];
+
+/** Extensions that are in use and have the generator `key`. */
+function withHook(on: Features, key: 'start' | 'block' | 'inline'): ExtensionFuzz[] {
+  const result: ExtensionFuzz[] = [];
+  for (const extension of fuzzExtensions) {
+    if (on.extensions.includes(extension.name) && extension[key] !== undefined) {
+      result.push(extension);
+    }
+  }
+  return result;
+}
 
 interface Context {
   random: Random;
@@ -51,6 +64,10 @@ function inlineAtom(context: Context, depth: number): string {
   if (on.footnote) {
     choices.push('footnote');
   }
+  const hooks = withHook(on, 'inline');
+  if (hooks.length > 0) {
+    choices.push('extension', 'extension');
+  }
   const kind = random.pick(choices);
   const inner = (): string => (depth < 3 ? inlineText(context, depth + 1) : word(random));
   switch (kind) {
@@ -84,6 +101,8 @@ function inlineAtom(context: Context, depth: number): string {
       return random.pick(['www.a.com', 'http://a.b/c', 'a@b.co', 'www.a.com/x_y)']);
     case 'footnote':
       return random.pick(['[^1]', '[^a]', '[^big note]']);
+    case 'extension':
+      return random.pick(hooks).inline!(random, inner);
     default:
       return word(random);
   }
@@ -330,6 +349,11 @@ function blocks(context: Context, depth: number, out: string[]): void {
   if (on.footnote) {
     makers.push(footnoteDefinition);
   }
+  for (const extension of withHook(on, 'block')) {
+    makers.push((inner, sink) => {
+      sink.push(...extension.block!(inner.random, () => textLine(inner)));
+    });
+  }
   if (depth < 3) {
     if (on.blockquote) {
       makers.push(blockquote);
@@ -378,6 +402,11 @@ export function assemble(random: Random, lines: string[]): string {
 /** One random document from the grammar of the features that are on. */
 export function generateDocument(random: Random, on: Features): string {
   const lines: string[] = [];
+  for (const extension of withHook(on, 'start')) {
+    if (random.chance(0.3)) {
+      lines.push(...extension.start!(random));
+    }
+  }
   blocks({ random, on }, 0, lines);
   return assemble(random, lines);
 }
