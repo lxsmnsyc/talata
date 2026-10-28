@@ -1,25 +1,38 @@
-# Talata
+# talata
 
-Talata is a Markdown parser that produces the same mdast tree as `mdast-util-from-markdown`, so it works with remark plugins, while parsing several times faster.
+A fast Markdown parser written in TypeScript. It returns the same mdast tree as `mdast-util-from-markdown`, positions included, for CommonMark and GitHub Flavored Markdown. It parses about 17 to 22 times faster. It works as a drop-in parser for remark.
 
-Status: not usable yet. The repository holds the test harness, the benchmark and the roadmap. See `roadmaps/v1/`.
+```js
+import { fromMarkdown } from 'talata';
 
-The name is Tagalog for "paragraph".
+const tree = fromMarkdown('# Hello, *world*!', { gfm: true });
+```
 
-## Why
+Usage, the unified plugin, benchmarks and differences from the reference: [`packages/talata/README.md`](packages/talata/README.md).
 
-`remark-parse` with `remark-gfm` is 6 to 9 times slower than markdown-it on the same documents (`benchmark/BASELINE.md`). markdown-it already passes the CommonMark spec, but it produces its own tokens, so remark plugins cannot use it. Talata aims for both: remark-compatible mdast and markdown-it speed.
+## Repository
 
-## Packages
-
-- `packages/talata`: the parser.
-- `benchmark`: speed comparison with micromark, mdast-util-from-markdown, markdown-it and marked.
+- `packages/talata`: the parser, published to npm as `talata`.
+- `benchmark`: speed and size comparison with `mdast-util-from-markdown`, micromark, markdown-it and marked.
+- `roadmaps/v1`: the plan and the record of each piece of work.
 
 ## Development
 
+Node 22.18 or later and pnpm 12.
+
 ```sh
 pnpm install
-pnpm --filter talata test          # spec and mdast equivalence tests
-pnpm --filter benchmark corpus     # download the benchmark corpus
-pnpm --filter benchmark interleaved
+pnpm --filter talata test           # spec, corpus and equivalence tests
+pnpm --filter benchmark corpus      # download the benchmark corpus first
+pnpm --filter benchmark interleaved # speed
+pnpm --filter benchmark size        # bundle size
+cd packages/talata && pnpm fuzz --count 100000   # differential fuzzer
 ```
+
+Lint and format: `npx oxlint` and `npx oxfmt --check`.
+
+Releases use changesets. Add one with `pnpm cs:add`. Merging the "Version Packages" pull request publishes to npm.
+
+## License
+
+MIT
