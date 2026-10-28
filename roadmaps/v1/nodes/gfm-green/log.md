@@ -19,3 +19,7 @@
 - Test in `fuzz.test.ts`: the deep input is not a skip, and the next document still compares.
 - Nits: replay lines include `--timeout-ms` when it is not 5000. `--timeout-ms 0` exits with code 2.
 - Fast check: 19 files, 4973 tests passed; tsc, oxlint, oxfmt clean. CLI seed 9, 5,000 documents with `--timeout-ms 3000`: 0 failures.
+
+## After the merge
+
+- 2026-10-28, after the restart: waited for load below 4, then ran `pnpm --filter talata fuzz --count 1000000 --seed 20261028 --max-failures 10`. 1,000,000 compared, 0 skipped, 0 failures, 546 s, exit code 0.

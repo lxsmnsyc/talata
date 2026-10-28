@@ -31,7 +31,7 @@ Branch `feat/gfm-green`. Paths are under `packages/talata/`.
 
 - The lazy task cases cannot be compared under vitest in the test process. Vitest resolves the `development` export condition, and `devlop`'s assert in mdast-util-gfm-task-list-item's `exitCheck` throws ("always in a paragraph, in a list item"). This is why the old `it.fails` cases failed. The published build that users get sets `checked` on the parent. These tests compare through the fuzz worker, which uses plain Node resolution (`execArgv: []`).
 - `src/blocks/paragraph.ts`, a CommonMark file, calls `paragraphClosed` from `src/gfm/task-list.ts` when GFM is on. This costs one WeakMap lookup per paragraph close. The contract does not change, so I wrote no change request.
-- The 1,000,000-document run is not done. The orchestrator moved it to after the machine restart (see Verification).
+- The 1,000,000-document run ran after the merge, after the machine restart (see Verification).
 
 ## Stubs left
 
@@ -82,13 +82,13 @@ Cases where the reference differs from the spec, or behaves in a surprising way.
 - Scratch fuzzers, not committed:
   - container prefixes combined with table, task, footnote, strikethrough and autolink lines, both modes: 120,000 documents, 0 differences;
   - 190,000 short `*_~[]` strings comparing the new emphasis-first path with the old one, and every fourth with the reference: 0 differences.
-- Pending: the 1,000,000-document run, after the restart, from `packages/talata` on a quiet machine. Check `uptime` first:
+- 1,000,000-document run, 2026-10-28 after the restart, one process, load average under 4 at the start:
 
   ```sh
   pnpm --filter talata fuzz --count 1000000 --seed 20261028 --max-failures 10
   ```
 
-  This is one process, with GFM on (the default) and corpus mutation on (the default, `benchmark/corpus` must be present). Expect 12 to 20 minutes: 50,000 documents took 44 s at load 5 alone and 66 s with three runs at once. It passes with exit code 0 and `0 failures`. Report the `reference timed out` count from the summary line as skipped.
+  GFM on, corpus mutation on: 1,000,000 compared, 0 skipped (`reference timed out`), 0 failures, 546 s, exit code 0.
 
 ## Size
 
