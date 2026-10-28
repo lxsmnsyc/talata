@@ -1,7 +1,7 @@
 ---
 id: ext-api
 title: Extension interface and subpath scaffolding
-status: todo
+status: active
 priority: must
 type: contract
 outline: false
