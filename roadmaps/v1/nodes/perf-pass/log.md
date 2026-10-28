@@ -6,3 +6,4 @@
 - Test hooks `emphasisPaths` and `workSteps`: not in the public entry, checked below in the outcome.
 - Dead ends: literal autolink flag (no corpus gain, see RESULTS.md); table cell state (noise-sized, not tried).
 - Load was 2.4 to 3.0 at the start of each benchmark; another worker kept it near 5 to 6 in between.
+- Review fix: added test/perf-pass.test.ts, which spies on Array.prototype.splice and fails when a splice moves 100 or more elements. With the splice put back in failBracket it failed (expected 4000 to be less than 100); with the marker fix it passes.
