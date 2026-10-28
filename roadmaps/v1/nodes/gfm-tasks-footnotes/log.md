@@ -12,3 +12,9 @@
 - Fuzz (main, GFM, 50k each): seeds 101, 202, 303, 404. Fixed failures saved as 7 fixtures. Only gfm-inline's literal autolink text splits remain.
 - Scratch fuzzer (container pieces plus footnotes and tasks, not committed): 170k documents, 0 failures apart from the lazy-root task case.
 - Merged main (gfm-tables, ca0b33d). Conflicts in `blocks/index.ts`, `corpus.test.ts`, `features.ts` resolved by keeping both. The tables worker's `-\n[x]\n-|-` is the lazy-root case.
+
+## Review round 1
+
+- Should-fix: module-level `indentState` (footnote.ts) and `pendingState`/`pendingItem` (task-list.ts) kept the last parse alive. Both are now `WeakMap`s keyed by `BlockState`. `taskState` in task-list.ts is cleared by the same leaf's final resolve, so it only holds an object during that leaf's inline parse.
+- No test for retention: a `WeakMap` entry cannot be observed without a heap measurement or a test-only hook, so I skipped it.
+- Nit: list items call `footnoteIndentAt` only with GFM on.

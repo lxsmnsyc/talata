@@ -47,16 +47,13 @@ function isTarget(block: OpenBlock): block is TaskTarget {
 }
 
 // The item whose marker line was empty, and the line after it.
-let pendingState: BlockState | undefined;
-let pendingItem: TaskTarget | undefined;
-let pendingLine = -1;
+// Per document, so a finished parse is not kept alive.
+const pending = new WeakMap<BlockState, { item: TaskTarget; line: number }>();
 
 /** Called by a list item whose marker line ends right after the marker. */
 export function flowAfterMarker(state: BlockState, item: TaskTarget, line: number): void {
   if (state.options.gfm) {
-    pendingState = state;
-    pendingItem = item;
-    pendingLine = line;
+    pending.set(state, { item, line });
   }
 }
 
@@ -72,12 +69,12 @@ export const taskListStart: BlockRule = {
   triggers: '[',
   gfm: true,
   start(state: BlockState, line: Line): OpenBlock | undefined {
-    if (pendingState !== state || pendingLine !== line.index) {
+    const entry = pending.get(state);
+    if (entry === undefined || entry.line !== line.index) {
       return undefined;
     }
-    const item = pendingItem!;
-    pendingState = undefined;
-    pendingItem = undefined;
+    pending.delete(state);
+    const item = entry.item;
     // Whitespace first is a line prefix, not content.
     if (line.nonBlank !== line.start || line.partialTab !== 0) {
       return undefined;

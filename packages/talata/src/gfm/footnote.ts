@@ -69,8 +69,8 @@ function scanLabel(text: string, from: number, end: number): number {
 }
 
 // The last line on which a definition consumed its indent.
-let indentState: BlockState | undefined;
-let indentLineStart = -1;
+// Per document, so a finished parse is not kept alive.
+const indentLines = new WeakMap<BlockState, number>();
 
 /**
  * True when a footnote definition consumed its indent on the line that
@@ -79,7 +79,7 @@ let indentLineStart = -1;
  * item closed on such a line ends at the event that closes it.
  */
 export function footnoteIndentAt(state: BlockState, lineStart: number): boolean {
-  return indentState === state && indentLineStart === lineStart;
+  return indentLines.get(state) === lineStart;
 }
 
 /**
@@ -169,8 +169,7 @@ class OpenFootnoteDefinition implements TrackedContainer {
       this.indentEnd = line.start;
       this.quoteLine = line.index;
       this.end = line.end;
-      indentState = state;
-      indentLineStart = state.source.lineStarts[line.index];
+      indentLines.set(state, state.source.lineStarts[line.index]);
     }
     this.matchedEnd = line.end === line.text.length;
     return true;

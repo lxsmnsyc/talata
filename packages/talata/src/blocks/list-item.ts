@@ -61,6 +61,7 @@ class OpenListItem implements TrackedContainer, ItemState, TaskTarget {
     this.quoteLine = parentQuoteLine(state.container);
     if (
       this.quoteLine === line.index &&
+      state.options.gfm &&
       footnoteIndentAt(state, state.source.lineStarts[line.index])
     ) {
       // The walk back from the list's end stops at that indent.
@@ -123,7 +124,11 @@ class OpenListItem implements TrackedContainer, ItemState, TaskTarget {
     // In a GFM footnote definition, an item closed on a line where the
     // definition's indent matched ends at the closing event, and blank lines
     // before it make it spread.
-    if (this.nextLineStart !== -1 && footnoteIndentAt(state, this.nextLineStart)) {
+    if (
+      this.nextLineStart !== -1 &&
+      state.options.gfm &&
+      footnoteIndentAt(state, this.nextLineStart)
+    ) {
       end = this.nextEnd;
       const last =
         flow.length > 0

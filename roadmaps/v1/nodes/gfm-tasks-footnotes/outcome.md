@@ -40,6 +40,7 @@ Paths are under `packages/talata/`.
 ## Gotchas
 
 - When the marker line has nothing after the marker, the "first content" can lie outside the item, on a lazy line.
+- Per-document state in `src/gfm/` lives in `WeakMap`s keyed by `BlockState` or `Source`, so a finished parse is not kept alive (review round 1).
 - A tab check value only works when the tab is one column wide.
 - A footnote definition directly inside another one continues with no indent of its own: micromark checks the last token (`followsIndent`).
 - mdast-util-from-markdown's `prepareList` skips quote prefixes but stops at footnote indents. It counts blank lines inside footnote definitions toward an item's spread.
