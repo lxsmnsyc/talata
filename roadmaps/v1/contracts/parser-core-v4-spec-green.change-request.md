@@ -1,7 +1,7 @@
 # Change request: parser-core v3 to v4
 
 - From node: spec-green
-- Status: open
+- Status: accepted
 
 ## Problem
 

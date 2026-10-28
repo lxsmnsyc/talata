@@ -1,7 +1,7 @@
 ---
 id: gfm-inline
 title: GFM strikethrough and autolink literals
-status: todo
+status: active
 priority: must
 type: feature
 outline: false
@@ -40,6 +40,8 @@ depends_on:
 Add `~~strikethrough~~` (single and double tildes, as the reference does) and autolink literals (`www.`, `http://`, `https://` and email addresses) with the reference's trailing punctuation rules.
 
 ## Context
+
+The corpus files and spec examples waiting on literal autolinks are listed in `test/corpus.test.ts` and `test/equivalence.test.ts` (`gfmWaiting`); remove the ones you unblock. Known: the reference splits text nodes around `[www.` and `<\+@b.c` even when no autolink results; `![~~a~~](b)` gives alt `"a"`.
 
 Turn on `strikethrough` and `autolinkLiteral` in `test/fuzz/features.ts` too, so the differential fuzzer covers them.
 

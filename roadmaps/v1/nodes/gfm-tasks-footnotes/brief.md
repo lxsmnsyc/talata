@@ -1,7 +1,7 @@
 ---
 id: gfm-tasks-footnotes
 title: GFM task lists and footnotes
-status: todo
+status: active
 priority: must
 type: feature
 outline: false
@@ -49,6 +49,8 @@ depends_on:
 Add task list items (`checked` on `listItem`) and footnotes (`footnoteDefinition` blocks and `footnoteReference` inlines), matching `mdast-util-gfm`.
 
 ## Context
+
+Footnote definitions are a container: implement `TrackedContainer` and `closedAt`, and end like list items (parser-core v4).
 
 Turn on `taskList` and `footnote` in `test/fuzz/features.ts` too, so the differential fuzzer covers them.
 

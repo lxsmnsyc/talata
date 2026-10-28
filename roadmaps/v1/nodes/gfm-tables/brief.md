@@ -1,7 +1,7 @@
 ---
 id: gfm-tables
 title: GFM tables
-status: todo
+status: active
 priority: must
 type: feature
 outline: false
@@ -41,6 +41,8 @@ depends_on:
 Add GFM tables: delimiter row, alignment, escaped pipes, and rows that end the table, producing `table`, `tableRow` and `tableCell` with `align`.
 
 ## Context
+
+Table body rows never continue lazily; check `BlockState.unmatched` (parser-core v4). The 23 corpus files waiting on GFM are listed in `test/corpus.test.ts` (`gfmWaiting`); remove the ones you unblock.
 
 Turn on `table` in `test/fuzz/features.ts` too, so the differential fuzzer covers it.
 

@@ -1,6 +1,6 @@
 ---
 name: parser-core
-version: 3
+version: 4
 status: frozen
 defined_by: core-skeleton
 ---
@@ -228,3 +228,4 @@ core-skeleton ships paragraphs, ATX headings and thematic breaks on these interf
   Containers that track quote prefixes implement blocks-container's `TrackedContainer` (`src/blocks/blockquote.ts`); a new container rule (GFM footnote definitions) must implement it too, or end positions inside a quote are off by the prefix. blocks-container's end-of-file quote check uses `parentQuoteLine(state.container) === line.index` instead of the `line.start > lineStarts[index]` test in Positions; the block quote rule is the reference for it.
   v3 also adds `BlockState.closeKeepsLineEnding` (blocks-leaf, `parser-core-v3-blocks-leaf.change-request.md`): true while blocks close because a container starts on the line, or at end of file after a line ending that every open container continues over. For that check the core calls each open container's `continue` once with an empty virtual line (`start === end === text.length`); `continue` must not change what `close` later returns for it. List items return true, block quotes false.
   v3 also accepts inline-core's request (`parser-core-v3-inline-core.change-request.md`) in this shape: `BlockState.inline(node, ranges, indents?)` and `InlineState.indents`, using the triples `OpenParagraph.indents` already holds (line-end offset, offset after container prefixes, split-tab columns), listed only for lines with whitespace there. inline-core shipped a `lineIndents` WeakMap in `src/inline/lines.ts` filled from `blocks/paragraph.ts` as a stand-in; spec-green replaces it with the field (it costs about 15% on paragraph-heavy documents).
+- v4 (2026-10-28): accepted spec-green's request (`parser-core-v4-spec-green.change-request.md`), approved by the user at the spec-green gate. Adds `BlockState.unmatched`, `BlockState.endOnlyLine`, `OpenBlock.keepsLazyContainers` and `Source.withNul`; container rules implement `TrackedContainer.closedAt` (`src/blocks/blockquote.ts`). The request's Proposed change and Behavior sections are the normative text for these fields. Affected: gfm-tasks-footnotes (footnote definitions implement `closedAt` and the list item end rule), gfm-tables (lazy body rows), ext-math and ext-directive (fenced leaves check `matchedOnlyAtEnd()`).
