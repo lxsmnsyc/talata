@@ -18,6 +18,7 @@ export interface Extension {
   transforms?: Transform[];
 }
 
+// Lives for the whole process: one entry per distinct option set, which stays small.
 const made = new Map<string, Extension>();
 
 /**

@@ -104,6 +104,24 @@ describe('extension rules reach the parse', () => {
     expect(calls.count).toBe(4);
   });
 
+  it('evicts the least recently used registry, not the plain ones', () => {
+    const extensions: Extension[] = [];
+    for (let i = 0; i < 9; i++) {
+      extensions.push(counted());
+    }
+    for (const extension of extensions) {
+      fromMarkdown('a', { extensions: [extension] });
+      // The plain registries are used between builds, so they stay.
+      fromMarkdown('a');
+      fromMarkdown('a', { gfm: true });
+    }
+    calls.count = 0;
+    fromMarkdown('a', { extensions: [extensions[8]] });
+    expect(calls.count).toBe(0);
+    fromMarkdown('a', { extensions: [extensions[0]] });
+    expect(calls.count).toBe(1);
+  });
+
   it('does not see a list that the caller changes afterwards', () => {
     const a = counted();
     const list = [a];

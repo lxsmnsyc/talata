@@ -37,10 +37,16 @@ function sameList(a: Extension[], b: Extension[]): boolean {
   return true;
 }
 
-/** The registry for one mode and list of extensions, built on first use. Holds the last 8 combinations. */
+/** The registry for one mode and list of extensions, built on first use. Keeps the 8 most recently used combinations. */
 function registryFor(gfm: boolean, extensions: Extension[]): Registry {
-  for (const entry of cache) {
+  for (let i = 0; i < cache.length; i++) {
+    const entry = cache[i];
     if (entry.gfm === gfm && sameList(entry.extensions, extensions)) {
+      // Most recently used goes last, so the oldest unused entry is evicted.
+      if (i !== cache.length - 1) {
+        cache.splice(i, 1);
+        cache.push(entry);
+      }
       return entry.registry;
     }
   }
