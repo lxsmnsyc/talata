@@ -171,6 +171,22 @@ const groups: [string, string[]][] = [
     ],
   ],
   [
+    // Split-tab columns after a container prefix are micromark's virtual
+    // spaces: data, not padding, in a code span.
+    'code span padding with split tabs',
+    [
+      '>` ````\n>\t  ````',
+      '>` \n>\t`',
+      '>` \n>\t `',
+      '>`` \n>\t``',
+      '- ` \n \t `',
+      '-\t` \n \t `',
+      '>` \n>\t\t `',
+      '>`\n>\t`',
+      '>`\n>\t `',
+    ],
+  ],
+  [
     'empty titles',
     [
       '[](i "")',

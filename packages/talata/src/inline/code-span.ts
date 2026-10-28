@@ -1,6 +1,6 @@
 import type { InlineRule, InlineState } from '../core/inline';
 import { point, skipLineEnding } from '../core/source';
-import { linePrefix, reach, workSteps } from './lines';
+import { linePrefix, reach, splitColumnsAt, workSteps } from './lines';
 import { appendText, pushNode } from './text';
 
 // Code spans: a run of backticks up to the next run of the same length,
@@ -22,14 +22,23 @@ function isPadding(code: number): boolean {
   return code === SPACE || code === LF || code === CR;
 }
 
-/** Strips one space or line ending from both ends when both have one and the value is not all padding. */
-function strip(value: string): string {
+/**
+ * Strips one space or line ending from both ends when both have one and the
+ * value is not all padding. `virtual`: the value holds split-tab columns
+ * (micromark's virtual spaces, which are data); `virtualEnd`: it ends in them.
+ */
+function strip(value: string, virtual: boolean, virtualEnd: boolean): string {
   const length = value.length;
-  if (length < 2 || !isPadding(value.charCodeAt(0)) || !isPadding(value.charCodeAt(length - 1))) {
+  if (
+    length < 2 ||
+    virtualEnd ||
+    !isPadding(value.charCodeAt(0)) ||
+    !isPadding(value.charCodeAt(length - 1))
+  ) {
     return value;
   }
-  let data = false;
-  for (let i = 0; i < length; i++) {
+  let data = virtual;
+  for (let i = 0; i < length && !data; i++) {
     if (!isPadding(value.charCodeAt(i))) {
       data = true;
       break;
@@ -102,16 +111,24 @@ function parseCodeSpan(state: InlineState): boolean {
   }
   let value = '';
   let from = open;
+  let virtual = false;
+  let virtualEnd = false;
   for (let r = state.range; r < range; r += 2) {
     const lineEnd = ranges[r + 1];
     value += text.slice(from, lineEnd) + text.slice(lineEnd, skipLineEnding(text, lineEnd));
-    value += linePrefix(state, r + 2, 0);
+    const prefix = linePrefix(state, r + 2, 0);
+    const columns = splitColumnsAt(state, r + 2);
+    if (columns > 0) {
+      virtual = true;
+      virtualEnd = r + 2 === range && ranges[range] === close && prefix.length === columns;
+    }
+    value += prefix;
     from = ranges[r + 2];
   }
   value += text.slice(from, close);
   pushNode(state, {
     type: 'inlineCode',
-    value: strip(value),
+    value: strip(value, virtual, virtualEnd),
     position: { start: point(state.source, start), end: point(state.source, pos) },
   });
   state.range = range;

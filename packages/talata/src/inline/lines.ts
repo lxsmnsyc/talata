@@ -139,6 +139,16 @@ export function containerEnd(state: InlineState, range: number): number {
   return from + 1;
 }
 
+/**
+ * Split-tab columns left after the container prefixes on the line of range
+ * `range` (not the first). micromark reads them as virtual spaces, which
+ * are data, not spaces.
+ */
+export function splitColumnsAt(state: InlineState, range: number): number {
+  containerEnd(state, range);
+  return splitColumns;
+}
+
 /** Visual column (tab stops of 4) of `offset` on the line starting at `lineStart`. */
 function visualColumn(text: string, lineStart: number, offset: number): number {
   let column = 0;
