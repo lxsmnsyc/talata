@@ -10,7 +10,7 @@
       "text": "talata's existing path (fromMarkdown, mdast-util-to-hast, hast-util-to-html) renders HTML 6.5x faster than micromark HTML + GFM on the READMEs and 7.5x on node fs.md.",
       "evidence": {
         "type": "measured",
-        "source": "node --expose-gc evidence/html-bench.mjs",
+        "source": "node --expose-gc evidence/html-bench.mjs.txt",
         "detail": "evidence/html-bench.txt"
       }
     },
@@ -23,7 +23,7 @@
       "text": "That path gives the same HTML string as micromark for 1 of 139 READMEs (6 of 139 ignoring blank lines), so it is not a drop-in for micromark() callers.",
       "evidence": {
         "type": "measured",
-        "source": "node --expose-gc evidence/html-bench.mjs",
+        "source": "node --expose-gc evidence/html-bench.mjs.txt",
         "detail": "evidence/html-bench.txt"
       }
     },
