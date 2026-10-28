@@ -431,14 +431,21 @@ export class BlockParser implements BlockState {
 
   takeParagraph(): OpenParagraph | undefined {
     const paragraph = this.paragraph;
-    if (paragraph === undefined || this.lazy) {
+    // An empty paragraph was already taken on this line (see below).
+    if (paragraph === undefined || this.lazy || paragraph.lines.length === 0) {
       return undefined;
     }
     this.stack.pop();
     this.children.pop();
-    this.paragraph = undefined;
     this.runPrefixRules(paragraph, this.children[this.children.length - 1]);
-    return paragraph.lines.length === 0 ? undefined : paragraph;
+    if (paragraph.lines.length === 0) {
+      // Definitions took every line. The rules after this one still see a
+      // paragraph being interrupted, as in micromark (`[a]: /u\n-` gives a
+      // paragraph "-", not an empty list item).
+      return undefined;
+    }
+    this.paragraph = undefined;
+    return paragraph;
   }
 
   splitParagraph(count: number): number[] | undefined {

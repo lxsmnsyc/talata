@@ -11,14 +11,14 @@ All paths are under `packages/talata/src/`. Each rule is the default export of i
 - `blocks/definition.ts`: `definition`, a `ParagraphPrefixRule` (priority 100). It scans label, destination and title over the paragraph's flat line pairs, with backtracking when a title fails. It fills `state.definitions` with `normalizeIdentifier(rawLabel)` (uppercase form), and gives the mdast `identifier` in lowercase. With GFM, `[^` is refused. One scanner per paragraph keeps a forward-only cursor into the paragraph's indents, so multi-line labels stay linear.
 - `blocks/decode.ts`: `decodeString(value)` (default export), shared by fenced code and definitions: backslash escapes and numeric character references (micromark's U+FFFD rules).
 - `blocks/paragraph.ts`: paragraphs record the whitespace after container prefixes on continuation lines (`indents`, sparse, only when the paragraph starts with `[`). `paragraphIndents(paragraph)` exposes it, so multi-line definition labels keep it as the reference does (`[Foo\n  bar]`).
-- `core/blocks.ts`: `BlockState.closeKeepsLineEnding` (see Deviations).
+- `core/blocks.ts`: `BlockState.closeKeepsLineEnding` (see Deviations). `takeParagraph`: when definitions take every line it returns undefined but leaves `state.paragraph` set (empty) for the rest of the line, so later rules still treat the line as interrupting a paragraph (`[a]: /u\n-` gives a paragraph "-", not an empty list item). Calling it again on that empty paragraph returns undefined and changes nothing.
 - Tests: `test/blocks-leaf.test.ts` has:
   - the five spec sections, with a waiting map naming the node each skipped example needs;
   - a block-structure check of every spec example, with inline content stripped;
   - about 230 hand-written cases;
   - decoder unit tests;
   - cross cases with copies of the test-only quote and `+` list from `test/core.test.ts`, and with the real list rule;
-  - a linear-growth timing test for multi-line definition labels.
+  - a step-count test that the label indent lookup is linear (`indentSteps` in `blocks/definition.ts`).
 
 ## Deviations
 
@@ -26,6 +26,8 @@ All paths are under `packages/talata/src/`. Each rule is the default export of i
 - `test/core-sections.test.ts`: removed 48, 59, 69 and 225 from its waiting list, as the core-skeleton outcome asks. They pass now.
 - New test file `test/blocks-leaf.test.ts`, outside the owned paths.
 - `blocks/index.ts`: one rule per line; main (blocks-container) is merged in, with both rule sets kept.
+- `.gitignore`: added `packages/talata/.vitest/` (vitest cache).
+- `core/blocks.ts` `takeParagraph`: behavior change described under Built. The contract says undefined is returned when definitions took every line; it does not say what `state.paragraph` is afterwards. The reference needs it to still count as a paragraph for interrupt checks.
 - `blocks/decode.ts` is a new file outside the owned paths (review nit: shared by two rules).
 - `test/blocks-container.test.ts`: emptied its waiting map (every blocks-leaf example passes). `test/core-sections.test.ts`: removed 57, 60 and 61 too.
 
@@ -50,7 +52,7 @@ All paths are under `packages/talata/src/`. Each rule is the default export of i
 
 ## Verification
 
-- `pnpm --filter talata test` (after merging main, review round 1): 1318 passed, 1 expected fail, 1988 skipped.
+- `pnpm --filter talata test` (review round 2, run twice): 1329 passed, 1 expected fail, 1988 skipped both times.
 - `npx tsc --noEmit -p packages/talata`: clean.
 - `npx oxlint`: clean. `npx oxfmt --check packages/talata/src packages/talata/test`: clean.
 - Scratch fuzz (not committed): about 200k random documents from leaf-block fragments, compared with the reference with paragraph and heading children stripped and container documents skipped: no differences.

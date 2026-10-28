@@ -18,6 +18,9 @@ const BACKSLASH = 92;
 const RIGHT_BRACKET = 93;
 const CARET = 94;
 
+/** Indent entries the scanners stepped over, for a test that checks the lookup stays linear. */
+export const indentSteps = { count: 0 };
+
 /**
  * Reads a link reference definition from the paragraph's lines, which are
  * flat [start, end) pairs. A line ending between pairs counts as whitespace.
@@ -64,6 +67,7 @@ class Scanner {
     let i = this.indent;
     while (i < indents.length && indents[i] < this.end) {
       i += 3;
+      indentSteps.count++;
     }
     this.indent = i;
     if (i >= indents.length || indents[i] !== this.end) {

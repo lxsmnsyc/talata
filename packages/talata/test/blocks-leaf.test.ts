@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest';
 import { fromMarkdown } from '../src';
 import { blockRules, paragraphPrefixRules } from '../src/blocks';
 import decodeString from '../src/blocks/decode';
+import { indentSteps } from '../src/blocks/definition';
 import type { BlockRule, BlockState, OpenBlock } from '../src/core/blocks';
 import { advanceLine, consumeColumns } from '../src/core/line';
 import type { Line } from '../src/core/line';
@@ -141,6 +142,17 @@ const cases: Record<string, string[]> = {
     '[a]: /u\nb\n===',
     '[a]: /u\n===',
     '[a]: /u\n---',
+    '[a]: /u\n-',
+    '[a]: /u\n- ',
+    '[a]: "t"\n- ',
+    '[a]: /u "t"\n-',
+    '[a]: /u\n    b',
+    '[a]: /u\n<x>',
+    '[a]: /u\n2. b',
+    '[a]: /u\n1. b',
+    '[a]: /u\n- b',
+    '> [a]: /u\n> -',
+    '- [a]: /u\n  -',
     '[a]: /u "t"\n===',
     '[a]: /u\n[b]: /v\nc\n---',
     '    a\n---',
@@ -336,6 +348,7 @@ const inlineWaiting = new Set([
   '[a]: <b\nc>',
   '[a]: <a<b>',
   '> a\n> <span>',
+  '[a]: /u\n<x>',
 ]);
 
 function checkBlocks(markdown: string, actual: Root): void {
@@ -365,23 +378,18 @@ it('decodes escapes and numeric references', () => {
 });
 
 // Definition labels that span lines look up each line's indentation. The
-// lookup must stay linear: 4 times the input should take about 4 times as
-// long, far from the 16 times a quadratic lookup takes.
-it('parses many multi-line definition labels in linear time', () => {
-  const time = (count: number): number => {
-    const markdown = '[a\n b]: /u\n'.repeat(count);
-    let best = Infinity;
-    for (let run = 0; run < 3; run++) {
-      const start = performance.now();
-      fromMarkdown(markdown);
-      best = Math.min(best, performance.now() - start);
-    }
-    return best;
+// scanner steps over each indent entry once, so the steps grow linearly with
+// the number of lines (a lookup from the start would grow quadratically).
+it('looks up label indentation in linear steps', () => {
+  const steps = (count: number): number => {
+    indentSteps.count = 0;
+    fromMarkdown('[a\n b]: /u\n'.repeat(count));
+    return indentSteps.count;
   };
-  time(2000);
-  const small = time(4000);
-  const large = time(16_000);
-  expect(large / Math.max(small, 0.5)).toBeLessThan(10);
+  const small = steps(1000);
+  expect(small).toBeGreaterThan(500);
+  expect(small).toBeLessThanOrEqual(1000);
+  expect(steps(4000)).toBeLessThanOrEqual(4000);
 });
 
 // Named references (`&ouml;`) in info strings and definitions need the entity

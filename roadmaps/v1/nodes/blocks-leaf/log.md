@@ -20,4 +20,9 @@
   - Fixed quadratic definition label lookup: the scanner now keeps a forward-only cursor into the paragraph's indents, and paragraphs record indents only when they start with `[`. Added a linear-growth timing test.
   - Nits: `hasRawEnd` compares names with char codes; `decodeString` moved to `blocks/decode.ts`.
   - With the real containers, every example in blocks-container's waiting list and 57, 60, 61 in core-sections pass and were removed. The block-structure suite now runs on every spec example.
-  - Cross cases: `- ```\n  a\n` and `- [a]: /u\n\n  b` match. `- ```\n  a\n- b` matches for the code node, but the reference ends the list item at 3:3 (after the next marker) and talata at 3:1. That is the list item end rule, for spec-green.
+  - (round 1, continued below)
+- Review round 2:
+  - `[a]: /u\n-` gave definition plus an empty list item; the reference gives a paragraph "-". Setext called `takeParagraph`, definitions took every line, and the list rule then saw no paragraph. Fix in `core/blocks.ts`: when definitions take every line, `takeParagraph` returns undefined but leaves `state.paragraph` set (now empty) for the rest of the line, so later rules still see an interruption; a second `takeParagraph` on the empty paragraph returns undefined without popping. No list change. Tests: `[a]: /u\n-`, `- `, `[a]: "t"\n- `, `===`, `    b`, `<x>`, `2. b`, `1. b`, `- b`, inside a quote and a list.
+  - Replaced the flaky timing test with a step count: `indentSteps` in definition.ts counts indent entries the scanner steps over; the test asserts at most one step per line.
+  - Added `packages/talata/.vitest/` to `.gitignore`.
+- Round 1 cross cases: `- ```\n  a\n` and `- [a]: /u\n\n  b` match. `- ```\n  a\n- b` matches for the code node, but the reference ends the list item at 3:3 (after the next marker) and talata at 3:1. That is the list item end rule, for spec-green.
