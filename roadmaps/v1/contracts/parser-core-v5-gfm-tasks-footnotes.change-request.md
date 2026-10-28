@@ -1,7 +1,7 @@
 # Change request: parser-core v4 to v5
 
 - From node: gfm-tasks-footnotes
-- Status: open
+- Status: accepted
 
 ## Problem
 

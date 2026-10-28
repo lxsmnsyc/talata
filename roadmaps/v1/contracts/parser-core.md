@@ -1,6 +1,6 @@
 ---
 name: parser-core
-version: 4
+version: 5
 status: frozen
 defined_by: core-skeleton
 ---
@@ -214,7 +214,7 @@ These are testable invariants. core-skeleton's position tests cover each one.
 - Nested containers stay open over a last line that has no line ending and nothing left after an outer prefix: no whitespace and no split-tab columns. `> > a\n> ` ends the inner quote at 2:3, and `> > > a\n> ` ends all three there. With a final `\n`, or with whitespace left (`> > a\n>  `, `> > a\n>\t`), the inner quote ends at 1:6. `> a\n  ` ends at 1:4. When its prefix does not match, the container checks `line.start === line.end && line.partialTab === 0 && line.end === line.text.length && line.start > source.lineStarts[line.index]` in `continue`. If that holds, it sets its end to `line.end` and returns true, so it stays matched and deeper containers see the line too. The test quote in `test/core.test.ts` does this; blocks-container owns the exact rule. No core change is needed.
 - A paragraph ends at the end of its last line, trailing whitespace included; its last text node stops before that whitespace. ATX headings and thematic breaks end at the line end, trailing whitespace included.
 - A `listItem` ends before trailing blank lines (mdast-util-from-markdown, list item exit).
-- Nodes created by transforms (GFM autolink literals) have no `position` property, matching `mdast-util-find-and-replace`.
+- GFM literal autolinks found by the inline rule have positions. Nodes created by transforms (the autolink literals the inline rule misses, and the text nodes they split) have no `position`, matching `mdast-util-find-and-replace`.
 
 ## Stub
 
@@ -229,3 +229,4 @@ core-skeleton ships paragraphs, ATX headings and thematic breaks on these interf
   v3 also adds `BlockState.closeKeepsLineEnding` (blocks-leaf, `parser-core-v3-blocks-leaf.change-request.md`): true while blocks close because a container starts on the line, or at end of file after a line ending that every open container continues over. For that check the core calls each open container's `continue` once with an empty virtual line (`start === end === text.length`); `continue` must not change what `close` later returns for it. List items return true, block quotes false.
   v3 also accepts inline-core's request (`parser-core-v3-inline-core.change-request.md`) in this shape: `BlockState.inline(node, ranges, indents?)` and `InlineState.indents`, using the triples `OpenParagraph.indents` already holds (line-end offset, offset after container prefixes, split-tab columns), listed only for lines with whitespace there. inline-core shipped a `lineIndents` WeakMap in `src/inline/lines.ts` filled from `blocks/paragraph.ts` as a stand-in; spec-green replaces it with the field (it costs about 15% on paragraph-heavy documents).
 - v4 (2026-10-28): accepted spec-green's request (`parser-core-v4-spec-green.change-request.md`), approved by the user at the spec-green gate. Adds `BlockState.unmatched`, `BlockState.endOnlyLine`, `OpenBlock.keepsLazyContainers` and `Source.withNul`; container rules implement `TrackedContainer.closedAt` (`src/blocks/blockquote.ts`). The request's Proposed change and Behavior sections are the normative text for these fields. Affected: gfm-tasks-footnotes (footnote definitions implement `closedAt` and the list item end rule), gfm-tables (lazy body rows), ext-math and ext-directive (fenced leaves check `matchedOnlyAtEnd()`).
+- v5 (2026-10-28): wording only, from gfm-inline and gfm-tasks-footnotes (`parser-core-v5-*.change-request.md`). Positions: see the autolink line above. Inline: resolvers run in priority order; a rule whose order relative to another depends on the input (strikethrough and emphasis) decides it in its own resolve and may run the later resolvers itself. Containers: `TrackedContainer.quoteLine` means "a prefix token of this container matched on this line", not only a block quote; any container whose prefix is a token (footnote definitions, later container directives) sets it. GFM nodes may register a `Transform` in `core/transform.ts`; gfm-green uses one for the lazy task check (`-\n[ ] a`).

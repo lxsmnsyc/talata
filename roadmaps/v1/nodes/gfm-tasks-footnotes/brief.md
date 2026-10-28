@@ -1,7 +1,7 @@
 ---
 id: gfm-tasks-footnotes
 title: GFM task lists and footnotes
-status: active
+status: done
 priority: must
 type: feature
 outline: false
