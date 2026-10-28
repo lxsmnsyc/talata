@@ -95,7 +95,9 @@ function isCorrectDomain(value: string, from: number, to: number): boolean {
   }
   let last = -1;
   for (let i = to - 1; i >= from; i--) {
-    workSteps.count++;
+    if (__TALATA_TEST__) {
+      workSteps.count++;
+    }
     if (value.charCodeAt(i) === DOT) {
       last = i;
       break;
@@ -106,7 +108,9 @@ function isCorrectDomain(value: string, from: number, to: number): boolean {
   }
   let before = from - 1;
   for (let i = last - 1; i >= from; i--) {
-    workSteps.count++;
+    if (__TALATA_TEST__) {
+      workSteps.count++;
+    }
     if (value.charCodeAt(i) === DOT) {
       before = i;
       break;
@@ -228,7 +232,9 @@ function replaceUrls(value: string): PhrasingContent[] | undefined {
     if (domainStart >= domainEnd) {
       domainEnd = domainStart;
       while (domainEnd < length && isDomain(value.charCodeAt(domainEnd))) {
-        workSteps.count++;
+        if (__TALATA_TEST__) {
+          workSteps.count++;
+        }
         domainEnd++;
       }
     }
@@ -239,7 +245,9 @@ function replaceUrls(value: string): PhrasingContent[] | undefined {
         if (next === 32 || next === 9 || next === 13 || next === 10) {
           break;
         }
-        workSteps.count++;
+        if (__TALATA_TEST__) {
+          workSteps.count++;
+        }
         pathEnd++;
       }
     }

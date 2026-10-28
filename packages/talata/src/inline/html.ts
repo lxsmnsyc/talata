@@ -112,7 +112,9 @@ function scan(state: InlineState): number {
   let index = 0;
   cursor.pos++;
   for (;;) {
-    workSteps.count++;
+    if (__TALATA_TEST__) {
+      workSteps.count++;
+    }
     const code = peek(state, cursor);
     if (code === LINE_ENDING) {
       // Only states that allow a line ending reach here with one.

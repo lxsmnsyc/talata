@@ -12,6 +12,9 @@ import type { Outcome } from './check';
 import type { Features } from './features';
 import { workerData } from 'node:worker_threads';
 
+// The sources guard their test counters with this flag (see cli.ts).
+Object.assign(globalThis, { __TALATA_TEST__: false });
+
 // Hooks are per thread: register the .ts resolve hook here too (see cli.ts).
 registerHooks({
   resolve(specifier, context, nextResolve) {

@@ -151,7 +151,9 @@ function resolveMixed(state: InlineState, bottom: number): void {
     const closeSize = closer.end - closer.start;
     let open = index - 1;
     for (; open >= bottom; open--) {
-      workSteps.count++;
+      if (__TALATA_TEST__) {
+        workSteps.count++;
+      }
       const opener = delimiters[open];
       if (opener.marker !== marker || !opener.canOpen) {
         continue;
@@ -266,7 +268,9 @@ function pairList(
     const limit = bottoms[key];
     let open = previous[index];
     for (; open >= limit; open = previous[open]) {
-      workSteps.count++;
+      if (__TALATA_TEST__) {
+        workSteps.count++;
+      }
       const opener = delimiters[bottom + ids[open]];
       if (opener.marker !== marker || !opener.canOpen) {
         continue;
@@ -304,7 +308,9 @@ function pairList(
       const list = new Int32Array(inside);
       let k = previous[index];
       for (let i = inside - 1; i >= 0; i--) {
-        workSteps.count++;
+        if (__TALATA_TEST__) {
+          workSteps.count++;
+        }
         list[i] = ids[k];
         k = previous[k];
       }
@@ -447,7 +453,9 @@ function pairTildeList(
     if (delimiter.marker !== TILDE) {
       continue;
     }
-    workSteps.count++;
+    if (__TALATA_TEST__) {
+      workSteps.count++;
+    }
     const size = delimiter.end - delimiter.start;
     const same = size === 1 ? single : double;
     if (delimiter.canClose && same.length > 0) {
@@ -457,7 +465,9 @@ function pairTildeList(
       partner[i] = open;
       const other = size === 1 ? double : single;
       while (other.length > 0 && other[other.length - 1] > open) {
-        workSteps.count++;
+        if (__TALATA_TEST__) {
+          workSteps.count++;
+        }
         other.pop();
       }
       continue;

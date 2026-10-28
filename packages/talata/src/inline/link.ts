@@ -153,7 +153,9 @@ function isDefined(state: InlineState, range: number, from: number, to: number):
     const last = to <= ranges[range + 1] || range + 2 >= ranges.length;
     const end = last ? to : ranges[range + 1];
     for (; pos < end; pos++) {
-      workSteps.count++;
+      if (__TALATA_TEST__) {
+        workSteps.count++;
+      }
       if (isWhitespace(text.charCodeAt(pos))) {
         if (segment !== -1) {
           result += text.slice(segment, pos);
@@ -412,7 +414,9 @@ function closeBracket(state: InlineState): boolean {
   // the stack.
   let open = -1;
   while (brackets.length > 0) {
-    workSteps.count++;
+    if (__TALATA_TEST__) {
+      workSteps.count++;
+    }
     const top = brackets.length - 1;
     open = bracketIndexes[top];
     if (delimiters[open] !== brackets[top]) {

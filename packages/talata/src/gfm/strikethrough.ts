@@ -87,7 +87,9 @@ function pairTildes(delimiters: Delimiter[], bottom: number): number[] {
     if (delimiter.marker !== TILDE) {
       continue;
     }
-    workSteps.count++;
+    if (__TALATA_TEST__) {
+      workSteps.count++;
+    }
     const size = delimiter.end - delimiter.start;
     const same = size === 1 ? single : double;
     if (delimiter.canClose && same.length > 0) {
@@ -95,7 +97,9 @@ function pairTildes(delimiters: Delimiter[], bottom: number): number[] {
       pairs.push(open, i);
       const other = size === 1 ? double : single;
       while (other.length > 0 && other[other.length - 1] > open) {
-        workSteps.count++;
+        if (__TALATA_TEST__) {
+          workSteps.count++;
+        }
         other.pop();
       }
       continue;
