@@ -3,7 +3,6 @@
 // base-36 digit (how many leading characters it shares with the previous
 // name), the rest of the name, then the value. Values hold no ASCII letter or
 // digit, so the next entry's digit ends them. `fjlig` is added by hand.
-// The `browser` build uses entities.browser.ts instead.
 import { isAsciiAlphanumeric } from './classify';
 
 const table =

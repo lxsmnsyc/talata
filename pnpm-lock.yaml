@@ -227,9 +227,6 @@ importers:
       commonmark-spec:
         specifier: ^0.31.2
         version: 0.31.2
-      happy-dom:
-        specifier: ^21.0.4
-        version: 21.0.4
       hast-util-to-html:
         specifier: ^9.0.5
         version: 9.0.5
@@ -2353,11 +2350,13 @@ snapshots:
 
   '@types/unist@3.0.3': {}
 
-  '@types/whatwg-mimetype@3.0.2': {}
+  '@types/whatwg-mimetype@3.0.2':
+    optional: true
 
   '@types/ws@8.18.2':
     dependencies:
       '@types/node': 26.6.5
+    optional: true
 
   '@typescript/typescript-aix-ppc64@7.0.2':
     optional: true
@@ -2479,6 +2478,7 @@ snapshots:
   buffer-image-size@0.6.4:
     dependencies:
       '@types/node': 26.6.5
+    optional: true
 
   cac@7.1.0: {}
 
@@ -2518,7 +2518,8 @@ snapshots:
 
   empathic@2.1.0: {}
 
-  entities@7.0.1: {}
+  entities@7.0.1:
+    optional: true
 
   entities@8.1.0: {}
 
@@ -2596,6 +2597,7 @@ snapshots:
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
+    optional: true
 
   hast-util-to-html@9.0.5:
     dependencies:
@@ -3352,11 +3354,13 @@ snapshots:
     transitivePeerDependencies:
       - msw
 
-  whatwg-mimetype@3.0.0: {}
+  whatwg-mimetype@3.0.0:
+    optional: true
 
   why-is-node-running@3.2.1: {}
 
-  ws@8.22.0: {}
+  ws@8.22.0:
+    optional: true
 
   yaml@2.9.1: {}
 

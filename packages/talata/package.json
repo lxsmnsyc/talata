@@ -26,76 +26,6 @@
   "types": "./dist/index.d.cts",
   "exports": {
     ".": {
-      "convex": {
-        "import": {
-          "types": "./dist/index.d.ts",
-          "default": "./dist/index.js"
-        },
-        "require": {
-          "types": "./dist/index.d.cts",
-          "default": "./dist/index.cjs"
-        },
-        "default": "./dist/index.js"
-      },
-      "deno": {
-        "import": {
-          "types": "./dist/index.d.ts",
-          "default": "./dist/index.js"
-        },
-        "require": {
-          "types": "./dist/index.d.cts",
-          "default": "./dist/index.cjs"
-        },
-        "default": "./dist/index.js"
-      },
-      "edge-light": {
-        "import": {
-          "types": "./dist/index.d.ts",
-          "default": "./dist/index.js"
-        },
-        "require": {
-          "types": "./dist/index.d.cts",
-          "default": "./dist/index.cjs"
-        },
-        "default": "./dist/index.js"
-      },
-      "react-native": {
-        "import": {
-          "types": "./dist/index.d.ts",
-          "default": "./dist/index.js"
-        },
-        "require": {
-          "types": "./dist/index.d.cts",
-          "default": "./dist/index.cjs"
-        },
-        "default": "./dist/index.js"
-      },
-      "worker": {
-        "import": {
-          "types": "./dist/index.d.ts",
-          "default": "./dist/index.js"
-        },
-        "require": {
-          "types": "./dist/index.d.cts",
-          "default": "./dist/index.cjs"
-        },
-        "default": "./dist/index.js"
-      },
-      "workerd": {
-        "import": {
-          "types": "./dist/index.d.ts",
-          "default": "./dist/index.js"
-        },
-        "require": {
-          "types": "./dist/index.d.cts",
-          "default": "./dist/index.cjs"
-        },
-        "default": "./dist/index.js"
-      },
-      "browser": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/browser/index.js"
-      },
       "import": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
@@ -107,76 +37,6 @@
       "default": "./dist/index.js"
     },
     "./unified": {
-      "convex": {
-        "import": {
-          "types": "./dist/unified.d.ts",
-          "default": "./dist/unified.js"
-        },
-        "require": {
-          "types": "./dist/unified.d.cts",
-          "default": "./dist/unified.cjs"
-        },
-        "default": "./dist/unified.js"
-      },
-      "deno": {
-        "import": {
-          "types": "./dist/unified.d.ts",
-          "default": "./dist/unified.js"
-        },
-        "require": {
-          "types": "./dist/unified.d.cts",
-          "default": "./dist/unified.cjs"
-        },
-        "default": "./dist/unified.js"
-      },
-      "edge-light": {
-        "import": {
-          "types": "./dist/unified.d.ts",
-          "default": "./dist/unified.js"
-        },
-        "require": {
-          "types": "./dist/unified.d.cts",
-          "default": "./dist/unified.cjs"
-        },
-        "default": "./dist/unified.js"
-      },
-      "react-native": {
-        "import": {
-          "types": "./dist/unified.d.ts",
-          "default": "./dist/unified.js"
-        },
-        "require": {
-          "types": "./dist/unified.d.cts",
-          "default": "./dist/unified.cjs"
-        },
-        "default": "./dist/unified.js"
-      },
-      "worker": {
-        "import": {
-          "types": "./dist/unified.d.ts",
-          "default": "./dist/unified.js"
-        },
-        "require": {
-          "types": "./dist/unified.d.cts",
-          "default": "./dist/unified.cjs"
-        },
-        "default": "./dist/unified.js"
-      },
-      "workerd": {
-        "import": {
-          "types": "./dist/unified.d.ts",
-          "default": "./dist/unified.js"
-        },
-        "require": {
-          "types": "./dist/unified.d.cts",
-          "default": "./dist/unified.cjs"
-        },
-        "default": "./dist/unified.js"
-      },
-      "browser": {
-        "types": "./dist/unified.d.ts",
-        "default": "./dist/browser/unified.js"
-      },
       "import": {
         "types": "./dist/unified.d.ts",
         "default": "./dist/unified.js"
@@ -194,7 +54,7 @@
   },
   "scripts": {
     "prepublishOnly": "pnpm build",
-    "build": "rm -rf dist && tsdown",
+    "build": "tsdown",
     "test": "NODE_ENV=production vitest run",
     "test:watch": "NODE_ENV=production vitest",
     "fuzz": "node test/fuzz/cli.ts"
@@ -205,7 +65,6 @@
   "devDependencies": {
     "@types/node": "^26.6.5",
     "commonmark-spec": "^0.31.2",
-    "happy-dom": "^21.0.4",
     "hast-util-to-html": "^9.0.5",
     "mdast-util-from-markdown": "^2.0.2",
     "mdast-util-gfm": "^3.1.0",

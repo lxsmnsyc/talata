@@ -89,6 +89,8 @@ release:
 - 2026-10-28: the benchmark and README compare talata only with the remark/mdast stack and HTML renderers, not md4x (the user's call). md4x measured about 2x faster than talata at its own AST, which is not mdast and has no positions.
 - 2026-10-28: HTML output stays a non-goal for 0.1 (`debate-html/debate.md`, decided by the orchestrator at the user's request). talata replaces mdast-util-from-markdown. The README shows the to-hast path for HTML: 6.5x to 7.5x faster than micromark's HTML, not byte-identical. A byte-identical `talata/html` is the parked outline node html-output.
 
+- 2026-10-28: the user dropped the `browser` build after 0.1.0. One build for every runtime, plain `import`/`require` exports, as in the user's other packages. The DOM decoder needed six extra export conditions for runtimes that set `browser` without a `document`. talata is now smaller than the reference in Node (32.6 against 35.9 KB gzip) and larger in browser bundles (32.6 against 23.8 KB gzip).
+
 ## Gates
 
 - core-skeleton: the user reviews the parser-core contract before the parallel block and inline work starts.

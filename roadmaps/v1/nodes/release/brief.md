@@ -1,7 +1,7 @@
 ---
 id: release
 title: Docs and the 0.1 release
-status: todo
+status: done
 priority: must
 type: release
 outline: false
