@@ -12,6 +12,8 @@ Branch `feat/gfm-inline`. Paths are under `packages/talata/`.
 - Flags: `ready.gfm.strikethrough`, `ready.gfm.autolinkLiteral` (`test/parsers.ts`) and `supported.strikethrough`, `supported.autolinkLiteral` (`test/fuzz/features.ts`) are on. Removed from `gfmWaiting`: spec examples 602, 606, 608, 611, 612 (`test/equivalence.test.ts`, map now empty) and corpus files `readmes/114.md`, `19.md`, `38.md`, `40.md`. `readmes/10.md` and `91.md` list `table` and `autolinkLiteral`; I left those lines unchanged so gfm-tables can drop them whole.
 - `test/gfm-inline.test.ts`: 37 strikethrough and 113 autolink cases compared to the reference with positions, and 16 growth tests (`workSteps` grows under 12 times for 8 times the input), each also compared to the reference at small size.
 
+- Review round 1: the transform rebuilds children in one pass (no spread into `splice`, which overflowed the stack on 560 KB of emails), skips `replaceUrls` unless the text has `://` or `www.` in any case and `replaceEmails` unless it has `@`. Module-level references to the last leaf are dropped: `orderState` at the leaf's final resolve, the autolink memos through `releaseAutolinkMemos()` called by the transform.
+
 ## Deviations
 
 - Contract: the reference makes most literal autolinks in the tokenizer, with positions, not only in a transform as the brief and the Positions section say. Built both. Change request: `roadmaps/v1/contracts/parser-core-v5-gfm-inline.change-request.md` (wording only; it also records the strikethrough/emphasis order).
@@ -43,6 +45,8 @@ Branch `feat/gfm-inline`. Paths are under `packages/talata/`.
 - `npx tsc --noEmit -p packages/talata`: no errors. `npx oxlint`: no findings. `npx oxfmt` applied to the new files.
 - Fuzz with GFM, before the merge: seed 11 20,000, seed 4242 50,000, seed 777 `--no-corpus` 50,000: 0 failures. Final run seed 2027, 100,000 documents: 99,938 compared, 1 failure, `- [\r  *x*`. After the merge, seed 31337 50,000: 1 failure, `* [\n  <t>`. Both are a `[` alone on the first line of a list item: with GFM the reference's text before the next line ends after the item's indent (2:3), talata ends it at 2:1. Without GFM they match. This looks like micromark's task list check reading the line ending as the check's whitespace and so reaching the next line, which belongs to gfm-tasks-footnotes; no strikethrough or autolink is involved (`- [\n  *x*` fails the same way). Not saved as fixtures: `fuzz.test.ts` would fail on them with every feature on.
 - Scratch fuzzer of short documents from GFM-inline atoms (emphasis, tildes, brackets, URLs, emails, escapes, entities, tabs, astral characters), about 170,000 documents: no difference except tables.
+
+- Review round 1, after merging main: `npx vitest run`: 17 files passed, 4762 tests passed, 12 skipped. tsc, oxlint and oxfmt clean. Fuzz seed 5150, 20,000 documents: 1 failure, the known task-list case `* [\r  *f*`.
 
 ## Size
 

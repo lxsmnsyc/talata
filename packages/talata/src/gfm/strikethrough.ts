@@ -222,13 +222,19 @@ function hasTilde(delimiters: Delimiter[], bottom: number): boolean {
 }
 
 function resolveStrikethrough(state: InlineState, bottom: number): void {
+  const emphasisFirst = bottom === 0 && orderState === state && attentionFirst;
+  if (bottom === 0) {
+    // The resolve of the whole leaf is its last step: drop the reference so
+    // the leaf can be collected.
+    orderState = undefined;
+  }
   const delimiters = state.delimiters;
   if (!hasTilde(delimiters, bottom)) {
     return;
   }
   // Inside links and pairs, and when a tilde run came first in the leaf,
   // strikethrough resolves first.
-  if (bottom > 0 || orderState !== state || !attentionFirst) {
+  if (!emphasisFirst) {
     resolveTildes(state, bottom);
     return;
   }

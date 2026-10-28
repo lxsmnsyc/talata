@@ -2,6 +2,7 @@ import type { Link, Nodes, PhrasingContent, Root, Text } from 'mdast';
 import type { Transform } from '../core/transform';
 import { OTHER, classifyCharacter, isAsciiAlphanumeric } from '../inline/classify';
 import { workSteps } from '../inline/lines';
+import { releaseAutolinkMemos } from './autolink-literal';
 
 // The literal autolinks micromark's tokenizer misses (inside an open `[`,
 // after `"` or `-`, after an escape), found the way mdast-util-gfm does:
@@ -336,20 +337,43 @@ function replaceEmails(value: string): PhrasingContent[] | undefined {
   return nodes;
 }
 
+/**
+ * Whether `value` can hold a URL match: `://`, or `www.` in any case. A
+ * cheap check before `replaceUrls`.
+ */
+function mayHoldUrl(value: string): boolean {
+  if (value.includes('://')) {
+    return true;
+  }
+  let dot = value.indexOf('.', 3);
+  while (dot !== -1) {
+    if (
+      lower(value.charCodeAt(dot - 1)) === 119 &&
+      lower(value.charCodeAt(dot - 2)) === 119 &&
+      lower(value.charCodeAt(dot - 3)) === 119
+    ) {
+      return true;
+    }
+    dot = value.indexOf('.', dot + 1);
+  }
+  return false;
+}
+
 /** Replacement nodes for `node`, or undefined when it stays. */
 function replaceText(node: Text): PhrasingContent[] | undefined {
   const value = node.value;
-  // Both patterns need a dot.
+  // Both patterns need a dot; emails need `@`.
   if (!value.includes('.')) {
     return undefined;
   }
-  const urls = replaceUrls(value);
+  const urls = mayHoldUrl(value) ? replaceUrls(value) : undefined;
   if (urls === undefined) {
     return value.includes('@') ? replaceEmails(value) : undefined;
   }
   const result: PhrasingContent[] = [];
   for (const piece of urls) {
-    const emails = piece.type === 'text' ? replaceEmails(piece.value) : undefined;
+    const emails =
+      piece.type === 'text' && piece.value.includes('@') ? replaceEmails(piece.value) : undefined;
     if (emails === undefined) {
       result.push(piece);
     } else {
@@ -362,6 +386,7 @@ function replaceText(node: Text): PhrasingContent[] | undefined {
 }
 
 function transformAutolinkLiterals(tree: Root): void {
+  releaseAutolinkMemos();
   const stack: Nodes[] = [tree];
   while (stack.length > 0) {
     const parent = stack.pop()!;
@@ -369,16 +394,28 @@ function transformAutolinkLiterals(tree: Root): void {
       continue;
     }
     const children: Nodes[] = parent.children;
+    // The new children, built only once a text node is replaced. One pass,
+    // no spread: a paragraph can get many thousands of new nodes.
+    let rebuilt: Nodes[] | undefined;
     for (let i = 0; i < children.length; i++) {
       const child = children[i];
-      if (child.type === 'text') {
-        const replacement = replaceText(child);
-        if (replacement !== undefined) {
-          children.splice(i, 1, ...replacement);
-          i += replacement.length - 1;
+      const replacement = child.type === 'text' ? replaceText(child) : undefined;
+      if (replacement !== undefined) {
+        rebuilt ??= children.slice(0, i);
+        for (const node of replacement) {
+          rebuilt.push(node);
         }
-      } else if ('children' in child && child.type !== 'link' && child.type !== 'linkReference') {
+        continue;
+      }
+      if ('children' in child && child.type !== 'link' && child.type !== 'linkReference') {
         stack.push(child);
+      }
+      rebuilt?.push(child);
+    }
+    if (rebuilt !== undefined) {
+      children.length = 0;
+      for (const node of rebuilt) {
+        children.push(node);
       }
     }
   }

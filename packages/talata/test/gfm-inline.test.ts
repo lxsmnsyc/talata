@@ -213,3 +213,17 @@ describe('work growth on pathological inputs', () => {
     });
   }
 });
+
+describe('large transform replacements', () => {
+  // The transform once spread every new node into one `splice` call, which
+  // overflows the stack on large paragraphs.
+  it('replaces 80,000 emails in one text node', () => {
+    const tree = fromMarkdown('[' + '-a@b.c '.repeat(80_000), { gfm: true });
+    const paragraph = tree.children[0];
+    expect(paragraph.type === 'paragraph' && paragraph.children.length).toBe(160_000);
+  });
+
+  it('matches the reference on many replacements', () => {
+    expect(compare('[' + '-a@b.c www.d.e '.repeat(500))).toBeUndefined();
+  });
+});

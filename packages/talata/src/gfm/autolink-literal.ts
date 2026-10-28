@@ -530,6 +530,20 @@ function parseProtocol(state: InlineState): boolean {
   return emit(state, start, to, text.slice(start, to));
 }
 
+/**
+ * Drops the memos' references to the last leaf, so the document can be
+ * collected. The autolink transform calls it once the inline phase is done.
+ */
+export function releaseAutolinkMemos(): void {
+  owner = undefined;
+  trailOwner = undefined;
+  domainOwner = undefined;
+  bracketState = undefined;
+  cleanLast = undefined;
+  openBracket = undefined;
+  emailState = undefined;
+}
+
 function parseAutolinkLiteral(state: InlineState): boolean {
   const code = state.source.text.charCodeAt(state.pos);
   if (code === COLON) {

@@ -13,3 +13,11 @@
 - Fuzz (GFM on): seed 11 20k, seed 4242 50k: 0 failures. Scratch random fuzzer over GFM-inline atoms (about 170k short documents): only table differences.
 - Merged main after gfm-tables landed; fast check green. Final 100k fuzz and a post-merge 50k each found one task-list lookahead difference (`- [
   *x*`), outside this node.
+
+## Review round 1
+
+- Merged main (roadmap-only commits).
+- The transform rebuilds a parent's children in one pass instead of `splice(i, 1, ...replacement)`, which overflowed the stack on `'[' + '-a@b.c '.repeat(80000)`. Test added.
+- Pre-checks: `replaceUrls` runs only when the text has `://` or a `.` after `www` in any case (the URL pattern needs one of them); `replaceEmails` only when the text or piece has `@`.
+- Module state: strikethrough drops `orderState` at the leaf's final resolve (bottom 0); the transform calls `releaseAutolinkMemos()` from `autolink-literal.ts` before it walks the tree.
+- Fast check green; fuzz seed 5150 20k: only the known task-list case (`* [\r  *f*`).
