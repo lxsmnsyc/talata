@@ -11,7 +11,7 @@ import { fromMarkdown as reference } from 'mdast-util-from-markdown';
 import { describe, expect, it } from 'vitest';
 import { fromMarkdown } from '../src';
 import { blockRules, paragraphPrefixRules } from '../src/blocks';
-import { decodeString } from '../src/blocks/definition';
+import decodeString from '../src/blocks/decode';
 import type { BlockRule, BlockState, OpenBlock } from '../src/core/blocks';
 import { advanceLine, consumeColumns } from '../src/core/line';
 import type { Line } from '../src/core/line';
@@ -46,17 +46,9 @@ const waiting = new Map<number, string>([
   [80, 'emphasis (inline-core)'],
   [81, 'emphasis (inline-core)'],
   [82, 'emphasis (inline-core)'],
-  [92, 'block quotes (blocks-container)'],
-  [93, 'block quotes (blocks-container)'],
-  [94, 'lists (blocks-container)'],
-  [99, 'lists (blocks-container)'],
-  [101, 'block quotes (blocks-container)'],
   [102, 'backslash escapes (inline-core)'],
   [106, 'backslash escapes (inline-core)'],
-  [108, 'lists (blocks-container)'],
-  [109, 'lists (blocks-container)'],
   [121, 'code spans (inline-core)'],
-  [128, 'block quotes (blocks-container)'],
   [138, 'code spans (inline-core)'],
   [145, 'code spans (inline-core)'],
   [148, 'emphasis (inline-core)'],
@@ -64,8 +56,6 @@ const waiting = new Map<number, string>([
   [155, 'emphasis (inline-core)'],
   [167, 'emphasis (inline-core)'],
   [168, 'raw HTML (inline-core)'],
-  [174, 'block quotes (blocks-container)'],
-  [175, 'lists (blocks-container)'],
   [176, 'emphasis (inline-core)'],
   [177, 'emphasis (inline-core)'],
   [187, 'raw HTML (inline-core)'],
@@ -87,7 +77,7 @@ const waiting = new Map<number, string>([
   [215, 'reference links (inline-core)'],
   [216, 'reference links (inline-core)'],
   [217, 'reference links (inline-core)'],
-  [218, 'reference links (inline-core), block quotes (blocks-container)'],
+  [218, 'reference links (inline-core)'],
 ]);
 
 describe('spec sections built by blocks-leaf', () => {
@@ -119,11 +109,11 @@ const blockWaiting = new Map<number, string>([
   [34, 'named character references (inline-core)'],
 ]);
 
-describe('block structure of every spec example without containers', () => {
+describe('block structure of every spec example', () => {
   for (const example of specExamples) {
     const markdown = specText(example.markdown);
     const expected = reference(markdown);
-    if (blockWaiting.has(example.number) || hasContainer(expected)) {
+    if (blockWaiting.has(example.number)) {
       continue;
     }
     it(`example ${example.number} (${example.section})`, () => {
@@ -134,21 +124,6 @@ describe('block structure of every spec example without containers', () => {
     });
   }
 });
-
-function hasContainer(node: Root | RootContent): boolean {
-  if (node.type === 'blockquote' || node.type === 'list') {
-    return true;
-  }
-  if (node.type === 'paragraph' || !('children' in node)) {
-    return false;
-  }
-  for (const child of node.children) {
-    if (hasContainer(child)) {
-      return true;
-    }
-  }
-  return false;
-}
 
 const cases: Record<string, string[]> = {
   setext: [
@@ -215,6 +190,14 @@ const cases: Record<string, string[]> = {
     '```\\*a \\b\n```',
     'a\n```\nb\n```',
     '```\n# a\n```\n# b',
+    '> ```\n> a\n>\nb',
+    '- ```\n  a\n\nb',
+    '> ```\n> a\n>\n> \nb',
+    '* ```a[a]:\n    \n  \n?>',
+    '> ```\n> a\n>\n>',
+    '> ```\n>\nb',
+    '- ```\n  a\n',
+    '- [a]: /u\n\n  b',
   ],
   html: [
     '<div>\na\n',
@@ -379,6 +362,26 @@ it('decodes escapes and numeric references', () => {
     'a*b\\cABC&#;&#x;&#12345678;&amp;',
   );
   expect(decodeString('&#0;&#xFFFE;&#127;')).toBe('\uFFFD\uFFFD\uFFFD');
+});
+
+// Definition labels that span lines look up each line's indentation. The
+// lookup must stay linear: 4 times the input should take about 4 times as
+// long, far from the 16 times a quadratic lookup takes.
+it('parses many multi-line definition labels in linear time', () => {
+  const time = (count: number): number => {
+    const markdown = '[a\n b]: /u\n'.repeat(count);
+    let best = Infinity;
+    for (let run = 0; run < 3; run++) {
+      const start = performance.now();
+      fromMarkdown(markdown);
+      best = Math.min(best, performance.now() - start);
+    }
+    return best;
+  };
+  time(2000);
+  const small = time(4000);
+  const large = time(16_000);
+  expect(large / Math.max(small, 0.5)).toBeLessThan(10);
 });
 
 // Named references (`&ouml;`) in info strings and definitions need the entity
@@ -569,10 +572,9 @@ const testItem: BlockRule = {
   },
 };
 
-// Cross cases with containers. To check after blocks-container merges, with
-// the real rules: the test-only list does not continue over blank lines, so
-// `- ```\n  a\n` (the code keeps the final line ending) and `- [a]: /u\n\n  b`
-// wait; `> > ```\n> > a\n>` gives a code block that ends after the line
+// Cross cases with the test-only containers. Cases that need the real list
+// rule (blank lines in items) are in the hand-written fenced cases above.
+// Known gap: `> > ```\n> > a\n>` gives a code block that ends after the line
 // ending, where the reference ends it before (see outcome.md).
 const crossCases = [
   '> > ```\n> > a\n> >',
@@ -649,6 +651,22 @@ describe('cross cases with test-only containers', () => {
     it(JSON.stringify(markdown), () => {
       const expected = reference(markdown).children[0];
       const actual = parse(markdown, { gfm: false }, rules).children[0];
+      expect(expected.type === 'list' && actual.type === 'list').toBe(true);
+      if (expected.type === 'list' && actual.type === 'list') {
+        expect(actual.children[0].children[0]).toEqual(expected.children[0].children[0]);
+      }
+    });
+  }
+});
+
+// With the real list rule: the leaf matches, but the reference ends the first
+// item after the next item's marker (3:3) and talata ends it at the leaf
+// (3:1). That is the list item's end rule, listed for spec-green.
+describe('leaf blocks in real list items followed by a new item', () => {
+  for (const markdown of ['- ```\n  a\n- b', '- ```\n- b', '- <!--\n  a\n- b']) {
+    it(JSON.stringify(markdown), () => {
+      const expected = reference(markdown).children[0];
+      const actual = fromMarkdown(markdown).children[0];
       expect(expected.type === 'list' && actual.type === 'list').toBe(true);
       if (expected.type === 'list' && actual.type === 'list') {
         expect(actual.children[0].children[0]).toEqual(expected.children[0].children[0]);

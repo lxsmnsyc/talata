@@ -110,6 +110,26 @@ function isAsciiAlphanumeric(code: number): boolean {
   return isAsciiAlpha(code) || (code >= 48 && code <= 57);
 }
 
+const RAW_NAMES = ['pre', 'script', 'style', 'textarea'];
+
+/** Whether `[start, end)` is a raw tag name, in any case. The text is ASCII letters. */
+function isRawName(text: string, start: number, end: number): boolean {
+  for (const name of RAW_NAMES) {
+    if (name.length !== end - start) {
+      continue;
+    }
+    let i = 0;
+    // `| 32` lowercases an ASCII letter.
+    while (i < name.length && (text.charCodeAt(start + i) | 32) === name.charCodeAt(i)) {
+      i++;
+    }
+    if (i === name.length) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /**
  * Whether `[from, end)` holds the end of a raw block: `</pre>`, `</script>`,
  * `</style>` or `</textarea>`, any of them, in any case.
@@ -126,11 +146,7 @@ function hasRawEnd(text: string, from: number, end: number): boolean {
     while (j < end && j - nameStart < 8 && isAsciiAlpha(text.charCodeAt(j))) {
       j++;
     }
-    if (
-      j < end &&
-      text.charCodeAt(j) === GREATER_THAN &&
-      rawNames.has(text.slice(nameStart, j).toLowerCase())
-    ) {
+    if (j < end && text.charCodeAt(j) === GREATER_THAN && isRawName(text, nameStart, j)) {
       return true;
     }
     i = j > nameStart ? j : nameStart;

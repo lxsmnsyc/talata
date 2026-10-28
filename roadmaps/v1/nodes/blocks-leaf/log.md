@@ -14,3 +14,10 @@
   - Paren titles may contain `(` (`[a]: b (c (d)` gives title "c (d").
 - Named character references need inline-core's entity table; decodeString leaves them raw for now.
 - Fuzz (scratch, not committed): 200k random documents built from leaf-block fragments, compared with inline content stripped and container documents skipped. No differences.
+- Review round 1:
+  - Merged main (blocks-container). The `blocks/index.ts` conflict was resolved by keeping both rule sets.
+  - Fixed fenced code: an unclosed fence that ends without keeping its line ending, and whose last content line is empty, now drops one trailing line ending from the value, as mdast-util-from-markdown does (`> ```\n> a\n>\nb` gives "a").
+  - Fixed quadratic definition label lookup: the scanner now keeps a forward-only cursor into the paragraph's indents, and paragraphs record indents only when they start with `[`. Added a linear-growth timing test.
+  - Nits: `hasRawEnd` compares names with char codes; `decodeString` moved to `blocks/decode.ts`.
+  - With the real containers, every example in blocks-container's waiting list and 57, 60, 61 in core-sections pass and were removed. The block-structure suite now runs on every spec example.
+  - Cross cases: `- ```\n  a\n` and `- [a]: /u\n\n  b` match. `- ```\n  a\n- b` matches for the code node, but the reference ends the list item at 3:3 (after the next marker) and talata at 3:1. That is the list item end rule, for spec-green.

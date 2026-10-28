@@ -4,7 +4,7 @@ import { isSpaceOrTab } from '../core/chars';
 import type { Line } from '../core/line';
 import { point, skipLineEnding } from '../core/source';
 import { isEmptyLastLine, lineContent } from './code-indented';
-import { decodeString } from './definition';
+import decodeString from './decode';
 
 const BACKTICK = 96;
 
@@ -42,6 +42,8 @@ class OpenFencedCode implements OpenBlock {
   meta: string | null;
   value = '';
   lines = 0;
+  /** Length of the line ending before the last content line, when that line is empty. */
+  emptyLast = 0;
   /** The current line is the closing fence. */
   closing = false;
   closed = false;
@@ -78,6 +80,7 @@ class OpenFencedCode implements OpenBlock {
     if (isEmptyLastLine(line)) {
       // micromark ends the block after the line ending, with no content line.
       this.end = next;
+      this.emptyLast = 0;
       return;
     }
     const eol = text.slice(this.end, next);
@@ -90,19 +93,25 @@ class OpenFencedCode implements OpenBlock {
     const content = lineContent(line, this.indent);
     // The line ending after the opening fence is not part of the value.
     this.value = this.lines === 0 ? content : this.value + eol + content;
+    this.emptyLast = this.lines > 0 && content === '' ? eol.length : 0;
     this.lines++;
   }
 
   close(state: BlockState): Code {
     let end = this.end;
+    let value = this.value;
     if (!this.closed && state.closeKeepsLineEnding) {
       end = skipLineEnding(state.source.text, end);
+    } else if (!this.closed && this.emptyLast > 0) {
+      // Without a closing fence or a kept line ending, the reference drops
+      // the line ending before an empty last line.
+      value = value.slice(0, value.length - this.emptyLast);
     }
     return {
       type: 'code',
       lang: this.lang,
       meta: this.meta,
-      value: this.value,
+      value,
       position: { start: point(state.source, this.start), end: point(state.source, end) },
     };
   }

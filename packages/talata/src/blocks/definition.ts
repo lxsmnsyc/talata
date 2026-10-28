@@ -3,124 +3,26 @@ import type { BlockState, OpenParagraph, ParagraphPrefixRule } from '../core/blo
 import { isSpaceOrTab } from '../core/chars';
 import { point, skipLineEnding } from '../core/source';
 import { normalizeIdentifier } from '../core/state';
-import { lineIndent } from './paragraph';
+import decodeString from './decode';
+import { paragraphIndents } from './paragraph';
 
 const DOUBLE_QUOTE = 34;
-const AMPERSAND = 38;
 const APOSTROPHE = 39;
 const LEFT_PAREN = 40;
 const RIGHT_PAREN = 41;
 const COLON = 58;
-const SEMICOLON = 59;
 const LESS_THAN = 60;
 const GREATER_THAN = 62;
 const LEFT_BRACKET = 91;
 const BACKSLASH = 92;
 const RIGHT_BRACKET = 93;
 const CARET = 94;
-const NUMBER_SIGN = 35;
-
-function isAsciiPunctuation(code: number): boolean {
-  return (
-    (code >= 33 && code <= 47) ||
-    (code >= 58 && code <= 64) ||
-    (code >= 91 && code <= 96) ||
-    (code >= 123 && code <= 126)
-  );
-}
-
-function isDigit(code: number): boolean {
-  return code >= 48 && code <= 57;
-}
-
-function isHexDigit(code: number): boolean {
-  return isDigit(code) || (code >= 65 && code <= 70) || (code >= 97 && code <= 102);
-}
-
-/** Decodes a numeric character reference as micromark does: invalid code points become U+FFFD. */
-function decodeNumeric(digits: string, base: number): string {
-  const code = Number.parseInt(digits, base);
-  if (
-    code < 9 ||
-    code === 11 ||
-    (code > 13 && code < 32) ||
-    (code > 126 && code < 160) ||
-    (code > 55_295 && code < 57_344) ||
-    (code > 64_975 && code < 65_008) ||
-    (code & 65_535) === 65_535 ||
-    (code & 65_535) === 65_534 ||
-    code > 1_114_111
-  ) {
-    return '�';
-  }
-  return String.fromCodePoint(code);
-}
-
-/**
- * Length of a numeric character reference (`&#123;`, `&#x1F;`) at `start`,
- * or 0. Named references are not decoded yet: they need the entity table that
- * inline-core adds in `src/inline/entities.ts`.
- */
-function numericReferenceEnd(value: string, start: number): number {
-  let i = start + 1;
-  if (value.charCodeAt(i) !== NUMBER_SIGN) {
-    return 0;
-  }
-  i++;
-  const hex = value.charCodeAt(i) === 120 || value.charCodeAt(i) === 88; // x X
-  if (hex) {
-    i++;
-  }
-  const digitsStart = i;
-  const max = hex ? 6 : 7;
-  while (
-    i - digitsStart < max &&
-    (hex ? isHexDigit(value.charCodeAt(i)) : isDigit(value.charCodeAt(i)))
-  ) {
-    i++;
-  }
-  if (i === digitsStart || value.charCodeAt(i) !== SEMICOLON) {
-    return 0;
-  }
-  return i + 1;
-}
-
-/**
- * Decodes backslash escapes and character references in a string, as
- * micromark's string content does (fenced code info, definitions).
- */
-export function decodeString(value: string): string {
-  let result = '';
-  let run = 0;
-  const length = value.length;
-  for (let i = 0; i < length; i++) {
-    const code = value.charCodeAt(i);
-    if (code === BACKSLASH && i + 1 < length && isAsciiPunctuation(value.charCodeAt(i + 1))) {
-      result += value.slice(run, i);
-      run = i + 1;
-      i++;
-    } else if (code === AMPERSAND) {
-      const end = numericReferenceEnd(value, i);
-      if (end > 0) {
-        const hex = value.charCodeAt(i + 2) === 120 || value.charCodeAt(i + 2) === 88;
-        result +=
-          value.slice(run, i) +
-          decodeNumeric(value.slice(i + (hex ? 3 : 2), end - 1), hex ? 16 : 10);
-        run = end;
-        i = end - 1;
-      }
-    }
-  }
-  return run === 0 ? value : result + value.slice(run);
-}
 
 /**
  * Reads a link reference definition from the paragraph's lines, which are
  * flat [start, end) pairs. A line ending between pairs counts as whitespace.
  */
 class Scanner {
-  state: BlockState;
-  paragraph: OpenParagraph;
   text: string;
   lines: number[];
   /** Index of the current pair's start. */
@@ -128,15 +30,46 @@ class Scanner {
   pos: number;
   end: number;
 
-  constructor(state: BlockState, paragraph: OpenParagraph, pair: number) {
+  /** Whitespace of continuation lines (see `paragraphIndents`) and a forward-only index into it. */
+  indents: number[] | undefined;
+  indent = 0;
+
+  constructor(state: BlockState, paragraph: OpenParagraph) {
     const lines = paragraph.lines;
-    this.state = state;
-    this.paragraph = paragraph;
     this.text = state.source.text;
     this.lines = lines;
+    this.pair = 0;
+    this.pos = lines[0];
+    this.end = lines[1];
+    this.indents = paragraphIndents(paragraph);
+  }
+
+  /** Starts a definition at pair `pair`. */
+  reset(pair: number): void {
     this.pair = pair;
-    this.pos = lines[pair];
-    this.end = lines[pair + 1];
+    this.pos = this.lines[pair];
+    this.end = this.lines[pair + 1];
+  }
+
+  /**
+   * The whitespace after container prefixes before the content of the
+   * current line. Columns of a split tab become spaces. Lines only move
+   * forward between calls, so the lookup is linear over a paragraph.
+   */
+  lineIndent(): string {
+    const indents = this.indents;
+    if (indents === undefined) {
+      return '';
+    }
+    let i = this.indent;
+    while (i < indents.length && indents[i] < this.end) {
+      i += 3;
+    }
+    this.indent = i;
+    if (i >= indents.length || indents[i] !== this.end) {
+      return '';
+    }
+    return ' '.repeat(indents[i + 2]) + this.text.slice(indents[i + 1], this.pos);
   }
 
   /** Moves to the next line. False when there is none. */
@@ -193,7 +126,7 @@ class Scanner {
           return undefined;
         }
         // Unlike titles, labels keep the whitespace at the start of a line.
-        const indent = lineIndent(this.state, this.paragraph, this.pos, this.end);
+        const indent = this.lineIndent();
         value += indent;
         size += indent.length;
         from = this.pos;
@@ -395,8 +328,9 @@ const definition: ParagraphPrefixRule = {
       return;
     }
     let taken = 0;
+    const scanner = new Scanner(state, paragraph);
     while (taken < lines.length) {
-      const scanner = new Scanner(state, paragraph, taken);
+      scanner.reset(taken);
       const node = parseDefinition(state, scanner);
       if (node === undefined) {
         break;
