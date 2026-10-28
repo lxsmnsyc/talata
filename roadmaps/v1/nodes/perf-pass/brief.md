@@ -37,6 +37,8 @@ Profile talata on the benchmark corpus and optimize until it is at least 4 times
 
 ## Context
 
+From the inline-core review: `failBracket` in `src/inline/link.ts` (~194-200) splices `state.delimiters` and becomes quadratic when a failed bracket sits under many delimiters (`'[*a '.repeat(n/8) + ' a*]'.repeat(n/8)`: 41 ms at 50 KB, 660 ms at 100 KB). Mark the bracket dead instead of splicing, add the input to the growth tests, and count splice lengths in `workSteps`. Keep the test hooks `emphasisPaths` and `workSteps` out of the public bundle.
+
 Use the perf-pass skill: baseline, profile, several candidate optimizations measured side by side. Record before and after numbers in `benchmark/RESULTS.md`.
 
 ## Acceptance

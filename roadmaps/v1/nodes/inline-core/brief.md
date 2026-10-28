@@ -1,7 +1,7 @@
 ---
 id: inline-core
 title: Inline parsing: emphasis, links, code spans and the rest
-status: active
+status: done
 priority: must
 type: feature
 outline: false
