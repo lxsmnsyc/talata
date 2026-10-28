@@ -1,7 +1,6 @@
 import { unified } from 'unified';
 import { describe, expect, it } from 'vitest';
 import { fromMarkdown } from '../src/index';
-import { directive } from '../src/directive';
 import type { Extension } from '../src/ext/api';
 import { frontmatter } from '../src/frontmatter';
 import { math } from '../src/math';
@@ -132,12 +131,10 @@ describe('subpath factories', () => {
     expect(math()).toBe(math({}));
     expect(math()).toBe(math({ singleDollarTextMath: true }));
     expect(math({ singleDollarTextMath: false })).not.toBe(math());
-    expect(directive()).toBe(directive());
   });
 
   it('name themselves after the subpath', () => {
     expect(frontmatter().name).toBe('talata:frontmatter');
     expect(math().name).toBe('talata:math');
-    expect(directive().name).toBe('talata:directive');
   });
 });

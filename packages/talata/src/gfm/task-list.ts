@@ -194,6 +194,18 @@ let taskState: InlineState | undefined;
 let taskCandidate: Candidate | undefined;
 let taskNodes: PhrasingContent[] | undefined;
 
+/** True when the paragraph line ending at `end` had whitespace after its container prefixes. */
+function keptWhitespace(indents: number[] | undefined, end: number): boolean {
+  if (indents !== undefined) {
+    for (let i = 0; i < indents.length; i += 3) {
+      if (indents[i] === end) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 function isCheckValue(code: number): boolean {
   return isSpaceOrTab(code) || code === LOWER_X || code === UPPER_X;
 }
@@ -247,6 +259,11 @@ function parse(state: InlineState): boolean {
     close = ranges[2];
     // The check read into the next line, even when it fails.
     reach(state, 2);
+    // micromark sees the whitespace a paragraph strips from that line, so `]`
+    // must come right after the container prefixes (`- [\n ] a` is no task).
+    if (keptWhitespace(state.indents, ranges[3])) {
+      return false;
+    }
   }
   const rangeEnd = ranges[range + 1];
   if (close >= rangeEnd || text.charCodeAt(close) !== RIGHT_BRACKET) {

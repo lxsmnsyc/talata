@@ -71,6 +71,25 @@ const published: [string, string[]][] = [
 
 const groups: [string, string[]][] = [
   [
+    // The check's line ending: `]` must follow the container prefixes, with no
+    // whitespace the paragraph strips (fuzz, seed 20261028).
+    'task check across a line ending',
+    [
+      '+ [\n ] *',
+      '- [\r ] $',
+      '- [\r\n ] a',
+      '- [\n ]\n  a',
+      '- [\n  ] a',
+      '- [\n   ] a',
+      '- [\n] a',
+      '* [\n\t] a',
+      '1. [\n ] a',
+      '1. [\n   ] a',
+      '> - [\n>   ] a',
+      '> - [\n> ] a',
+    ],
+  ],
+  [
     // A `*` or `_` run before the first `~`: attention resolves first over
     // the leaf, strikethrough first inside each emphasis pair.
     'emphasis before strikethrough',

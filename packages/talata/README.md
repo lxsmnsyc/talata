@@ -76,10 +76,31 @@ const html = toHtml(toHast(fromMarkdown(value, { gfm: true })));
 
 This path is 6.5 to 7.5 times faster than `micromark` HTML output on the benchmark corpus. Its HTML follows `mdast-util-to-hast`, so it is not byte for byte the same as `micromark()` output.
 
+## Extensions
+
+Frontmatter and math ship in the same package, each behind its own subpath. Pass them in `extensions`. Code for an extension reaches your bundle only when you import its subpath.
+
+```js
+import { fromMarkdown } from 'talata';
+import { frontmatter } from 'talata/frontmatter';
+import { math } from 'talata/math';
+
+const tree = fromMarkdown(value, { gfm: true, extensions: [frontmatter(), math()] });
+```
+
+| Subpath              | Factory                 | Same tree as                                                 | Options                                                                                                                              |
+| -------------------- | ----------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `talata/frontmatter` | `frontmatter(options?)` | `micromark-extension-frontmatter` + `mdast-util-frontmatter` | The same as the reference: `'yaml'`, `'toml'`, or matter objects with `type`, `marker` or `fence`, and `anywhere`. Default `'yaml'`. |
+| `talata/math`        | `math(options?)`        | `micromark-extension-math` + `mdast-util-math`               | `{ singleDollarTextMath }`, default `true`.                                                                                          |
+
+The unified plugin takes the same option: `.use(talata, { gfm: true, extensions: [frontmatter(), math()] })`. To serialize with `remark-stringify`, keep `remark-frontmatter` and `remark-math` in the pipeline for their serializer rules, as with `remark-gfm`.
+
+One known difference, only with `anywhere: true`: take a matter that interrupts a lazy paragraph in a block quote or list (`> a\n---\nb\n---`). talata keeps it outside the quote, and the reference puts it inside.
+
 ## What is not supported
 
-- **micromark syntax extensions.** talata does not run micromark, so plugins that add syntax through it do not work. Examples are `remark-frontmatter`, `remark-math`, `remark-directive` and `remark-mdx`. With the unified plugin, their syntax is parsed as plain Markdown. Tree plugins are not affected. Frontmatter, math and directives are planned as talata's own extensions.
-- **The rest of the `mdast-util-from-markdown` signature.** There is no `encoding` argument, no `Buffer` input, and no `extensions` or `mdastExtensions` option. Pass a string.
+- **micromark syntax extensions.** talata does not run micromark, so plugins that add syntax through it do not work. Examples are `remark-directive`, `remark-mdx` and `remark-wiki-link`. With the unified plugin, their syntax is parsed as plain Markdown. Tree plugins are not affected. For frontmatter and math, use talata's own extensions above. Directives and MDX are planned.
+- **The rest of the `mdast-util-from-markdown` signature.** There is no `encoding` argument, no `Buffer` input, and the `extensions` option takes talata extensions, not micromark ones. There is no `mdastExtensions` option: each talata extension builds its own nodes. Pass a string.
 
 ## Speed
 
@@ -104,10 +125,12 @@ Parse time grows linearly with input size, including on inputs that are quadrati
 
 | Build   | talata                | `mdast-util-from-markdown` + GFM |
 | ------- | --------------------- | -------------------------------- |
-| Node    | 92.1 KB, 32.6 KB gzip | 118.2 KB, 35.9 KB gzip           |
-| Browser | 92.1 KB, 32.6 KB gzip | 82.5 KB, 23.8 KB gzip            |
+| Node    | 92.6 KB, 32.8 KB gzip | 118.2 KB, 35.9 KB gzip           |
+| Browser | 92.6 KB, 32.8 KB gzip | 82.5 KB, 23.8 KB gzip            |
 
 talata ships one build for every runtime, with a table of the 2,125 named character references (about 9.5 KB gzip). In browser bundles, the reference decodes those names through the DOM and ships no table, so it is smaller there.
+
+Each extension adds to a bundle only when imported: `talata/frontmatter` is 1.4 KB gzip and `talata/math` is 12.7 KB gzip. Both include the shared core code they reuse, so most of that is already in a bundle that imports `talata`.
 
 ## How it is tested
 

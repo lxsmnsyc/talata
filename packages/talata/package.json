@@ -69,17 +69,6 @@
       },
       "default": "./dist/math.js"
     },
-    "./directive": {
-      "import": {
-        "types": "./dist/directive.d.ts",
-        "default": "./dist/directive.js"
-      },
-      "require": {
-        "types": "./dist/directive.d.cts",
-        "default": "./dist/directive.cjs"
-      },
-      "default": "./dist/directive.js"
-    },
     "./package.json": "./package.json"
   },
   "publishConfig": {
@@ -99,13 +88,11 @@
     "@types/node": "^26.6.5",
     "commonmark-spec": "^0.31.2",
     "hast-util-to-html": "^9.0.5",
-    "mdast-util-directive": "^3.1.1",
     "mdast-util-from-markdown": "^2.0.2",
     "mdast-util-frontmatter": "^2.0.1",
     "mdast-util-gfm": "^3.1.0",
     "mdast-util-math": "^3.0.0",
     "mdast-util-to-hast": "^13.2.0",
-    "micromark-extension-directive": "^4.0.0",
     "micromark-extension-frontmatter": "^2.0.0",
     "micromark-extension-gfm": "^3.0.0",
     "micromark-extension-math": "^3.1.0",

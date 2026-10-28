@@ -127,7 +127,7 @@ const noCloseByParse = new WeakMap<object, number[]>();
  * such a fence (`---\n> a` gives a thematic break and a paragraph) no
  * container starts on the lines that follow.
  */
-const CONTAINER_RULES = ['blockquote', 'listItem', 'footnoteDefinition', 'directiveContainer'];
+const CONTAINER_RULES = ['blockquote', 'listItem', 'footnoteDefinition'];
 
 const withoutContainers = new WeakMap<Registry, Registry>();
 

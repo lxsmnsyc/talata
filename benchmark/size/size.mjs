@@ -73,7 +73,7 @@ for (const platform of platforms) {
 }
 
 // Each subpath entry on its own, so a growing extension shows apart from the main entry.
-const subpaths = ['frontmatter', 'math', 'directive', 'unified'];
+const subpaths = ['frontmatter', 'math', 'unified'];
 const entryRows = [];
 for (const subpath of subpaths) {
   const result = await build({
