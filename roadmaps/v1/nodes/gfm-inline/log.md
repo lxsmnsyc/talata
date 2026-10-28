@@ -11,3 +11,5 @@
 - Bug found by probes: text before a link at a line start ended after the container prefix. `takeBack` now restores the line ending's end as `endRange` set it.
 - Quadratic cases found by timing and fixed with memos: `www._` repeated (domain scan failure memo), dots after `www.a` (trail check memo), transform candidates inside the same run (run end and domain check memo). Growth tests in `test/gfm-inline.test.ts` count `workSteps`.
 - Fuzz (GFM on): seed 11 20k, seed 4242 50k: 0 failures. Scratch random fuzzer over GFM-inline atoms (about 170k short documents): only table differences.
+- Merged main after gfm-tables landed; fast check green. Final 100k fuzz and a post-merge 50k each found one task-list lookahead difference (`- [
+  *x*`), outside this node.

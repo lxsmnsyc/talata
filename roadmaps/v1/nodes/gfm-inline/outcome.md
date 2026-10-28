@@ -24,6 +24,8 @@ Branch `feat/gfm-inline`. Paths are under `packages/talata/`.
 
 ## Gotchas
 
+- gfm-tasks-footnotes: `- [\n  *x*` with GFM gives text `"[\n"` ending at 2:3 in the reference, 2:1 in talata (see Verification).
+
 - A leaf where `*`/`_` comes before the first tilde, with a tilde pair possible, uses emphasis's quadratic mixed path. `*x* ` then `~a~ a* ` repeated: about 0.3 s at 50 KB here, quadratic beyond; the reference takes 13 s at 50 KB. perf-pass could fix it in `emphasis.ts`.
 - The autolink rule takes back pending text with `takeBack`; at a range start it restores the line ending's end as `endRange` computed it. A rule that changes how line endings end must keep these in step.
 - `previousUnbalanced` is "a delimiter with marker 91 or 33 is on the stack". gfm-tasks-footnotes: footnote calls that push bracket delimiters keep autolinks off after them, as open label starts do in micromark.
@@ -37,9 +39,9 @@ Branch `feat/gfm-inline`. Paths are under `packages/talata/`.
 
 ## Verification
 
-- `npx vitest run` in `packages/talata` (corpus present): FILL
+- After merging main (gfm-tables, ca0b33d): `npx vitest run` in `packages/talata` (corpus present): 17 files passed, 4760 tests passed, 12 skipped. The corpus files `readmes/10.md` and `91.md` (table and autolinks) now pass; I removed their `gfmWaiting` lines in the merge. Before the merge: 16 files, 4610 passed, 37 skipped.
 - `npx tsc --noEmit -p packages/talata`: no errors. `npx oxlint`: no findings. `npx oxfmt` applied to the new files.
-- Fuzz with GFM: seed 11 20,000 documents, seed 4242 50,000: 0 failures. FILL
+- Fuzz with GFM, before the merge: seed 11 20,000, seed 4242 50,000, seed 777 `--no-corpus` 50,000: 0 failures. Final run seed 2027, 100,000 documents: 99,938 compared, 1 failure, `- [\r  *x*`. After the merge, seed 31337 50,000: 1 failure, `* [\n  <t>`. Both are a `[` alone on the first line of a list item: with GFM the reference's text before the next line ends after the item's indent (2:3), talata ends it at 2:1. Without GFM they match. This looks like micromark's task list check reading the line ending as the check's whitespace and so reaching the next line, which belongs to gfm-tasks-footnotes; no strikethrough or autolink is involved (`- [\n  *x*` fails the same way). Not saved as fixtures: `fuzz.test.ts` would fail on them with every feature on.
 - Scratch fuzzer of short documents from GFM-inline atoms (emphasis, tildes, brackets, URLs, emails, escapes, entities, tabs, astral characters), about 170,000 documents: no difference except tables.
 
 ## Size
