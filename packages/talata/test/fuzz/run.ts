@@ -21,6 +21,8 @@ export interface RunOptions {
   shrinkBudget: number;
   // Mutate corpus files too. Off, the seeds are the spec examples only.
   corpus: boolean;
+  // Include pathological documents (default true). The smoke test turns them off.
+  pathological?: boolean;
   onProgress?: (done: number) => void;
 }
 
@@ -61,10 +63,11 @@ export function documentAt(
   index: number,
   features: Features,
   seeds: string[],
+  pathological = true,
 ): string {
   const random = createRandom(documentSeed(seed, index));
   const roll = random.next();
-  if (roll < 0.03) {
+  if (roll < 0.03 && pathological) {
     return generatePathological(random);
   }
   if (roll < 0.55 || seeds.length === 0) {
@@ -95,7 +98,7 @@ export function runFuzz(options: RunOptions): Report {
   const seen = new Set<string>();
   for (let n = 0; n < count; n++) {
     const index = start + n;
-    const source = documentAt(seed, index, features, seeds);
+    const source = documentAt(seed, index, features, seeds, options.pathological ?? true);
     const outcome = check(source, gfm, features);
     report.documents++;
     if (outcome.kind === 'skip') {

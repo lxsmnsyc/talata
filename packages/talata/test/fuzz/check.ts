@@ -29,7 +29,6 @@ const typeFeature: Record<string, keyof Features> = {
   blockquote: 'blockquote',
   list: 'list',
   listItem: 'list',
-  html: 'html',
   definition: 'definition',
   inlineCode: 'inline',
   emphasis: 'inline',
@@ -68,8 +67,20 @@ function isAtx(value: string, offset: number): boolean {
   return Number.isNaN(code) || isBlank(code) || code === 10 || code === 13;
 }
 
-function nodeReason(node: Node, value: string, on: Features): string | undefined {
+// Parents whose children are blocks. An html node anywhere else is inline.
+const blockParents: Record<string, true> = {
+  root: true,
+  blockquote: true,
+  listItem: true,
+  footnoteDefinition: true,
+};
+
+function nodeReason(node: Node, parent: string, value: string, on: Features): string | undefined {
   const { type } = node;
+  if (type === 'html') {
+    const feature = parent in blockParents ? 'html' : 'inline';
+    return on[feature] ? undefined : feature;
+  }
   if (type in alwaysOn) {
     return undefined;
   }
@@ -106,15 +117,18 @@ export function unsupportedReason(tree: Root, value: string, on: Features): stri
     return 'inline';
   }
   const stack: Node[] = [tree];
+  const parents: string[] = [''];
   while (stack.length > 0) {
     const node = stack.pop()!;
-    const reason = nodeReason(node, value, on);
+    const parent = parents.pop()!;
+    const reason = nodeReason(node, parent, value, on);
     if (reason !== undefined) {
       return reason;
     }
     if (node.children) {
       for (const child of node.children) {
         stack.push(child);
+        parents.push(node.type);
       }
     }
   }

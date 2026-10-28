@@ -14,3 +14,9 @@
 - Fixture replay uses all features; fixtures skipped under `supported` run as `it.fails`. Fixture names carry `-nogfm` and `-all`.
 - Added negative controls (`check` takes an optional parser) and feature marker asserts.
 - Fixed the 1,000,000 estimate to 10 to 15 minutes.
+
+## Review round 2
+
+- Smoke test: 500 documents, no pathological ones (`RunOptions.pathological`), timeout 60000. Same documents for the same seed.
+- `html` nodes are gated on `html` at block level and on `inline` under phrasing parents (`check.ts`).
+- Replaced the `length >= 0` assert with a folder-readable test.
