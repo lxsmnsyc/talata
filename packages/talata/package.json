@@ -30,6 +30,11 @@
       "require": "./dist/index.cjs",
       "default": "./dist/index.js"
     },
+    "./unified": {
+      "import": "./dist/unified.js",
+      "require": "./dist/unified.cjs",
+      "default": "./dist/unified.js"
+    },
     "./package.json": "./package.json"
   },
   "publishConfig": {
@@ -44,6 +49,14 @@
   "dependencies": {
     "@types/mdast": "^4.0.4"
   },
+  "peerDependencies": {
+    "unified": "^11.0.0"
+  },
+  "peerDependenciesMeta": {
+    "unified": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "@types/node": "^26.6.5",
     "commonmark-spec": "^0.31.2",
@@ -52,8 +65,13 @@
     "mdast-util-gfm": "^3.1.0",
     "mdast-util-to-hast": "^13.2.0",
     "micromark-extension-gfm": "^3.0.0",
+    "rehype-stringify": "^10.0.1",
+    "remark-gfm": "^4.0.1",
+    "remark-parse": "^11.0.0",
+    "remark-rehype": "^11.1.2",
     "tsdown": "^0.23.1",
     "typescript": "^7.0.2",
+    "unified": "^11.0.5",
     "vitest": "^5.0.5"
   },
   "engines": {
