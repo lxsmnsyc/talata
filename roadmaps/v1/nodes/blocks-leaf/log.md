@@ -1,0 +1,16 @@
+# Log: blocks-leaf
+
+- 2026-10-28: branch renamed to feat/blocks-leaf. No earlier work existed for these rules.
+- Read micromark-core-commonmark sources (setext-underline, code-indented, code-fenced, html-flow, definition, factory-label, factory-title, factory-destination). Each rule follows them state for state.
+- Reference findings:
+  - Indented code starts at `line.start`, so the indentation is in its position. Lines with 4 columns but nothing after them are part of the code, and the value drops one trailing line ending (`    a\n    \nb` gives value "a", end 2:5).
+  - Fenced code starts at the fence. HTML starts at the line start and its value keeps the indentation.
+  - Fenced code meta keeps trailing whitespace. Lang ends at whitespace.
+  - The trailing line ending stays in fenced code and in HTML kinds 1 to 5 when the next line is not lazy (a new container, or EOF that the containers continue over). This needed `BlockState.closeKeepsLineEnding`; see `contracts/parser-core-v3-blocks-leaf.change-request.md`.
+  - An empty last line after container prefixes (`> ```\n> a\n>`) ends fenced code and HTML 1 to 5 right after the previous line ending, with no content line.
+  - The CDATA end follows micromark's states, so `]]]>` does not end it. `<!-->` and `<?>` end at once.
+  - Kind 7 HTML may interrupt a lazy paragraph (`> a\n<span>` gives html at the root).
+  - Definition labels keep the whitespace at the start of continuation lines (`[Foo\n  bar]` gives label "Foo\n  bar"); titles do not. Labels after a split tab get spaces. Paragraphs now record that whitespace (`indents` in paragraph.ts, `lineIndent()`).
+  - Paren titles may contain `(` (`[a]: b (c (d)` gives title "c (d").
+- Named character references need inline-core's entity table; decodeString leaves them raw for now.
+- Fuzz (scratch, not committed): 200k random documents built from leaf-block fragments, compared with inline content stripped and container documents skipped. No differences.

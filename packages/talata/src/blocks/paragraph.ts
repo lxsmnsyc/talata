@@ -16,6 +16,12 @@ class OpenParagraphBlock implements OpenParagraph {
   acceptsLazy = false;
   lines: number[];
   start: number;
+  /**
+   * Lines with whitespace after their container prefixes, as flat triples:
+   * line ending offset, start of the whitespace, split tab columns. Labels of
+   * definitions that span lines keep that whitespace.
+   */
+  indents: number[] | undefined = undefined;
 
   constructor(line: Line) {
     this.lines = [line.nonBlank, line.end];
@@ -25,6 +31,10 @@ class OpenParagraphBlock implements OpenParagraph {
   continue: (state: BlockState, line: Line) => boolean = continueParagraph;
 
   addLine(_state: BlockState, line: Line): void {
+    if (line.nonBlank !== line.start || line.partialTab !== 0) {
+      this.indents ??= [];
+      this.indents.push(line.end, line.start, line.partialTab);
+    }
     this.lines.push(line.nonBlank, line.end);
   }
 
@@ -43,6 +53,29 @@ class OpenParagraphBlock implements OpenParagraph {
     state.inline(node, lines);
     return node;
   }
+}
+
+/**
+ * The whitespace after container prefixes before `content`, the content
+ * start of the paragraph line that ends at `end`. Columns of a split tab
+ * become spaces. Empty for the first line, which no caller needs.
+ */
+export function lineIndent(
+  state: BlockState,
+  paragraph: OpenParagraph,
+  content: number,
+  end: number,
+): string {
+  const indents = paragraph instanceof OpenParagraphBlock ? paragraph.indents : undefined;
+  if (indents === undefined) {
+    return '';
+  }
+  for (let i = 0; i < indents.length; i += 3) {
+    if (indents[i] === end) {
+      return ' '.repeat(indents[i + 2]) + state.source.text.slice(indents[i + 1], content);
+    }
+  }
+  return '';
 }
 
 /** Opens a paragraph whose first line is the rest of `line`. */
