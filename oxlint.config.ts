@@ -4,7 +4,8 @@ import { defineConfig } from 'oxlint';
 export default defineConfig({
   extends: [config],
   // Benchmark scripts are untyped Node scripts that are measured, not shipped.
-  ignorePatterns: ['benchmark/**'],
+  // Agent worktrees under .claude/ hold other branches' work in progress.
+  ignorePatterns: ['benchmark/**', '.claude/**'],
   rules: {
     'new-cap': 'off',
     'no-underscore-dangle': 'off',

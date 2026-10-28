@@ -6,3 +6,4 @@ coverage
 *.cpuprofile
 benchmark/corpus
 benchmark/profiles
+.claude/
