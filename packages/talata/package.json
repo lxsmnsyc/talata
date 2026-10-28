@@ -26,13 +26,25 @@
   "types": "./dist/index.d.cts",
   "exports": {
     ".": {
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs",
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      },
       "default": "./dist/index.js"
     },
     "./unified": {
-      "import": "./dist/unified.js",
-      "require": "./dist/unified.cjs",
+      "import": {
+        "types": "./dist/unified.d.ts",
+        "default": "./dist/unified.js"
+      },
+      "require": {
+        "types": "./dist/unified.d.cts",
+        "default": "./dist/unified.cjs"
+      },
       "default": "./dist/unified.js"
     },
     "./package.json": "./package.json"

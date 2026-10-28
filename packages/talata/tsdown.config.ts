@@ -6,4 +6,6 @@ export default defineConfig({
   target: 'es2020',
   dts: true,
   format: ['esm', 'cjs'],
+  // Keep `exports.default` next to the named export, as the .d.cts says.
+  cjsDefault: false,
 });

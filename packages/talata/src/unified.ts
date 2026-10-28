@@ -10,6 +10,8 @@ export type { Options };
  * (and `remark-gfm` when `gfm` is set). micromark and mdast extensions do not
  * apply to it.
  */
-export default function talata(this: Processor, options: Options = {}): void {
+export function talata(this: Processor, options: Options = {}): void {
   this.parser = (document: unknown): Root => fromMarkdown(String(document), options);
 }
+
+export default talata;
