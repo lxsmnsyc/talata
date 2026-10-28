@@ -19,7 +19,10 @@ owns:
   - README.md
   - packages/talata/README.md
   - .changeset/**
-shared: []
+shared:
+  - package.json
+  - packages/talata/package.json
+  - pnpm-lock.yaml
 reserves: []
 provides: []
 depends_on:

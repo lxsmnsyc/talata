@@ -17,7 +17,9 @@ gate: false
 added:
 owns:
   - benchmark/size/**
-shared: []
+shared:
+  - package.json
+  - pnpm-lock.yaml
 reserves: []
 provides: []
 depends_on:

@@ -18,6 +18,7 @@ added:
 owns:
   - packages/talata/src/gfm/task-list.ts
   - packages/talata/src/gfm/footnote.ts
+  - packages/talata/test/gfm-tasks-footnotes*.test.ts
 shared:
   - packages/talata/src/blocks/index.ts
   - packages/talata/src/inline/index.ts
@@ -26,6 +27,7 @@ shared:
   - packages/talata/src/blocks/definition.ts
   - packages/talata/src/inline/link.ts
   - packages/talata/test/parsers.ts
+  - packages/talata/test/fuzz/features.ts
 reserves: []
 provides: []
 depends_on:
@@ -47,6 +49,8 @@ depends_on:
 Add task list items (`checked` on `listItem`) and footnotes (`footnoteDefinition` blocks and `footnoteReference` inlines), matching `mdast-util-gfm`.
 
 ## Context
+
+Turn on `taskList` and `footnote` in `test/fuzz/features.ts` too, so the differential fuzzer covers them.
 
 Use rule priorities to run before the CommonMark definition and link rules instead of editing them where possible. Footnote definitions are a container block rule that can interrupt paragraphs, not a paragraph prefix rule (parser-core v2). Footnote calls resolve only against `footnotes` in `DocumentState`. Turn on `ready.gfm.taskList` and `ready.gfm.footnote` when done.
 

@@ -1,6 +1,6 @@
 ---
 name: parser-core
-version: 2
+version: 3
 status: frozen
 defined_by: core-skeleton
 ---
@@ -59,6 +59,10 @@ interface BlockState extends DocumentState {
   container: OpenBlock;                  // innermost matched open container
   paragraph: OpenParagraph | undefined;  // open paragraph at the tip, matched or lazy
   lazy: boolean;                         // paragraph set but the line did not match all containers above it
+  // Open leaf at the tip when every container matched the line, whether or
+  // not it continued; undefined otherwise. Lists use it to refuse starts
+  // after indented code (`    a\n2. b`). Added in v3; spec-green implements it.
+  tip: OpenBlock | undefined;
   // Removes the open paragraph; prefix rules run first. A rule calls it before
   // it knows whether it starts: on undefined (lazy, none, or definitions took
   // every line) it returns undefined too; on a paragraph it must return a block.
@@ -218,3 +222,4 @@ core-skeleton ships paragraphs, ATX headings and thematic breaks on these interf
 
 - v1: initial draft. Review findings added `DocumentState`, paragraph takeover, prefix rules, transforms, priorities and the position rules.
 - v2 (2026-10-28): frozen from core-skeleton's change request (`parser-core.change-request.md`, problems 1 to 15) after two review rounds that probed it against the reference parser. Changed the split-tab model, flat range pairs, `Transform` objects, `close(state, children)`, deferred inline parsing, `lazy`, `splitParagraph`, `interruptible`, `canContain` and `openContainer`, `OpenParagraph.start`, span-scoped `resolve`, rule `triggers` and `gfm` flags, and `createRegistry`. The root now always spans 1:1 to the end of the text.
+- v3 (2026-10-28): added `BlockState.tip` from blocks-container's request (`parser-core-v3.change-request.md`). Additive. Indented code is named `codeIndented`. Until spec-green lands, `tip` may be missing at runtime; rules must not rely on it before then.
