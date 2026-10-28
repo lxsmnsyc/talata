@@ -1,7 +1,7 @@
 ---
 id: harness
 title: Test harness: corpus, GFM spec and a reference CLI
-status: active
+status: done
 priority: must
 type: feature
 outline: false
