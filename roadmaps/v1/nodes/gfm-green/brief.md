@@ -44,6 +44,8 @@ Every GFM example and every corpus file gives a tree equal to the reference pars
 
 ## Context
 
+The reference parser can hang: `[^n]: x\n\n![ \n^n]` (space before the line ending) never finishes in micromark with GFM (talata: 1.4 ms). The fuzzer parses synchronously with no time limit, so give the reference call a timeout (a worker thread or child process) and count such documents as skipped with a reason before the 1,000,000-document run.
+
 From gfm-tasks-footnotes: when a list item's marker line is empty, the reference takes the next lazy line as the item's first content even outside the item: `-\n[ ] a`, `> -\n> [ ] a` and `-\n[x]\n-|-` drop `[ ]` and set `checked: false` on the root or the block quote. Match it with a GFM transform (two `it.fails` cases in `test/gfm-tasks-footnotes.test.ts`). Also `![\n^a]` (a footnote call whose label starts on the next line) is not a call in talata.
 From gfm-inline: when emphasis comes before the first `~` and a tilde pair is possible, emphasis takes its general path (`*x* ` then many `~a~ a* `: 0.3 s at 50 KB, the reference 13 s); hand to perf-pass if not fixed here.
 
