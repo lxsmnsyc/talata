@@ -32,11 +32,12 @@ jobs:
           package-manager-cache: false
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter benchmark corpus
+      # Lint is type-aware and reads the built dist through the smoke script.
+      - run: pnpm --filter talata build
       - run: npx oxlint
       - run: npx oxfmt --check
       - run: npx tsc --noEmit -p .
         working-directory: packages/talata
-      - run: pnpm --filter talata build
       - run: pnpm --filter talata test
 
   # `engines` says node >=20, but the tooling cannot run there. Build on a
