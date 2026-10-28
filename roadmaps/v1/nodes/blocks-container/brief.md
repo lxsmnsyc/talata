@@ -1,7 +1,7 @@
 ---
 id: blocks-container
 title: Container blocks: block quotes and lists
-status: active
+status: done
 priority: must
 type: feature
 outline: false
