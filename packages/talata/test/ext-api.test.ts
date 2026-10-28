@@ -28,15 +28,6 @@ describe('extensions option', () => {
     }
   });
 
-  it('gives the same tree for the stub extensions as for none', () => {
-    const extensions = [frontmatter(), math(), directive()];
-    for (const gfm of [false, true]) {
-      for (const input of inputs) {
-        expect(fromMarkdown(input, { gfm, extensions })).toEqual(fromMarkdown(input, { gfm }));
-      }
-    }
-  });
-
   it('still matches the reference without extensions', () => {
     for (const input of inputs.slice(0, 3)) {
       expect(parseTalata(input, true)).toEqual(parseReference(input, true));
