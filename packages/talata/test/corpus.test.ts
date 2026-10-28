@@ -1,9 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { corpusFiles, parseReference, parseTalata, ready } from './parsers';
+import type { GfmFeature } from './parsers';
 import { describeDiff, firstDiff } from './tree-diff';
 
-// The files come from `pnpm --filter benchmark corpus`. Both suites skip when
+// The files come from `pnpm --filter benchmark corpus`. The suites skip when
 // the corpus has not been downloaded.
 const files = corpusFiles();
 // Large corpus files take seconds in the reference parser on a loaded machine.
@@ -17,20 +18,88 @@ describe.skipIf(files.length === 0)('benchmark corpus through the reference pars
     if (file.name.startsWith('large/')) {
       continue;
     }
-    it(`parses ${file.name} into a root with positions`, () => {
-      const tree = parseReference(readFileSync(file.path, 'utf8'), true);
-      expect(tree.type).toBe('root');
-      expect(tree.position).toBeDefined();
-    }, timeout);
+    it(
+      `parses ${file.name} into a root with positions`,
+      () => {
+        const tree = parseReference(readFileSync(file.path, 'utf8'), true);
+        expect(tree.type).toBe('root');
+        expect(tree.position).toBeDefined();
+      },
+      timeout,
+    );
   }
 });
 
+describe.skipIf(files.length === 0 || !ready.corpus)(
+  'benchmark corpus through talata without gfm',
+  () => {
+    for (const file of files) {
+      it(
+        file.name,
+        () => {
+          const value = readFileSync(file.path, 'utf8');
+          const found = firstDiff(parseReference(value, false), parseTalata(value, false));
+          expect(describeDiff(found)).toBeUndefined();
+        },
+        timeout,
+      );
+    }
+  },
+);
+
+// Files that hold GFM constructs talata does not build yet, with the
+// features they need: table (gfm-tables), autolinkLiteral and strikethrough
+// (gfm-inline), taskList and footnote (gfm-tasks-footnotes). A file runs with
+// GFM once all its flags are on; each GFM node turns its flag on.
+const gfmWaiting = new Map<string, GfmFeature[]>([
+  ['large/node-fs.md', ['table']],
+  ['readmes/10.md', ['table', 'autolinkLiteral']],
+  ['readmes/100.md', ['table']],
+  ['readmes/103.md', ['table']],
+  ['readmes/110.md', ['table']],
+  ['readmes/112.md', ['table']],
+  ['readmes/114.md', ['autolinkLiteral']],
+  ['readmes/115.md', ['table']],
+  ['readmes/127.md', ['table']],
+  ['readmes/13.md', ['table']],
+  ['readmes/134.md', ['table']],
+  ['readmes/135.md', ['table']],
+  ['readmes/137.md', ['table']],
+  ['readmes/18.md', ['table']],
+  ['readmes/19.md', ['autolinkLiteral']],
+  ['readmes/33.md', ['table']],
+  ['readmes/38.md', ['autolinkLiteral']],
+  ['readmes/40.md', ['autolinkLiteral']],
+  ['readmes/87.md', ['taskList']],
+  ['readmes/91.md', ['table', 'autolinkLiteral']],
+  ['readmes/93.md', ['table', 'taskList']],
+  ['readmes/97.md', ['table']],
+  ['readmes/99.md', ['table']],
+]);
+
+function waitsOnGfm(name: string): boolean {
+  const features = gfmWaiting.get(name);
+  if (features === undefined) {
+    return false;
+  }
+  for (const feature of features) {
+    if (!ready.gfm[feature]) {
+      return true;
+    }
+  }
+  return false;
+}
+
 describe.skipIf(files.length === 0 || !ready.corpus)('benchmark corpus through talata', () => {
   for (const file of files) {
-    it(file.name, () => {
-      const value = readFileSync(file.path, 'utf8');
-      const found = firstDiff(parseReference(value, true), parseTalata(value, true));
-      expect(describeDiff(found)).toBeUndefined();
-    }, timeout);
+    it.skipIf(waitsOnGfm(file.name))(
+      file.name,
+      () => {
+        const value = readFileSync(file.path, 'utf8');
+        const found = firstDiff(parseReference(value, true), parseTalata(value, true));
+        expect(describeDiff(found)).toBeUndefined();
+      },
+      timeout,
+    );
   }
 });

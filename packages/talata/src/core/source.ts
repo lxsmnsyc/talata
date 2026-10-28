@@ -12,6 +12,11 @@ export interface Source {
   lineStarts: number[];
   /** Line index (0-based) of the last `point()` lookup. Speeds up lookups that move forward. */
   lastLine: number;
+  /**
+   * The text before NUL was replaced, when it had one. The reference keeps a
+   * NUL as its own chunk, which changes some text values (see emphasis).
+   */
+  withNul: string | undefined;
 }
 
 export function createSource(value: string): Source {
@@ -19,7 +24,9 @@ export function createSource(value: string): Source {
   if (text.length > 0 && text.charCodeAt(0) === BOM) {
     text = text.slice(1);
   }
+  let withNul: string | undefined;
   if (text.includes('\0')) {
+    withNul = text;
     text = text.replaceAll('\0', '�');
   }
   const lineStarts = [0];
@@ -35,7 +42,7 @@ export function createSource(value: string): Source {
       lineStarts.push(i + 1);
     }
   }
-  return { text, lineStarts, lastLine: 0 };
+  return { text, lineStarts, lastLine: 0, withNul };
 }
 
 /**

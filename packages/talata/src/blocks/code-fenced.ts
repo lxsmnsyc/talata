@@ -1,9 +1,10 @@
 import type { Code } from 'mdast';
 import type { BlockRule, BlockState, OpenBlock } from '../core/blocks';
-import { isSpaceOrTab } from '../core/chars';
+import { CR, LF, isSpaceOrTab } from '../core/chars';
 import type { Line } from '../core/line';
 import { point, skipLineEnding } from '../core/source';
 import { isEmptyLastLine, lineContent } from './code-indented';
+import { matchedOnlyAtEnd } from './blockquote';
 import decodeString from './decode';
 
 const BACKTICK = 96;
@@ -40,10 +41,11 @@ class OpenFencedCode implements OpenBlock {
   end: number;
   lang: string | null;
   meta: string | null;
-  value = '';
-  lines = 0;
-  /** Length of the line ending before the last content line, when that line is empty. */
-  emptyLast = 0;
+  /**
+   * Content as the reference buffers it: every line ending after the opening
+   * fence, and content lines without their prefixes.
+   */
+  raw = '';
   /** The current line is the closing fence. */
   closing = false;
   closed = false;
@@ -66,8 +68,8 @@ class OpenFencedCode implements OpenBlock {
     this.meta = meta;
   }
 
-  continue(_state: BlockState, line: Line): boolean {
-    if (this.closed) {
+  continue(state: BlockState, line: Line): boolean {
+    if (this.closed || (isEmptyLastLine(line) && matchedOnlyAtEnd(state, line))) {
       return false;
     }
     this.closing = isClosingFence(line, this.marker, this.size);
@@ -77,44 +79,63 @@ class OpenFencedCode implements OpenBlock {
   addLine(state: BlockState, line: Line): void {
     const text = state.source.text;
     const next = skipLineEnding(text, this.end);
+    const eol = text.slice(this.end, next);
     if (isEmptyLastLine(line)) {
       // micromark ends the block after the line ending, with no content line.
       this.end = next;
-      this.emptyLast = 0;
+      this.raw += eol;
       return;
     }
-    const eol = text.slice(this.end, next);
     this.end = line.end;
     if (this.closing) {
       this.closed = true;
+      this.raw += eol;
       line.start = line.end;
       return;
     }
-    const content = lineContent(line, this.indent);
-    // The line ending after the opening fence is not part of the value.
-    this.value = this.lines === 0 ? content : this.value + eol + content;
-    this.emptyLast = this.lines > 0 && content === '' ? eol.length : 0;
-    this.lines++;
+    this.raw += eol + lineContent(line, this.indent);
   }
 
   close(state: BlockState): Code {
     let end = this.end;
-    let value = this.value;
+    let raw = this.raw;
     if (!this.closed && state.closeKeepsLineEnding) {
       end = skipLineEnding(state.source.text, end);
-    } else if (!this.closed && this.emptyLast > 0) {
-      // Without a closing fence or a kept line ending, the reference drops
-      // the line ending before an empty last line.
-      value = value.slice(0, value.length - this.emptyLast);
+      raw += state.source.text.slice(this.end, end);
     }
     return {
       type: 'code',
       lang: this.lang,
       meta: this.meta,
-      value,
+      value: trimLineEndings(raw),
       position: { start: point(state.source, this.start), end: point(state.source, end) },
     };
   }
+}
+
+/**
+ * Drops one line ending from each end, as the reference's
+ * `/^(\r?\n|\r)|(\r?\n|\r)$/g` does. A `\r` after the fence and a `\n`
+ * after an empty first line go together as one `\r\n`.
+ */
+function trimLineEndings(raw: string): string {
+  let from = 0;
+  const first = raw.charCodeAt(0);
+  if (first === CR) {
+    from = raw.charCodeAt(1) === LF ? 2 : 1;
+  } else if (first === LF) {
+    from = 1;
+  }
+  let to = raw.length;
+  if (to > from) {
+    const last = raw.charCodeAt(to - 1);
+    if (last === LF) {
+      to = to - 1 > from && raw.charCodeAt(to - 2) === CR ? to - 2 : to - 1;
+    } else if (last === CR) {
+      to--;
+    }
+  }
+  return raw.slice(from, to);
 }
 
 const codeFenced: BlockRule = {

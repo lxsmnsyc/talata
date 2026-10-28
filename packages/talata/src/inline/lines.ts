@@ -32,15 +32,6 @@ export function peek(state: InlineState, cursor: Cursor): number {
   return cursor.range + 2 < state.ranges.length ? LINE_ENDING : END;
 }
 
-/**
- * Container prefixes of continuation lines, set by paragraphs and keyed by
- * their `lines` array (the ranges the inline parser gets): flat triples of
- * the line's end offset (its range end), offset after the
- * container prefixes, and split-tab columns left there. A line with no entry
- * has no whitespace between its containers and its content.
- */
-export const lineIndents: WeakMap<number[], number[]> = new WeakMap();
-
 // The furthest range a construct has looked into in the current leaf.
 // micromark feeds a leaf to its text tokenizer one line at a time, and a
 // line ending's end point skips the next line's container prefixes only
@@ -102,15 +93,16 @@ let splitColumns = 0;
 
 /**
  * Offset after the container prefixes on the line of range `range` (not the
- * first). Sets `splitColumns`. Paragraphs register exact values in
- * `lineIndents`; for other leaves this guesses from the source: all
+ * first). Sets `splitColumns`. Paragraphs pass exact values in
+ * `state.indents` (a line with no entry has no whitespace between its
+ * containers and its content); for other leaves this guesses from the source: all
  * whitespace when only whitespace precedes the range, else what follows a
  * block quote marker and its optional space.
  */
 export function containerEnd(state: InlineState, range: number): number {
   const ranges = state.ranges;
   const start = ranges[range];
-  const indents = lineIndents.get(ranges);
+  const indents = state.indents;
   splitColumns = 0;
   if (indents !== undefined) {
     // Line ending offsets grow, so search them in halves.
@@ -145,6 +137,15 @@ export function containerEnd(state: InlineState, range: number): number {
     splitColumns = 3 - (visualColumn(text, lineStart, from) % 4);
   }
   return from + 1;
+}
+
+/**
+ * Split-tab columns at the start of what the last `linePrefix` call
+ * returned. micromark reads them as virtual spaces, which are data, not
+ * spaces.
+ */
+export function prefixSplitColumns(): number {
+  return splitColumns;
 }
 
 /** Visual column (tab stops of 4) of `offset` on the line starting at `lineStart`. */

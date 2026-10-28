@@ -30,7 +30,9 @@ function viaRemark(input: string, gfm: boolean): string {
 }
 
 function viaTalata(input: string, gfm: boolean): string {
-  return String(unified().use(talata, { gfm }).use(remarkRehype).use(rehypeStringify).processSync(input));
+  return String(
+    unified().use(talata, { gfm }).use(remarkRehype).use(rehypeStringify).processSync(input),
+  );
 }
 
 describe('unified plugin', () => {
@@ -58,7 +60,9 @@ describe('unified plugin', () => {
   });
 
   it('works without options', () => {
-    const html = String(unified().use(talata).use(remarkRehype).use(rehypeStringify).processSync('# a'));
+    const html = String(
+      unified().use(talata).use(remarkRehype).use(rehypeStringify).processSync('# a'),
+    );
     expect(html).toBe('<h1>a</h1>');
   });
 });

@@ -20,6 +20,25 @@ export interface BlockState extends DocumentState {
   /** True when `paragraph` is set but the current line did not match all containers above it. */
   lazy: boolean;
   /**
+   * The open leaf at the tip when every container matched the line, whether
+   * or not it continued; undefined otherwise. Lists refuse some starts after
+   * indented code (`    a\n2. b`), as after a paragraph.
+   */
+  tip: OpenBlock | undefined;
+  /**
+   * True when an open container did not match the line and no container
+   * started on it (micromark's lazy line, with or without a paragraph).
+   * Indented code that starts on such a line ends with it.
+   */
+  unmatched: boolean;
+  /**
+   * Index of the last line a block quote matched only through its
+   * end-of-file rule (nothing after an outer quote prefix on a last line
+   * with no line ending), or -1. micromark treats that line as lazy for the
+   * quote, so fenced code and HTML inside end before it.
+   */
+  endOnlyLine: number;
+  /**
    * True while open blocks close because a container starts on the current
    * line, or because the document ends after a line ending that every open
    * container continues over. micromark then keeps the line ending after the
@@ -51,8 +70,13 @@ export interface BlockState extends DocumentState {
    * restore after a failed start does not undo it.
    */
   openContainer(block: OpenBlock): void;
-  /** Schedules inline parsing of `ranges` into `node.children` after all blocks close. */
-  inline(node: { children: PhrasingContent[] }, ranges: number[]): void;
+  /**
+   * Schedules inline parsing of `ranges` into `node.children` after all
+   * blocks close. `indents` holds flat triples for lines with whitespace
+   * after their container prefixes: line ending offset, offset after the
+   * prefixes, split-tab columns (`OpenParagraph` keeps them).
+   */
+  inline(node: { children: PhrasingContent[] }, ranges: number[], indents?: number[]): void;
 }
 
 export interface BlockRule {
@@ -92,6 +116,14 @@ export interface OpenBlock {
    * no rule starts go to `addLine`. GFM table bodies use it.
    */
   interruptible?: boolean;
+  /**
+   * Leaves: when true and the block interrupts a lazy paragraph on a line
+   * that has a line ending, the containers that did not match stay open and
+   * the block goes in the paragraph's container. micromark cannot finish the
+   * interrupt check of kind 7 HTML before the next line, so it does not exit
+   * those containers (`> a\n<x>\n> c` keeps `<x>\nc` in the quote).
+   */
+  keepsLazyContainers?: boolean;
   /**
    * Containers: whether `block` may be a direct child. When a new block
    * starts and the matched container refuses it, the container closes, and
@@ -165,6 +197,9 @@ export class BlockParser implements BlockState {
   container: OpenBlock = document;
   paragraph: OpenParagraph | undefined = undefined;
   lazy = false;
+  tip: OpenBlock | undefined = undefined;
+  unmatched = false;
+  endOnlyLine = -1;
   closeKeepsLineEnding = false;
   /** Open blocks from the document to the tip. */
   stack: OpenBlock[] = [document];
@@ -174,6 +209,7 @@ export class BlockParser implements BlockState {
   containerIndex = 0;
   inlineNodes: { children: PhrasingContent[] }[] = [];
   inlineRanges: number[][] = [];
+  inlineIndents: (number[] | undefined)[] = [];
 
   constructor(state: DocumentState) {
     this.source = state.source;
@@ -274,6 +310,8 @@ export class BlockParser implements BlockState {
     this.container = stack[this.containerIndex];
     this.paragraph = paragraph;
     this.lazy = paragraph !== undefined && matched !== top;
+    this.tip = !tip.isContainer && matched >= top - 1 ? tip : undefined;
+    this.unmatched = this.containerIndex < (tip.isContainer ? top : top - 1);
 
     let started = false;
     while (!line.blank) {
@@ -284,9 +322,15 @@ export class BlockParser implements BlockState {
         break;
       }
       started = true;
+      if (this.lazy && block.keepsLazyContainers === true && line.end < line.text.length) {
+        // Close only the paragraph; the block takes its place.
+        this.containerIndex = stack.length - 2;
+      }
       this.attach(block);
       this.paragraph = undefined;
       this.lazy = false;
+      this.tip = undefined;
+      this.unmatched = false;
       if (!block.isContainer) {
         return;
       }
@@ -382,6 +426,8 @@ export class BlockParser implements BlockState {
     this.attach(block);
     this.paragraph = undefined;
     this.lazy = false;
+    this.tip = undefined;
+    this.unmatched = false;
   }
 
   allowsLazy(matched: number, top: number): boolean {
@@ -468,8 +514,9 @@ export class BlockParser implements BlockState {
     return taken;
   }
 
-  inline(node: { children: PhrasingContent[] }, ranges: number[]): void {
+  inline(node: { children: PhrasingContent[] }, ranges: number[], indents?: number[]): void {
     this.inlineNodes.push(node);
     this.inlineRanges.push(ranges);
+    this.inlineIndents.push(indents);
   }
 }

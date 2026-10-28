@@ -315,7 +315,8 @@ function parseDefinition(state: BlockState, scanner: Scanner): Definition | unde
     identifier: identifier.toLowerCase(),
     label: decodeString(label),
     url: decodeString(url),
-    title: title === undefined ? null : decodeString(title),
+    // The reference has no title token for an empty title.
+    title: title === undefined || title === '' ? null : decodeString(title),
     position: { start: point(state.source, start), end: point(state.source, scanner.end) },
   };
 }

@@ -30,8 +30,12 @@ function continueCode(_state: BlockState, line: Line): boolean {
   return line.blank || line.indent >= 4;
 }
 
+function continueNever(): boolean {
+  return false;
+}
+
 class OpenIndentedCode implements OpenBlock {
-  name = 'codeIndented';
+  name: string;
   isContainer = false;
   acceptsLazy = false;
   start: number;
@@ -43,14 +47,20 @@ class OpenIndentedCode implements OpenBlock {
   /** Line endings of blank lines that may still turn out to be trailing. */
   pending = '';
 
-  constructor(start: number, end: number, value: string) {
+  constructor(start: number, end: number, value: string, single: boolean) {
     this.start = start;
     this.end = end;
     this.last = end;
     this.value = value;
+    // micromark checks for a lazy line at the line's end before it looks for
+    // more code, so code started on one never continues (`>\n    a\n    b`).
+    this.continue = single ? continueNever : continueCode;
+    // micromark has ended such code at its line ending, so lists after it
+    // are not restricted (`BlockState.tip` tests the name `codeIndented`).
+    this.name = single ? 'codeIndentedLine' : 'codeIndented';
   }
 
-  continue: (state: BlockState, line: Line) => boolean = continueCode;
+  continue: (state: BlockState, line: Line) => boolean;
 
   addLine(state: BlockState, line: Line): void {
     const text = state.source.text;
@@ -90,13 +100,13 @@ const codeIndented: BlockRule = {
   name: 'codeIndented',
   priority: 800,
   canInterruptParagraph: false,
-  start(_state: BlockState, line: Line): OpenBlock | undefined {
+  start(state: BlockState, line: Line): OpenBlock | undefined {
     if (line.indent < 4) {
       return undefined;
     }
     const start = line.start;
     const value = lineContent(line, 4);
-    return new OpenIndentedCode(start, line.end, value);
+    return new OpenIndentedCode(start, line.end, value, state.unmatched);
   },
 };
 

@@ -2,7 +2,6 @@ import type { Paragraph } from 'mdast';
 import type { BlockState, OpenParagraph } from '../core/blocks';
 import type { Line } from '../core/line';
 import { point } from '../core/source';
-import { lineIndents } from '../inline/lines';
 
 // Paragraphs are not a registered rule: the block parser opens one for any
 // non-blank line that no rule starts, and adds lazy continuation lines to it.
@@ -21,8 +20,8 @@ class OpenParagraphBlock implements OpenParagraph {
    * Lines with whitespace after their container prefixes, as flat triples:
    * line ending offset, start of the whitespace, split tab columns. Labels of
    * definitions that span lines keep that whitespace, and so do code spans,
-   * raw HTML and line ending positions (`lineIndents`). Created with the
-   * first continuation line.
+   * raw HTML and line ending positions (passed to `inline`). Created with
+   * the first continuation line.
    */
   indents: number[] | undefined = undefined;
 
@@ -34,12 +33,10 @@ class OpenParagraphBlock implements OpenParagraph {
   continue: (state: BlockState, line: Line) => boolean = continueParagraph;
 
   addLine(_state: BlockState, line: Line): void {
-    if (this.indents === undefined) {
-      this.indents = [];
-      lineIndents.set(this.lines, this.indents);
-    }
+    const indents = this.indents ?? [];
+    this.indents = indents;
     if (line.nonBlank !== line.start || line.partialTab !== 0) {
-      this.indents.push(line.end, line.start, line.partialTab);
+      indents.push(line.end, line.start, line.partialTab);
     }
     this.lines.push(line.nonBlank, line.end);
   }
@@ -56,7 +53,7 @@ class OpenParagraphBlock implements OpenParagraph {
         end: point(state.source, lines[lines.length - 1]),
       },
     };
-    state.inline(node, lines);
+    state.inline(node, lines, this.indents);
     return node;
   }
 }

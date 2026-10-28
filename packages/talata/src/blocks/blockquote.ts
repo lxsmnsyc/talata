@@ -25,6 +25,11 @@ export interface TrackedContainer extends OpenBlock {
    * that starts on the line, so nested list starts stay restricted.
    */
   interruptLine: number;
+  /**
+   * Called when a new container starts on a line and closes this block:
+   * `position` is where that container starts, after the matched prefixes.
+   */
+  closedAt?(position: number, lineStart: number): void;
 }
 
 export function isTracked(block: OpenBlock): block is TrackedContainer {
@@ -44,12 +49,17 @@ export function parentQuoteLine(parent: OpenBlock): number {
  */
 export function closeAtNewContainer(state: BlockState, line: Line, position: number): void {
   const parent = state.container;
-  if (!isTracked(parent) || parent.quoteLine !== line.index) {
+  if (!isTracked(parent)) {
     return;
   }
+  const quoted = parent.quoteLine === line.index;
+  const lineStart = state.source.lineStarts[line.index];
   let child = parent.openChild;
   while (child !== undefined) {
-    child.closeEnd = position;
+    if (quoted) {
+      child.closeEnd = position;
+    }
+    child.closedAt?.(position, lineStart);
     child = child.openChild;
   }
 }
@@ -57,6 +67,10 @@ export function closeAtNewContainer(state: BlockState, line: Line, position: num
 /** True when a block start on `line` counts as interrupting a paragraph. */
 export function interrupts(state: BlockState, line: Line): boolean {
   if (state.paragraph !== undefined && !state.lazy) {
+    return true;
+  }
+  // micromark also sets its interrupt flag while indented code is open.
+  if (state.tip?.name === 'codeIndented') {
     return true;
   }
   const parent = state.container;
@@ -83,6 +97,14 @@ export function lastChildEnd(children: RootContent[]): number {
   return position === undefined ? -1 : position.end.offset!;
 }
 
+/**
+ * True when a quote above matched `line` only through the end-of-file rule.
+ * A leaf inside then ends before the line (`> > ```\n> > a\n>`).
+ */
+export function matchedOnlyAtEnd(state: BlockState, line: Line): boolean {
+  return state.endOnlyLine === line.index;
+}
+
 function consumeQuotePrefix(line: Line): boolean {
   if (line.indent >= 4 || line.text.charCodeAt(line.nonBlank) !== GREATER_THAN) {
     return false;
@@ -104,6 +126,9 @@ class OpenBlockquote implements TrackedContainer {
   interruptLine: number;
   start: number;
   end: number;
+  /** Where a new container that closed this quote starts, and its line start, or -1. */
+  nextEnd = -1;
+  nextLineStart = -1;
 
   constructor(start: number, end: number, line: number, interrupt: boolean) {
     this.start = start;
@@ -130,9 +155,15 @@ class OpenBlockquote implements TrackedContainer {
     ) {
       this.quoteLine = quoteLine;
       this.end = line.end;
+      state.endOnlyLine = line.index;
       return true;
     }
     return false;
+  }
+
+  closedAt(position: number, lineStart: number): void {
+    this.nextEnd = position;
+    this.nextLineStart = lineStart;
   }
 
   close(state: BlockState, children: RootContent[]): Blockquote {
@@ -143,6 +174,11 @@ class OpenBlockquote implements TrackedContainer {
     const childEnd = lastChildEnd(children);
     if (childEnd > end) {
       end = childEnd;
+      // The last child kept its line ending (fenced code, HTML): the quote
+      // exits where the new container starts.
+      if (childEnd === this.nextLineStart && this.nextEnd > end) {
+        end = this.nextEnd;
+      }
     }
     const flow: (BlockContent | DefinitionContent)[] = [];
     for (const child of children) {

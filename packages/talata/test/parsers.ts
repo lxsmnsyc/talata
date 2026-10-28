@@ -12,9 +12,10 @@ import { fromMarkdown } from '../src';
 // The roadmap node that lands a feature turns its flag on.
 export const ready = {
   // The block and inline parser: CommonMark spec examples, with and without gfm.
-  commonmark: false,
-  // Every file of the benchmark corpus, parsed with gfm.
-  corpus: false,
+  commonmark: true,
+  // Every file of the benchmark corpus, parsed without and with gfm (files
+  // that need unbuilt GFM features wait in corpus.test.ts).
+  corpus: true,
   // One flag per GFM feature. Each gates the spec examples of that section.
   gfm: {
     table: false,

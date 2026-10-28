@@ -288,7 +288,9 @@ function parseTitle(state: InlineState): boolean {
     while (pos < end) {
       const code = text.charCodeAt(pos);
       if (code === close) {
-        title = decodeString(value + text.slice(from, pos));
+        // The reference has no title token for an empty title.
+        const raw = value + text.slice(from, pos);
+        title = raw === '' ? null : decodeString(raw);
         cursor.pos = pos + 1;
         return true;
       }

@@ -1,5 +1,6 @@
 import type { BlockContent, DefinitionContent, ListItem, RootContent } from 'mdast';
 import type { BlockRule, BlockState, OpenBlock } from '../core/blocks';
+import { CR, LF } from '../core/chars';
 import { advanceLine, consumeColumns } from '../core/line';
 import type { Line } from '../core/line';
 import { point } from '../core/source';
@@ -31,6 +32,15 @@ class OpenListItem implements TrackedContainer, ItemState {
   furtherBlank = false;
   start: number;
   firstEnd: number;
+  /**
+   * Where the event that closes this item ends when it is on a later line: a
+   * sibling's marker and whitespace, or a new container's position. -1 if none.
+   */
+  nextEnd = -1;
+  /** Start of the line of `nextEnd`. */
+  nextLineStart = -1;
+  /** The item continued on the last line, which has no line ending. */
+  matchedEnd = false;
 
   constructor(start: number, firstEnd: number, size: number, initialBlank: boolean) {
     this.start = start;
@@ -44,6 +54,7 @@ class OpenListItem implements TrackedContainer, ItemState {
     if (line.blank) {
       this.furtherBlank = this.furtherBlank || this.initialBlank;
       consumeColumns(line, this.size);
+      this.matchedEnd = line.end === line.text.length;
       return true;
     }
     const further = this.furtherBlank;
@@ -53,7 +64,13 @@ class OpenListItem implements TrackedContainer, ItemState {
       return false;
     }
     consumeColumns(line, this.size);
+    this.matchedEnd = line.end === line.text.length;
     return true;
+  }
+
+  closedAt(position: number, lineStart: number): void {
+    this.nextEnd = position;
+    this.nextLineStart = lineStart;
   }
 
   close(state: BlockState, children: RootContent[]): ListItem {
@@ -67,6 +84,18 @@ class OpenListItem implements TrackedContainer, ItemState {
     const childEnd = lastChildEnd(children);
     if (childEnd > end) {
       end = childEnd;
+      // The last child kept its line ending (fenced code, HTML). The
+      // reference then finds no line ending before the event that closes the
+      // item, and ends the item at that event.
+      const text = state.source.text;
+      const before = text.charCodeAt(childEnd - 1);
+      if (before === LF || before === CR) {
+        if (this.nextLineStart === childEnd) {
+          end = this.nextEnd;
+        } else if (this.matchedEnd) {
+          end = text.length;
+        }
+      }
     }
     // Spread when a blank line separates two direct children.
     let spread = false;
@@ -130,6 +159,10 @@ const listItem: BlockRule = {
     let list: OpenList;
     if (sibling) {
       list = parent;
+      const previous = list.openChild;
+      if (previous instanceof OpenListItem) {
+        previous.closedAt(line.start, state.source.lineStarts[line.index]);
+      }
     } else {
       closeAtNewContainer(state, line, position);
       list = new OpenList(found, start);

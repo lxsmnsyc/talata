@@ -3,6 +3,7 @@ import type { BlockRule, BlockState, OpenBlock } from '../core/blocks';
 import { DASH, isSpaceOrTab } from '../core/chars';
 import type { Line } from '../core/line';
 import { point, skipLineEnding } from '../core/source';
+import { matchedOnlyAtEnd } from './blockquote';
 import { isEmptyLastLine, lineContent } from './code-indented';
 
 const EXCLAMATION = 33;
@@ -321,17 +322,19 @@ class OpenHtml implements OpenBlock {
   end: number;
   value: string;
   closed: boolean;
+  keepsLazyContainers: boolean;
 
   constructor(kind: number, start: number, end: number, value: string, closed: boolean) {
     this.kind = kind;
+    this.keepsLazyContainers = kind === COMPLETE;
     this.start = start;
     this.end = end;
     this.value = value;
     this.closed = closed;
   }
 
-  continue(_state: BlockState, line: Line): boolean {
-    if (this.closed) {
+  continue(state: BlockState, line: Line): boolean {
+    if (this.closed || (isEmptyLastLine(line) && matchedOnlyAtEnd(state, line))) {
       return false;
     }
     return this.kind < BASIC || !line.blank;

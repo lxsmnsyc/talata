@@ -1,6 +1,6 @@
 import type { Emphasis, PhrasingContent, Strong, Text } from 'mdast';
 import { ASTERISK, UNDERSCORE } from '../core/chars';
-import type { InlineRule, InlineState } from '../core/inline';
+import type { Delimiter, InlineRule, InlineState } from '../core/inline';
 import { nodeIndex, resolveSpan } from '../core/inline';
 import { point } from '../core/source';
 import { OTHER, PUNCTUATION, WHITESPACE, classifyCharacter } from './classify';
@@ -57,6 +57,27 @@ function parseRun(state: InlineState): boolean {
 }
 
 /**
+ * The text left of a delimiter run after pairing. When a run that ended right
+ * before a NUL lost markers from its end, the reference keeps the whole run
+ * as the value (its NUL chunk boundary breaks the slice); the position is
+ * still the shorter one.
+ */
+function leftover(state: InlineState, delimiter: Delimiter): string {
+  const text = state.source.text;
+  const withNul = state.source.withNul;
+  if (withNul !== undefined) {
+    let end = delimiter.end;
+    while (end < text.length && text.charCodeAt(end) === delimiter.marker) {
+      end++;
+    }
+    if (end > delimiter.end && withNul.charCodeAt(end) === 0) {
+      return text.slice(delimiter.start, end);
+    }
+  }
+  return text.slice(delimiter.start, delimiter.end);
+}
+
+/**
  * Wraps the nodes between the opener at `open` and the closer at `close` in
  * emphasis or strong, using one or two markers from each. Returns the stack
  * index to continue from.
@@ -93,7 +114,7 @@ function pair(state: InlineState, open: number, close: number): number {
   const replacement: PhrasingContent[] = [];
   let next = close;
   if (opener.end > opener.start) {
-    opener.node.value = text.slice(opener.start, opener.end);
+    opener.node.value = leftover(state, opener);
     opener.node.position!.end = point(source, opener.end);
     replacement.push(opener.node);
   } else {
@@ -309,7 +330,6 @@ function pairList(
 function rebuild(state: InlineState, bottom: number, count: number, pairs: number[]): void {
   const delimiters = state.delimiters;
   const source = state.source;
-  const text = source.text;
   const pairCount = pairs.length / PAIR_SIZE;
   // Per delimiter: pairs it closes in pairing order (innermost first), and
   // pairs it opens in reverse order (outermost first).
@@ -360,7 +380,7 @@ function rebuild(state: InlineState, bottom: number, count: number, pairs: numbe
     }
     if (delimiter.end > delimiter.start) {
       if (closeHead[next] !== -1 || openHead[next] !== -1) {
-        delimiter.node.value = text.slice(delimiter.start, delimiter.end);
+        delimiter.node.value = leftover(state, delimiter);
         delimiter.node.position = {
           start: point(source, delimiter.start),
           end: point(source, delimiter.end),
