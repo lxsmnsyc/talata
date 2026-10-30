@@ -1,7 +1,7 @@
 ---
 id: release-0.2
 title: Docs and the 0.2 release
-status: active
+status: done
 priority: must
 type: release
 outline: false
@@ -12,7 +12,7 @@ size: S
 spike: false
 verify:
 exclusive: [benchmark]
-fulfilled_by:
+fulfilled_by: 63728b7
 gate: true
 added: 2026-10-28
 owns:
