@@ -165,7 +165,7 @@ test('open fences without a closing fence stay linear with anywhere', () => {
       ),
     ),
   ).toBeUndefined();
-  // Growth, not wall time: doubling the input must not much more than double the time.
+  // Growth, not wall time: four times the input must stay well under the 16x of quadratic.
   const best = (lines: number): number => {
     const text = '<<\n'.repeat(lines);
     let fastest = Infinity;
@@ -177,8 +177,8 @@ test('open fences without a closing fence stay linear with anywhere', () => {
     return fastest;
   };
   best(5000);
-  const ratio = best(60_000) / best(30_000);
-  expect(ratio).toBeLessThan(3);
+  const ratio = best(120_000) / best(30_000);
+  expect(ratio).toBeLessThan(8);
 });
 
 describe('frontmatter factory', () => {
