@@ -20,7 +20,7 @@ const RIGHT_BRACKET = 93;
 const LOWER_X = 120;
 const UPPER_X = 88;
 
-interface Candidate {
+export interface Candidate {
   item: ListItem;
   paragraph: Paragraph;
   /** The paragraph is the item's first paragraph: its first character goes. */
@@ -189,10 +189,11 @@ export function taskCandidates(
   }
 }
 
-// The leaf whose check matched, until its final resolve.
-let taskState: InlineState | undefined;
-let taskCandidate: Candidate | undefined;
-let taskNodes: PhrasingContent[] | undefined;
+/** The marker found in a leaf, until the leaf's resolve step handles it. */
+export interface TaskMark {
+  candidate: Candidate;
+  nodes: PhrasingContent[];
+}
 
 /** True when the paragraph line ending at `end` had whitespace after its container prefixes. */
 function keptWhitespace(indents: number[] | undefined, end: number): boolean {
@@ -286,9 +287,7 @@ function parse(state: InlineState): boolean {
   }
   map!.delete(pos);
   candidate.item.checked = checked;
-  taskState = state;
-  taskCandidate = candidate;
-  taskNodes = state.nodes;
+  state.task = { candidate, nodes: state.nodes };
   state.range = range;
   state.pos = close + 1;
   return true;
@@ -303,13 +302,12 @@ function parse(state: InlineState): boolean {
 function resolve(state: InlineState, bottom: number): void {
   // Strikethrough resolves the inside of its pairs with bottom 0 on other
   // node lists; only the leaf's own list counts.
-  if (state !== taskState || bottom !== 0 || state.nodes !== taskNodes) {
+  const task = state.task;
+  if (task === undefined || bottom !== 0 || state.nodes !== task.nodes) {
     return;
   }
-  const candidate = taskCandidate!;
-  taskState = undefined;
-  taskCandidate = undefined;
-  taskNodes = undefined;
+  const candidate = task.candidate;
+  state.task = undefined;
   const nodes = state.nodes;
   if (!candidate.slice || nodes.length === 0) {
     return;

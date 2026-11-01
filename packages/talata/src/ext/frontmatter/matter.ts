@@ -2,7 +2,6 @@ import type { RootContent } from 'mdast';
 import type { BlockRule, BlockState, OpenBlock } from '../../core/blocks';
 import { CR, LF, isSpaceOrTab } from '../../core/chars';
 import type { Line } from '../../core/line';
-import type { Registry } from '../../core/registry';
 import { point, skipLineEnding } from '../../core/source';
 
 /** One kind of matter with its fences resolved to strings. */
@@ -120,49 +119,6 @@ function open(
 /** Per parse: for each matter, the offset from which a scan found no closing fence. Keyed by the parse's source. */
 const noCloseByParse = new WeakMap<object, number[]>();
 
-/**
- * Rules that start containers. micromark does not look for new containers
- * while a concrete construct such as a matter is being tried, and it tries an
- * opening fence without a closing one until the end of the document. So after
- * such a fence (`---\n> a` gives a thematic break and a paragraph) no
- * container starts on the lines that follow.
- */
-const CONTAINER_RULES = ['blockquote', 'listItem', 'footnoteDefinition'];
-
-const withoutContainers = new WeakMap<Registry, Registry>();
-
-/** Registries made by `dropContainers`, so a second call on one returns it as is. */
-const dropped = new WeakSet<Registry>();
-
-function dropContainers(rules: Registry): Registry {
-  if (dropped.has(rules)) {
-    return rules;
-  }
-  let result = withoutContainers.get(rules);
-  if (result === undefined) {
-    const blockByChar: BlockRule[][] = [];
-    for (const list of rules.blockByChar) {
-      const kept: BlockRule[] = [];
-      for (const rule of list) {
-        if (!CONTAINER_RULES.includes(rule.name)) {
-          kept.push(rule);
-        }
-      }
-      blockByChar.push(kept);
-    }
-    const blockOther: BlockRule[] = [];
-    for (const rule of rules.blockOther) {
-      if (!CONTAINER_RULES.includes(rule.name)) {
-        blockOther.push(rule);
-      }
-    }
-    result = { ...rules, blockByChar, blockOther };
-    withoutContainers.set(rules, result);
-    dropped.add(result);
-  }
-  return result;
-}
-
 /** The block rule for a list of matters, tried in list order as the reference does. */
 export function matterRule(matters: ResolvedMatter[]): BlockRule {
   let triggers: string | undefined = '';
@@ -213,7 +169,9 @@ export function matterRule(matters: ResolvedMatter[]): BlockRule {
         }
       }
       if (unclosed && line.end < text.length) {
-        state.rules = dropContainers(state.rules);
+        // micromark tries the fence to the end of the document and starts no
+        // container after it (`---\n> a` gives a thematic break and a paragraph).
+        state.containerStartsOff = true;
       }
       return undefined;
     },

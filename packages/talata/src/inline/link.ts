@@ -60,29 +60,30 @@ const cursor: Cursor = { range: 0, pos: 0 };
 let url = '';
 let title: string | null = null;
 
-// Open brackets of the current leaf, so `]` does not scan the stack, with
-// their stack index as pushed and the number of links closed before them.
-// A `[` is inactive once a link closed after it (no links in links).
-let bracketState: InlineState | undefined;
-const brackets: Delimiter[] = [];
-const bracketIndexes: number[] = [];
-const bracketLinks: number[] = [];
-let linksClosed = 0;
-
-function trackBrackets(state: InlineState): void {
-  if (bracketState !== state) {
-    bracketState = state;
-    brackets.length = 0;
-    bracketIndexes.length = 0;
-    bracketLinks.length = 0;
-    linksClosed = 0;
-  }
+// Open brackets of the leaf, so `]` does not scan the stack, with their stack
+// index as pushed and the number of links closed before them. A `[` is
+// inactive once a link closed after it (no links in links). Kept on the
+// inline state, so a nested parse from a rule does not clobber them.
+export interface Brackets {
+  brackets: Delimiter[];
+  indexes: number[];
+  links: number[];
+  closed: number;
 }
 
-function popBracket(): void {
-  brackets.pop();
-  bracketIndexes.pop();
-  bracketLinks.pop();
+function trackBrackets(state: InlineState): Brackets {
+  let stack = state.brackets;
+  if (stack === undefined) {
+    stack = { brackets: [], indexes: [], links: [], closed: 0 };
+    state.brackets = stack;
+  }
+  return stack;
+}
+
+function popBracket(stack: Brackets): void {
+  stack.brackets.pop();
+  stack.indexes.pop();
+  stack.links.pop();
 }
 
 function openBracket(state: InlineState, start: number, end: number, marker: number): boolean {
@@ -101,10 +102,10 @@ function openBracket(state: InlineState, start: number, end: number, marker: num
     canClose: false,
     active: true,
   };
-  trackBrackets(state);
-  brackets.push(delimiter);
-  bracketIndexes.push(state.delimiters.length);
-  bracketLinks.push(linksClosed);
+  const stack = trackBrackets(state);
+  stack.brackets.push(delimiter);
+  stack.indexes.push(state.delimiters.length);
+  stack.links.push(stack.closed);
   state.delimiters.push(delimiter);
   state.pos = end;
   return true;
@@ -194,10 +195,10 @@ function isDefined(state: InlineState, range: number, from: number, to: number):
 }
 
 /** A `]` that closes nothing: kills the bracket and keeps `]` as text. */
-function failBracket(state: InlineState, open: number): boolean {
+function failBracket(state: InlineState, stack: Brackets, open: number): boolean {
   // Kept in place and made inert: a splice moves every delimiter above it.
   state.delimiters[open].marker = DEAD_BRACKET;
-  popBracket();
+  popBracket(stack);
   appendText(state, ']', state.pos, state.pos + 1);
   state.pos++;
   return true;
@@ -408,7 +409,8 @@ function toString(nodes: PhrasingContent[]): string {
 }
 
 function closeBracket(state: InlineState): boolean {
-  trackBrackets(state);
+  const stack = trackBrackets(state);
+  const { brackets, indexes, links } = stack;
   const delimiters = state.delimiters;
   // The nearest open bracket. Fall back to a search when other rules moved
   // the stack.
@@ -418,15 +420,15 @@ function closeBracket(state: InlineState): boolean {
       workSteps.count++;
     }
     const top = brackets.length - 1;
-    open = bracketIndexes[top];
+    open = indexes[top];
     if (delimiters[open] !== brackets[top]) {
       open = delimiters.lastIndexOf(brackets[top]);
-      bracketIndexes[top] = open;
+      indexes[top] = open;
     }
     if (open !== -1) {
       break;
     }
-    popBracket();
+    popBracket(stack);
   }
   if (open === -1) {
     return false;
@@ -434,9 +436,9 @@ function closeBracket(state: InlineState): boolean {
   const bracket = delimiters[open];
   if (
     !bracket.active ||
-    (bracket.marker === LEFT_BRACKET && bracketLinks[brackets.length - 1] < linksClosed)
+    (bracket.marker === LEFT_BRACKET && links[brackets.length - 1] < stack.closed)
   ) {
-    return failBracket(state, open);
+    return failBracket(state, stack, open);
   }
   const text = state.source.text;
   const close = state.pos;
@@ -476,10 +478,10 @@ function closeBracket(state: InlineState): boolean {
     // GFM: `![^a]` is `!` and a footnote call.
     if (bracket.marker === EXCLAMATION && imageFootnoteCall(state, bracket, labelRange, close)) {
       delimiters.length = open;
-      popBracket();
+      popBracket(stack);
       return true;
     }
-    return failBracket(state, open);
+    return failBracket(state, stack, open);
   }
   if (kind === SHORTCUT || kind === COLLAPSED) {
     reference = rangeText(state, labelRange, bracket.end, close);
@@ -492,12 +494,12 @@ function closeBracket(state: InlineState): boolean {
   const children = nodes.splice(index + 1);
   nodes.length = index;
   delimiters.length = open;
-  popBracket();
+  popBracket(stack);
   mergeText(children);
   const image = bracket.marker === EXCLAMATION;
   if (!image) {
     // No links inside links: earlier brackets can no longer form one.
-    linksClosed++;
+    stack.closed++;
   }
   const position = {
     start: point(state.source, bracket.start),

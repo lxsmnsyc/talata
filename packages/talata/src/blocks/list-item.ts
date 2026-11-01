@@ -150,6 +150,7 @@ class OpenListItem implements TrackedContainer, ItemState, TaskTarget {
 
 const listItem: BlockRule = {
   name: 'listItem',
+  opensContainer: true,
   priority: 700,
   canInterruptParagraph: true,
   triggers: '*+-0123456789',

@@ -10,7 +10,7 @@ import decodeString from './decode';
 const BACKTICK = 96;
 
 /** Whether `line` is a closing fence: at least `size` markers, then only spaces and tabs. */
-function isClosingFence(line: Line, marker: number, size: number): boolean {
+export function isClosingFence(line: Line, marker: number, size: number): boolean {
   if (line.indent >= 4) {
     return false;
   }
@@ -118,7 +118,7 @@ class OpenFencedCode implements OpenBlock {
  * `/^(\r?\n|\r)|(\r?\n|\r)$/g` does. A `\r` after the fence and a `\n`
  * after an empty first line go together as one `\r\n`.
  */
-function trimLineEndings(raw: string): string {
+export function trimLineEndings(raw: string): string {
   let from = 0;
   const first = raw.charCodeAt(0);
   if (first === CR) {

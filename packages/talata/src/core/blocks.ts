@@ -46,6 +46,30 @@ export interface BlockState extends DocumentState {
    */
   closeKeepsLineEnding: boolean;
   /**
+   * True: rules with `opensContainer` do not start for the rest of the
+   * document. micromark stops looking for containers after a construct that
+   * it tries to the end of the document and fails (an unclosed frontmatter
+   * fence). A rule sets it from `start`. Containers that are not CommonMark
+   * containers, such as directives, do not set `opensContainer` and keep
+   * starting; a rule may set the flag back to false.
+   */
+  containerStartsOff: boolean;
+  /**
+   * Index in the open blocks of `block` (0 is the document), or -1 when it is
+   * not open. Use it with `closeOpenBlocks`.
+   */
+  depthOf(block: OpenBlock): number;
+  /**
+   * Closes the open blocks above `depth`, innermost first, so the block at
+   * `depth` becomes the tip. A container calls it from its `continue` to end
+   * the blocks inside it early (a closing fence). While they close,
+   * `closeKeepsLineEnding` is `options.keepsLineEnding`: pass false when the
+   * container's content is a document of its own for the reference, so fenced
+   * code and HTML inside do not keep their last line ending. The block that
+   * calls it must still be open: pass `depthOf(this)` or less.
+   */
+  closeOpenBlocks(depth: number, options: { keepsLineEnding: boolean }): void;
+  /**
    * Removes the open paragraph so a rule can convert it (setext headings).
    * Paragraph prefix rules run first, so definitions at its start become
    * nodes. A rule calls it before it knows whether it starts: when it returns
@@ -94,6 +118,11 @@ export interface BlockRule {
   /** True: only registered when `options.gfm` is true. */
   gfm?: boolean;
   /**
+   * True for rules that start CommonMark containers (quote, list item,
+   * footnote definition). They are skipped while `BlockState.containerStartsOff`.
+   */
+  opensContainer?: boolean;
+  /**
    * Tries to start a block on the rest of `line`. On success, consume the
    * block's prefix from `line` (containers) or handle the whole line
    * (leaves), and return the open block. On failure, return undefined; the
@@ -108,6 +137,12 @@ export interface OpenBlock {
   /** The rule or node name, such as 'paragraph' or 'blockquote'. */
   name: string;
   isContainer: boolean;
+  /**
+   * Containers: false when a start of this block does not make the blocks it
+   * closes keep their line ending (`closeKeepsLineEnding`). A directive is a
+   * flow construct for the reference, not a container of the document.
+   */
+  startsContainer?: false;
   /** Containers: a paragraph inside may continue on a line that does not match this container. */
   acceptsLazy: boolean;
   /**
@@ -201,6 +236,7 @@ export class BlockParser implements BlockState {
   unmatched = false;
   endOnlyLine = -1;
   closeKeepsLineEnding = false;
+  containerStartsOff = false;
   /** Open blocks from the document to the tip. */
   stack: OpenBlock[] = [document];
   /** Closed child nodes of each open block, parallel to `stack`. */
@@ -254,16 +290,13 @@ export class BlockParser implements BlockState {
   }
 
   /**
-   * After a final line ending: whether every open container continues on the
-   * empty line after it. Only asked when the tip is a leaf other than a
-   * paragraph, the only blocks that read the answer.
+   * After a final line ending: whether every open block above the tip
+   * continues on the empty line after it. Asked for every tip, so a container
+   * or a paragraph at the tip sees the answer in `closeKeepsLineEnding` as a
+   * leaf does.
    */
   continuesOverEnd(line: Line): boolean {
     const stack = this.stack;
-    const tip = stack[stack.length - 1];
-    if (tip.isContainer || isParagraph(tip)) {
-      return false;
-    }
     const end = this.source.text.length;
     line.index = this.source.lineStarts.length - 1;
     line.start = end;
@@ -310,6 +343,11 @@ export class BlockParser implements BlockState {
     this.container = stack[this.containerIndex];
     this.paragraph = paragraph;
     this.lazy = paragraph !== undefined && matched !== top;
+    if (this.lazy && !this.allowsLazy(matched, top)) {
+      // A container that refuses lazy lines ends the paragraph: rules see none.
+      this.paragraph = undefined;
+      this.lazy = false;
+    }
     this.tip = !tip.isContainer && matched >= top - 1 ? tip : undefined;
     this.unmatched = this.containerIndex < (tip.isContainer ? top : top - 1);
 
@@ -344,13 +382,7 @@ export class BlockParser implements BlockState {
       deepest.addLine?.(this, line);
       return;
     }
-    if (
-      !started &&
-      paragraph !== undefined &&
-      this.lazy &&
-      !line.blank &&
-      this.allowsLazy(matched, top)
-    ) {
+    if (!started && paragraph !== undefined && this.lazy && !line.blank) {
       paragraph.addLine!(this, line);
       return;
     }
@@ -377,6 +409,9 @@ export class BlockParser implements BlockState {
       if (this.paragraph !== undefined && !rule.canInterruptParagraph) {
         continue;
       }
+      if (this.containerStartsOff && rule.opensContainer === true) {
+        continue;
+      }
       const block = rule.start(this, line);
       if (block !== undefined) {
         return block;
@@ -400,7 +435,7 @@ export class BlockParser implements BlockState {
    * containers that refuse it.
    */
   attach(block: OpenBlock): void {
-    this.closeKeepsLineEnding = block.isContainer;
+    this.closeKeepsLineEnding = block.isContainer && block.startsContainer !== false;
     this.closeTo(this.containerIndex);
     const stack = this.stack;
     while (stack.length > 1) {
@@ -437,6 +472,17 @@ export class BlockParser implements BlockState {
       }
     }
     return true;
+  }
+
+  depthOf(block: OpenBlock): number {
+    return this.stack.lastIndexOf(block);
+  }
+
+  closeOpenBlocks(depth: number, options: { keepsLineEnding: boolean }): void {
+    const keeps = this.closeKeepsLineEnding;
+    this.closeKeepsLineEnding = options.keepsLineEnding;
+    this.closeTo(depth);
+    this.closeKeepsLineEnding = keeps;
   }
 
   /** Closes open blocks until `depth` is the tip. */

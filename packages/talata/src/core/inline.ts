@@ -1,5 +1,7 @@
 import type { PhrasingContent, Text } from 'mdast';
 import { endRange, flushText, mergeText, takeRun } from '../inline/text';
+import type { Brackets } from '../inline/link';
+import type { TaskMark } from '../gfm/task-list';
 import type { DocumentState } from './state';
 
 /**
@@ -58,6 +60,19 @@ export interface InlineState extends DocumentState {
    * passed to `BlockState.inline`; undefined for leaves that did not pass any.
    */
   indents: number[] | undefined;
+  /**
+   * Per-leaf scratch of the built-in rules. It lives here and not in module
+   * variables, so a rule that calls `parseInline` from `parse` (a directive
+   * label) does not disturb the leaf it is in.
+   */
+  /** Open link brackets (`inline/link.ts`); created on the first bracket. */
+  brackets: Brackets | undefined;
+  /** The furthest range a construct looked into (`inline/lines.ts`); -1 before any. */
+  reached: number;
+  /** Whether `*` or `_` came before `~` in this leaf; undefined before either (`gfm/strikethrough.ts`). */
+  attentionFirst: boolean | undefined;
+  /** The task list item marker found in this leaf, until it resolves (`gfm/task-list.ts`). */
+  task: TaskMark | undefined;
 }
 
 export interface InlineRule {
@@ -109,6 +124,10 @@ export function createInlineState(
     textEnd: -1,
     delimiters: [],
     indents,
+    brackets: undefined,
+    reached: -1,
+    attentionFirst: undefined,
+    task: undefined,
   };
 }
 

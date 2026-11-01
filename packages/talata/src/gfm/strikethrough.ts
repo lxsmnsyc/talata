@@ -25,15 +25,9 @@ const PRIORITY = 50;
  */
 export const strikethroughPaths: { mixed: boolean } = { mixed: false };
 
-// The leaf whose first sequence was seen, and whether it was `*` or `_`.
-let orderState: InlineState | undefined;
-let attentionFirst = false;
-
+// Whether `*` or `_` came first in the leaf is kept on the inline state.
 function record(state: InlineState, attention: boolean): void {
-  if (orderState !== state) {
-    orderState = state;
-    attentionFirst = attention;
-  }
+  state.attentionFirst ??= attention;
 }
 
 function parseTildes(state: InlineState): boolean {
@@ -234,11 +228,10 @@ function hasTilde(delimiters: Delimiter[], bottom: number): boolean {
 }
 
 function resolveStrikethrough(state: InlineState, bottom: number): void {
-  const emphasisFirst = bottom === 0 && orderState === state && attentionFirst;
+  const emphasisFirst = bottom === 0 && state.attentionFirst === true;
   if (bottom === 0) {
-    // The resolve of the whole leaf is its last step: drop the reference so
-    // the leaf can be collected.
-    orderState = undefined;
+    // Later resolves with bottom 0 (inside pairs) see no order, as before.
+    state.attentionFirst = undefined;
   }
   const delimiters = state.delimiters;
   if (!hasTilde(delimiters, bottom)) {

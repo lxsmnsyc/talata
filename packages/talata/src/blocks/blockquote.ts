@@ -196,6 +196,7 @@ class OpenBlockquote implements TrackedContainer {
 
 const blockquote: BlockRule = {
   name: 'blockquote',
+  opensContainer: true,
   priority: 100,
   canInterruptParagraph: true,
   triggers: '>',
