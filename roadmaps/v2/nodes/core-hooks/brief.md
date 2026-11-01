@@ -1,7 +1,7 @@
 ---
 id: core-hooks
 title: Core hooks for container extensions
-status: todo
+status: active
 priority: must
 type: refactor
 outline: false
