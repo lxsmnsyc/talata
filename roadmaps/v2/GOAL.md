@@ -74,6 +74,7 @@ For 0.2, and again for 0.3 with directive added to each item:
 - "add frontmatter, math and directives as subpaths of talata" (user, 2026-10-28) -> ext-api, ext-frontmatter, ext-math, ext-directive
 - "this includes mdx in the future" (user) -> ext-mdx (outline, later)
 - 0.3 is directive only (user, 2026-11-02) -> core-hooks, ext-directive, release-0.3
+- "add to plan: a migration guide to talata" (user, 2026-11-02) -> docs-migration
 - v1 outline nodes ext-frontmatter, ext-math, ext-directive, ext-mdx -> moved here
 
 ## Decisions

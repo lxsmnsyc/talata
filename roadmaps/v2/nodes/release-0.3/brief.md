@@ -27,13 +27,16 @@ depends_on:
   - on: ext-directive
     kind: hard
     why: documents and ships it
+  - on: docs-migration
+    kind: hard
+    why: ships the guide and fills in its directive section
 ---
 
 # Docs and the 0.3 release
 
 ## Goal
 
-Document the `talata/directive` subpath in `packages/talata/README.md` (usage, the unified plugin, the `remark-directive` plugin it replaces, differences from the reference), update the size and speed tables, and add a minor changeset. The release workflow publishes 0.3.0 when the user merges the Version Packages pull request.
+Document the `talata/directive` subpath in `packages/talata/README.md` (usage, the unified plugin, the `remark-directive` plugin it replaces, differences from the reference), fill in the directive placeholder in `docs/migration.md` if docs-migration has landed, update the size and speed tables, and add a minor changeset. The release workflow publishes 0.3.0 when the user merges the Version Packages pull request.
 
 ## Acceptance
 
