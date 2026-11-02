@@ -1,4 +1,5 @@
 import type { ExtensionName } from '../parsers';
+import directive from './ext-directive';
 import frontmatter from './ext-frontmatter';
 import math from './ext-math';
 import type { Random } from './random';
@@ -25,7 +26,7 @@ export interface ExtensionFuzz {
   inline?: (random: Random, text: () => string) => string;
 }
 
-export const fuzzExtensions: ExtensionFuzz[] = [frontmatter, math];
+export const fuzzExtensions: ExtensionFuzz[] = [frontmatter, math, directive];
 
 /** Names of the extensions that are ready. */
 export function readyExtensions(): ExtensionName[] {
