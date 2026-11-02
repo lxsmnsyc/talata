@@ -21,6 +21,20 @@ import type { ItemState } from './list';
 
 const DIGIT_1 = 49;
 
+/** True when the line at `offset` is 2 or more lines after the item's last child, or its first line. */
+function blankLinesBefore(
+  state: BlockState,
+  flow: (BlockContent | DefinitionContent)[],
+  itemStart: number,
+  offset: number,
+): boolean {
+  const last =
+    flow.length > 0
+      ? flow[flow.length - 1].position!.end.line
+      : point(state.source, itemStart).line;
+  return point(state.source, offset).line - last >= 2;
+}
+
 class OpenListItem implements TrackedContainer, ItemState, TaskTarget {
   name = 'listItem';
   isContainer = true;
@@ -131,11 +145,13 @@ class OpenListItem implements TrackedContainer, ItemState, TaskTarget {
       footnoteIndentAt(state, this.nextLineStart)
     ) {
       end = this.nextEnd;
-      const last =
-        flow.length > 0
-          ? flow[flow.length - 1].position!.end.line
-          : point(state.source, this.start).line;
-      spread = spread || point(state.source, this.nextLineStart).line - last >= 2;
+      spread = spread || blankLinesBefore(state, flow, this.start, this.nextLineStart);
+    }
+    // The walk back from the list's end stops at a footnote indent on the
+    // item's last line, so a blank line before it that is not between two
+    // children still makes the item spread.
+    if (!spread && state.options.gfm && this.indentEnd >= 0 && this.indentEnd === end) {
+      spread = blankLinesBefore(state, flow, this.start, this.indentEnd);
     }
     const node: ListItem = {
       type: 'listItem',
