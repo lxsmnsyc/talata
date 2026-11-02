@@ -9,6 +9,6 @@
 
 ## Resume (after fix-directive-quote-end and fix-directive-nesting)
 
-- Merged origin/main (f5ea091, 027839f, PR #25). Fast check: 6759 tests pass, tsc clean, oxlint 0 errors, oxfmt clean.
-- Size and interleaved reran at load under 6. The README speed table and intro now say 17.4x, 18.3x, 21.2x (the first pass ran at load 8 to 25, which inflated the ratios). `talata/directive` is 19.4 KB gzip. Main entry is unchanged at 33.2 KB gzip.
+- Merged origin/main (f5ea091, 027839f, PR #25). Fast check: 6444 tests pass, tsc clean, oxlint 0 errors, oxfmt clean.
+- Size and interleaved reran at load under 6. The README speed table and intro now say 17.4x, 18.3x, 21.2x. The first pass ran at load 8 to 25, which inflated the ratios. `talata/directive` is 19.4 KB gzip. Main entry is unchanged at 33.2 KB gzip.
 - Fuzz seed 20261401, four chunks of 250,000 (`--start` 0, 250000, 500000, 750000), `--all`: 1,000,000 compared, 0 failures.

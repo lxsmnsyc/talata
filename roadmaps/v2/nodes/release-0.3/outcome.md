@@ -3,8 +3,8 @@
 ## Built
 
 - `.changeset/ext-directive.md`: minor for `talata`, announces `talata/directive`.
-- `packages/talata/README.md`: Directives section (usage, unified plugin, the `remark-directive` replacement, link to `docs/migration.md#directives`, note on look-ahead line ends), a `talata/directive` row in the extensions table, updated speed and size tables, the "not supported" bullet.
-- `README.md`: speedup range now 22 to 24 times.
+- `packages/talata/README.md`: a Directives section with usage, the unified plugin, the `remark-directive` replacement, the link to `docs/migration.md#directives` and a note on look-ahead line ends. Also a `talata/directive` row in the extensions table, new speed and size tables, and the "not supported" bullet.
+- `README.md`: speedup range now 17 to 21 times.
 - The directive guide in `docs/migration.md` is in main (PR #25). The README links to it.
 
 ## Deviations
@@ -26,7 +26,7 @@
 
 ## Verification
 
-- Fast check on the merged branch: 32 files, 6759 tests pass; tsc clean; oxlint 0 errors (2 existing `max-depth` warnings); oxfmt clean.
+- Fast check on the merged branch: 32 files and 6444 tests pass. tsc is clean, oxlint has 0 errors (2 existing `max-depth` warnings) and oxfmt is clean.
 - Fuzz, seed 20261401, 4 chunks of 250,000 (`--start` 0, 250000, 500000, 750000, `--all`: GFM, frontmatter, math, directive): 1,000,000 compared, 0 failures.
 - Full check: fast check, corpus, interleaved and size all exit 0.
 - Size: main entry 94046 bytes minified, 33184 gzip. Node talata 94.0 KB / 33.2 KB gzip, reference 118.2 KB / 35.9 KB. Gzip bytes per subpath: `talata/frontmatter` 1291, `talata/math` 12766, `talata/directive` 19426.

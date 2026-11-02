@@ -121,7 +121,7 @@ const tree = processor.parse(
 
 Remove `remark-parse` and `remark-directive` from the pipeline. Plugins that read directive nodes, such as the ones that turn them into hast, keep working because the tree is the same. Steps and a before and after example: [migration guide](../../docs/migration.md#directives).
 
-talata decides some line ends inside a container directive by looking one line ahead, where the reference lets micromark do it. The fuzzer found no difference in 1,000,000 documents, but it found several such cases while the extension was built, so report any difference you see.
+talata decides some line ends inside a container directive by looking one line ahead, where the reference lets micromark do it. The fuzzer found no difference in 1,000,000 documents. It found several such cases while the extension was built, so report any difference you see.
 
 ## What is not supported
 
@@ -156,7 +156,7 @@ Parse time grows linearly with input size, including on inputs that are quadrati
 
 talata ships one build for every runtime, with a table of the 2,125 named character references (about 9.5 KB gzip). In browser bundles, the reference decodes those names through the DOM and ships no table, so it is smaller there.
 
-Each extension adds to a bundle only when imported: `talata/frontmatter` is 1.3 KB gzip and `talata/math` is 12.8 KB gzip and `talata/directive` is 19.4 KB gzip. Both include the shared core code they reuse, so most of that is already in a bundle that imports `talata`.
+Each extension adds to a bundle only when imported: `talata/frontmatter` is 1.3 KB gzip, `talata/math` is 12.8 KB and `talata/directive` is 19.4 KB. All three include the shared core code they reuse, so most of that is already in a bundle that imports `talata`.
 
 ## How it is tested
 
