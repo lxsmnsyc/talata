@@ -1,7 +1,7 @@
 ---
 id: docs-migration
 title: Migration guide to talata
-status: active
+status: done
 priority: must
 type: docs
 outline: false
@@ -13,6 +13,7 @@ spike: false
 verify:
 exclusive: []
 fulfilled_by:
+spent: 85610
 gate: false
 added: 2026-11-02
 owns:
