@@ -40,3 +40,7 @@
 ## Size
 
 - Estimated S, actual S.
+
+## Landed
+
+Direct commit f5ea091 on main (2026-11-02), after one fresh review (clean). The review found two older cousins that also fail before this fix: a quote in a footnote definition in an item (`> :::b\n> + [^1]: >\n> \n>  `, spread) and a quote in a directive in an item in a quoted directive (`> :::b\n> + :::c\n>   >\n> \n> :::`, end line).

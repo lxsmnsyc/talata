@@ -1,7 +1,7 @@
 ---
 id: fix-directive-quote-end
 title: Fix container directive end positions in block quotes
-status: active
+status: done
 priority: must
 type: fix
 outline: false
@@ -13,6 +13,7 @@ spike: false
 verify: cd packages/talata && pnpm fuzz --seed 20261301 --start 900612 --count 1 --all --no-save && pnpm fuzz --seed 20261301 --start 295834 --count 1 --all --no-save
 exclusive: []
 fulfilled_by:
+spent: 204599
 gate: false
 added: 2026-11-02
 owns:
