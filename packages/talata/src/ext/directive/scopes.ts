@@ -77,38 +77,77 @@ function collectIdentifiers(
   }
 }
 
-/** Moves the labels that `set` gained after `from` and `inside` defines into `into`. */
-function take(
+/** The labels that `set` gained after `from`, in order. */
+function after(set: Set<string>, from: number): string[] {
+  const labels: string[] = [];
+  let index = 0;
+  for (const label of set) {
+    if (index++ >= from) {
+      labels.push(label);
+    }
+  }
+  return labels;
+}
+
+/** Labels a directive's content added, taken out of the sets early. */
+export interface Taken {
+  definitions: string[];
+  footnotes: string[];
+}
+
+/**
+ * Takes out of the sets what a directive's content added since `before`, on
+ * the line that closes the directive, and adds it to `into`. A definition on
+ * that line outside the directive then adds its label again.
+ */
+export function takeEarly(state: DocumentState, before: Snapshot, into?: Taken): Taken {
+  const taken: Taken = into ?? { definitions: [], footnotes: [] };
+  for (const label of after(state.definitions, before.definitions)) {
+    state.definitions.delete(label);
+    taken.definitions.push(label);
+  }
+  for (const label of after(state.footnotes, before.footnotes)) {
+    state.footnotes.delete(label);
+    taken.footnotes.push(label);
+  }
+  return taken;
+}
+
+/**
+ * Hides the labels in `labels` that `inside` defines: they are known only
+ * inside the directive. With `early` they are out of `set` already: the
+ * others go back, and one that a later definition added again stays.
+ */
+function hideLabels(
   set: Set<string>,
-  from: number,
+  labels: string[],
   inside: Set<string>,
+  early: boolean,
   depth: number,
   scope: Scope,
   into: Site[],
 ): void {
-  if (set.size <= from || inside.size === 0) {
-    return;
-  }
-  const labels: string[] = [];
-  let index = 0;
-  for (const label of set) {
-    if (index++ >= from && inside.has(label.toLowerCase())) {
-      labels.push(label);
-    }
-  }
   for (const label of labels) {
-    set.delete(label);
-    into.push({ set, label, depth, scope });
+    if (inside.has(label.toLowerCase())) {
+      if (!early) {
+        set.delete(label);
+      }
+      into.push({ set, label, depth, scope });
+    } else if (early) {
+      set.add(label);
+    }
   }
 }
 
 /**
- * Takes out what a directive's content added since `before`. `children` is
- * its content and `depth` that content's depth.
+ * Takes out what a directive's content added since `before`, or the labels
+ * in `taken` when they were taken out early. `children` is its content and
+ * `depth` that content's depth.
  */
 export function hide(
   state: BlockState,
   before: Snapshot,
+  taken: Taken | undefined,
   children: RootContent[],
   depth: number,
   scope: Scope,
@@ -116,9 +155,14 @@ export function hide(
   const definitions = new Set<string>();
   const footnotes = new Set<string>();
   collectIdentifiers(children, definitions, footnotes);
-  const found = getManager(state.source);
-  take(state.definitions, before.definitions, definitions, depth, scope, found.sites);
-  take(state.footnotes, before.footnotes, footnotes, depth, scope, found.sites);
+  const sites = getManager(state.source).sites;
+  const found = taken ?? {
+    definitions: after(state.definitions, before.definitions),
+    footnotes: after(state.footnotes, before.footnotes),
+  };
+  const early = taken !== undefined;
+  hideLabels(state.definitions, found.definitions, definitions, early, depth, scope, sites);
+  hideLabels(state.footnotes, found.footnotes, footnotes, early, depth, scope, sites);
 }
 
 /**

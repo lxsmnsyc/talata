@@ -1,5 +1,5 @@
 import type { Extension } from '../api';
-import containerDirective, { directiveEnd, directiveHtml } from './container';
+import containerDirective, { directiveScope } from './container';
 import leafDirective from './leaf';
 import directiveSpread from './spread';
 import textDirective from './text';
@@ -8,7 +8,7 @@ import textDirective from './text';
 export default function createDirective(): Extension {
   return {
     name: 'talata:directive',
-    blockRules: [directiveEnd, containerDirective, leafDirective, directiveHtml],
+    blockRules: [directiveScope, containerDirective, leafDirective],
     inlineRules: [textDirective],
     transforms: [directiveSpread],
   };

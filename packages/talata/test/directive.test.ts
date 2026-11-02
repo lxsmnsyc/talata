@@ -407,6 +407,38 @@ const containerInputs: string[] = [
   '[^a]\n>:::x\n>[^a]:\n[^a]:',
   '- :::x\n[^g ]:',
   '>:::b\n[^ e]:',
+  // Fuzz seed 20261106 (1,000,000 documents, all features), fixed on the v3 hooks.
+  '>:::a\n>>+ +\n>\n>',
+  '-\n  :::é{k=""}\n  - ```\n\t\n<',
+  '-\n  1) :::a\n     :::c\n\r    2)',
+  '1. +\n     :::b[[]]\n     :::b\n\n    +',
+  // Found while moving to the v3 hooks: a lazy line after `endContent`,
+  // definitions that close with the content, whitespace on a blank last line.
+  ' 2)  :::a\n\n    (\n    ',
+  '>:::a\n>\n    ~\n3)',
+  '516) :::9\r\r    :\r*',
+  '[foo]\r>:::a\r>[foo]:x\n"',
+  '[^big note]\n>:::x\n>[^big note]:>\n+',
+  '>:::b\n>* >\n>   \t',
+  '>:::y\n>- >\n>\t ',
+  '>:::y\n>- [^a]: >\n>       \n',
+  // Fuzz seed 20261107 (1,000,000 documents, all features).
+  '* [^1]::::a\r\r',
+  '>:::é\n>* >\n>\n>>',
+  '>:::a\n>- - >\n>\n>> x',
+  // Fuzz seed 20261108 (1,000,000 documents, all features).
+  '>:::b\n>\r:::a[[[^a]]]\n[^a]:',
+  '1) :::\t\r   [^a]:$$\r\r   <',
+  '- :::a\n  [^a]:```\n\n  c',
+  // Fuzz seed 20261109 (1,000,000 documents, all features).
+  '>:::x\n>>1.\n>  ',
+  '>:::x\n>>- >\n>  ',
+  // Fuzz seed 20261110 (1,000,000 documents, all features).
+  '>:a[$[]\\\n>]',
+  '>[^1]::::a\n>\t  -\n>\t  語',
+  '[^1]::::a\n    -\r    \\',
+  '[^1]::::a\n    -\n\n    b',
+  '[^1]::::a\n    - ```\n\n    b',
 ];
 
 describe('directive extension', () => {

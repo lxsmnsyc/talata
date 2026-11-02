@@ -99,8 +99,9 @@ export function parseLabel(
     // tab that a quote marker split leaves columns there, which it feeds.
     const tail = children.length > 0 ? children[children.length - 1] : undefined;
     const lineStart = skipLineEnding(text, ranges[ranges.length - 3]);
-    if (tail?.type === 'text' && tail.position?.end.offset === stop && lineStart < stop) {
-      tail.position.end = point(state.source, lineStart);
+    const position = tail?.type === 'text' || tail?.type === 'break' ? tail.position : undefined;
+    if (position?.end.offset === stop && lineStart < stop) {
+      position.end = point(state.source, lineStart);
     }
   }
   const from = trailingStart(text, lastStart, stop);

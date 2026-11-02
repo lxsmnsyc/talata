@@ -7,6 +7,7 @@ import type { Source } from '../../core/source';
 import { point, skipLineEnding } from '../../core/source';
 import {
   isFlow,
+  isTracked,
   lastChildEnd,
   linkChild,
   matchedOnlyAtEnd,
@@ -14,12 +15,11 @@ import {
 } from '../../blocks/blockquote';
 import type { TrackedContainer } from '../../blocks/blockquote';
 import { isClosingFence } from '../../blocks/code-fenced';
-import html from '../../blocks/html';
 import { isEmptyLastLine } from '../../blocks/code-indented';
-import { isThematicBreak } from '../../blocks/list';
+import OpenList, { isThematicBreak } from '../../blocks/list';
 import { queueLabel } from './labels';
-import { enter, hide, leave, snapshot } from './scopes';
-import type { Scope, Snapshot } from './scopes';
+import { enter, hide, leave, snapshot, takeEarly } from './scopes';
+import type { Scope, Snapshot, Taken } from './scopes';
 import { COLON, readHead } from './syntax';
 import type { Attributes } from './syntax';
 
@@ -53,40 +53,6 @@ function isVirtualLine(state: BlockState, line: Line): boolean {
 function hasLaterLine(state: BlockState, line: Line): boolean {
   const starts = state.source.lineStarts;
   return line.index + 1 < starts.length && starts[line.index + 1] < state.source.text.length;
-}
-
-/**
- * Whether the next line starts a container (a quote, a list item or a
- * footnote definition) after the quote markers of the `markers` quotes
- * around the directive.
- */
-function nextStartsContainer(state: BlockState, line: Line, markers: number): boolean {
-  const text = state.source.text;
-  let i = state.source.lineStarts[line.index + 1];
-  for (;;) {
-    while (isSpaceOrTab(text.charCodeAt(i))) {
-      i++;
-    }
-    if (markers === 0 || text.charCodeAt(i) !== GREATER_THAN) {
-      break;
-    }
-    i++;
-    markers--;
-  }
-  if (markers === 0) {
-    // All of them matched: the line continues the directive.
-    return false;
-  }
-  let end = i;
-  while (end < text.length && text.charCodeAt(end) !== 10 && text.charCodeAt(end) !== 13) {
-    end++;
-  }
-  return isContainerStart(state, text, i, end);
-}
-
-/** Whether `line`, where the containers around a directive stopped matching, starts no container. */
-function isLazy(state: BlockState, line: Line): boolean {
-  return line.indent >= 4 || !isContainerStart(state, line.text, line.nonBlank, line.end);
 }
 
 // The text of each parse with one more character, for `createEmptyLine`.
@@ -193,25 +159,19 @@ class OpenContainerDirective implements TrackedContainer {
   depth: number;
   scope: Scope;
   before: Snapshot | undefined = undefined;
+  /** What the content defined, taken out at the start of the line that closes this block. */
+  taken: Taken | undefined = undefined;
   /** `containerStartsOff` before this directive opened. */
   startsOff: boolean;
-  /**
-   * Columns of indent (list items, footnote definitions) that the containers
-   * around this block need before each of their quote markers and after the
-   * last one, outermost first. One more entry than `quotes`.
-   */
-  runs: number[] = [];
-  /** Quotes around this block. */
-  quotes = 0;
   /**
    * Set by `continuesAfter`: the next line does not continue the containers
    * around this block and starts no container, so micromark reads it as lazy.
    */
   lazyNext = false;
-  /** The last line this block consumed its own indent on, the offset after it, and its columns. */
-  indentLine = -1;
-  indentEnd = -1;
-  indentColumns = 0;
+  /** Set by `continuesAfter`: the next line does not continue the containers around, and starts one. */
+  startsNext = false;
+  /** The last line this block called `endContent` on. */
+  endedLine = -1;
 
   constructor(
     size: number,
@@ -234,6 +194,36 @@ class OpenContainerDirective implements TrackedContainer {
     this.startsOff = startsOff;
   }
 
+  /**
+   * A container starts outside this block, which closes. The blocks inside
+   * keep their line ending only when every container between them and the
+   * outermost closing directive continues over an empty line, as at the end
+   * of a document. Called innermost first.
+   */
+  willClose(state: BlockState, line: Line, keepsLineEnding: boolean): void {
+    const reached = state.getDepth(state.container);
+    let keeps = keepsLineEnding;
+    for (const directive of openDirectives.get(state.source) ?? []) {
+      if (state.getDepth(directive) > reached) {
+        keeps = keeps && directive.segmentKeeps(state, line);
+      }
+      if (directive === this) {
+        break;
+      }
+    }
+    // The content ended before this line: the line is not lazy for the
+    // blocks inside (a table there does not take it as a body row).
+    const unmatched = state.unmatched;
+    state.unmatched = false;
+    const sizes = snapshot(state);
+    state.closeOpenBlocks(state.getDepth(this), { keepsLineEnding: keeps });
+    state.unmatched = unmatched;
+    if (this.taken !== undefined) {
+      // Definitions that close now are part of the content.
+      takeEarly(state, sizes, this.taken);
+    }
+  }
+
   /** Closing the open containers inside: a new container starts outside, and the chain stops here. */
   closedAt(): void {
     this.openChild = undefined;
@@ -254,13 +244,12 @@ class OpenContainerDirective implements TrackedContainer {
   /** The open containers above this block, innermost last. */
   getInside(state: BlockState): TrackedContainer[] {
     const inside: TrackedContainer[] = [];
-    let depth = state.getDepth(this);
-    for (let child = this.openChild; child !== undefined; child = child.openChild) {
-      depth++;
-      if (state.getDepth(child) !== depth) {
+    for (let depth = state.getDepth(this) + 1; ; depth++) {
+      const block = state.getBlock(depth);
+      if (block === undefined || !block.isContainer || !isTracked(block)) {
         break;
       }
-      inside.push(child);
+      inside.push(block);
     }
     return inside;
   }
@@ -349,71 +338,6 @@ class OpenContainerDirective implements TrackedContainer {
     state.closeOpenBlocks(itself ? depth - 1 : depth, { keepsLineEnding });
   }
 
-  /**
-   * Reads the prefixes of the containers around this block from what they
-   * consumed on `line`: a quote marker, or columns of indent (list items,
-   * footnote definitions). Call it on lines where something follows the
-   * prefixes, so each container consumed all it needs.
-   */
-  measurePrefix(state: BlockState, line: Line): void {
-    const text = line.text;
-    const to = line.start;
-    const runs: number[] = [];
-    let column = 0;
-    let run = 0;
-    // Columns of whitespace that the quote before takes.
-    let skip = 0;
-    // The indents of the directives around this one are not prefixes.
-    const around: OpenContainerDirective[] = [];
-    for (const directive of openDirectives.get(state.source) ?? []) {
-      if (directive === this) {
-        break;
-      }
-      if (directive.indentLine === line.index) {
-        around.push(directive);
-      }
-    }
-    for (let i = state.source.lineStarts[line.index]; i <= to; i++) {
-      for (const directive of around) {
-        if (directive.indentEnd === i) {
-          run -= directive.indentColumns;
-        }
-      }
-      if (i === to) {
-        break;
-      }
-      const code = text.charCodeAt(i);
-      if (code === GREATER_THAN) {
-        runs.push(run);
-        run = 0;
-        column++;
-        skip = 1;
-        continue;
-      }
-      // A list marker on the start line counts as the indent it stands for.
-      let width = code === 9 ? 4 - (column % 4) : 1;
-      column += width;
-      if (skip > 0 && isSpaceOrTab(code)) {
-        width--;
-      }
-      skip = 0;
-      run += width;
-    }
-    runs.push(run - line.partialTab);
-    // A quote may also be indented by up to three columns of its own, so the
-    // need is the least indent seen on the lines so far.
-    const previous = this.runs;
-    if (previous.length === runs.length) {
-      for (let i = 0; i < runs.length; i++) {
-        if (previous[i] < runs[i]) {
-          runs[i] = previous[i];
-        }
-      }
-    }
-    this.runs = runs;
-    this.quotes = runs.length - 1;
-  }
-
   continue(state: BlockState, line: Line): boolean {
     if (isVirtualLine(state, line)) {
       // The parser asks the blocks from the document up, so the ones around
@@ -427,9 +351,6 @@ class OpenContainerDirective implements TrackedContainer {
     this.quoteLine = parentQuoteLine(state.container);
     if (this.closed || (isEmptyLastLine(line) && matchedOnlyAtEnd(state, line))) {
       return false;
-    }
-    if (!line.blank) {
-      this.measurePrefix(state, line);
     }
     // The closing fence is read before anything else, so blocks inside it
     // see an empty line and end.
@@ -446,105 +367,31 @@ class OpenContainerDirective implements TrackedContainer {
     // inside end before the line; this block takes the indent if any.
     const emptyBefore = isEmptyLastLine(line);
     if (this.indent > 0) {
-      const column = line.visualColumn;
       consumeColumns(line, this.indent);
-      this.indentLine = line.index;
-      this.indentEnd = line.start;
-      this.indentColumns = line.visualColumn - column;
     }
-    const last = isEmptyLastLine(line);
-    const empty = line.start === line.end && line.partialTab === 0;
     const later = this.continuesAfter(state, line);
-    // The next line does not continue the containers around, but starts one.
-    const next = !later && hasLaterLine(state, line) && !this.lazyNext;
-    if (last || (empty && !later && line.end < line.text.length && this.lazyNext)) {
-      // Nothing is left of the last line: the blocks inside end after the
-      // line ending before it. A line ending of this line stays in the
-      // directive.
+    if (!later && this.lazyNext) {
+      // micromark reads the next line as lazy, so the content ends with this
+      // line, as a document without a final line ending.
+      state.endContent(this);
+      this.endedLine = line.index;
+    }
+    if (isEmptyLastLine(line)) {
+      // Nothing is left of the last line of the content: the blocks inside
+      // end after the line ending before it. A line ending of this line
+      // stays in the directive.
       const text = state.source.text;
       this.end = line.end < text.length || !emptyBefore ? line.end : skipLineEnding(text, this.end);
-      if (next && this.quoteLine === line.index) {
-        // A container starts on the next line: the content took this line.
-        this.closeEnds(state, line, true);
-      }
-      if (hasLaterLine(state, line) && nextStartsContainer(state, line, this.quotes)) {
-        this.takeBlankLine(state, line);
-      }
       this.closeInside(state, line, false);
       return true;
     }
-    if (!later && this.lazyNext && this.onlyQuotesLeft(state, line)) {
-      // The content ends with this line, which holds only the markers of the
-      // quotes inside. micromark reads it as a last line without a line
-      // ending: the quotes take it, the leaves in them end before it.
-      for (const inside of this.getInside(state)) {
-        inside.closeEnd = line.end;
-      }
-      this.end = line.end;
-      const depth = state.getDepth(this);
-      state.closeOpenBlocks(depth, { keepsLineEnding: true });
-      advanceLine(line, line.end);
-      return true;
-    }
-    if ((!empty || later || next) && this.quoteLine === line.index) {
+    const empty = line.start === line.end && line.partialTab === 0;
+    if ((!empty || later || this.startsNext) && this.quoteLine === line.index) {
       // On a blank line before a final line ending they end with the line.
       this.closeEnds(state, line, line.blank && !hasLaterLine(state, line));
     }
     this.end = line.end;
     return true;
-  }
-
-  /**
-   * Whether the rest of `line` is the markers of the quotes inside this block
-   * and nothing else, and those quotes are all the open containers inside.
-   */
-  onlyQuotesLeft(state: BlockState, line: Line): boolean {
-    const inside = this.getInside(state);
-    if (inside.length === 0) {
-      return false;
-    }
-    for (const block of inside) {
-      if (block.name !== 'blockquote') {
-        return false;
-      }
-    }
-    // A last line without a line ending is one for the parser too.
-    const text = line.text;
-    if (line.end === text.length) {
-      return false;
-    }
-    // Each quote takes its marker and one space; anything more is content.
-    let markers = 0;
-    for (let i = line.start; i < line.end; i++) {
-      const code = text.charCodeAt(i);
-      if (code === GREATER_THAN) {
-        markers++;
-      } else if (code !== 32 || text.charCodeAt(i - 1) !== GREATER_THAN) {
-        return false;
-      }
-    }
-    return markers === inside.length;
-  }
-
-  /** Directives and footnote definitions inside still take a blank last line; the rest do not. */
-  takeBlankLine(state: BlockState, line: Line): void {
-    const text = state.source.text;
-    const container = state.container;
-    const blocks = this.getInside(state);
-    for (let i = 0; i < blocks.length; i++) {
-      const inside = blocks[i];
-      if (inside instanceof OpenContainerDirective) {
-        inside.end = skipLineEnding(text, line.end);
-      } else if (inside.name === 'footnoteDefinition') {
-        state.container = this.getParent(blocks, i);
-        if (!inside.continue(state, line)) {
-          break;
-        }
-      } else {
-        break;
-      }
-    }
-    state.container = container;
   }
 
   /**
@@ -557,21 +404,45 @@ class OpenContainerDirective implements TrackedContainer {
     const end = atLineEnd ? line.end : lineStart;
     // A list item or footnote prefix inside, before the quote, is a token on the line.
     let indented = false;
+    // Columns of the list item prefixes on a blank line.
+    let need = 0;
+    // A quote does not continue over a blank line: the blocks in it end with it.
+    let quoted = false;
+    // The prefix around this block on the line is a footnote definition's indent.
+    const parent = state.getBlock(state.getDepth(this) - 1);
+    const afterIndent = parent?.name === 'footnoteDefinition';
     for (
       let child: TrackedContainer | undefined = this.openChild;
       child !== undefined;
       child = child.openChild
     ) {
       if (child.name === 'blockquote') {
-        child.closeEnd = atLineEnd && indented && line.start < line.end ? line.end : lineStart;
+        // On a blank line, whitespace left after those prefixes is not one.
+        const prefixOnly = !line.blank || (line.indent <= need && !quoted);
+        child.closeEnd =
+          atLineEnd && indented && prefixOnly && line.start < line.end ? line.end : lineStart;
+        quoted = true;
       } else {
-        child.closeEnd = end;
+        // In a quote that ends on this blank line, the blocks end with it.
+        child.closeEnd = line.blank && quoted ? lineStart : end;
         indented = indented || child.name === 'listItem' || child.name === 'footnoteDefinition';
+        // A footnote definition takes no indent on a blank line.
+        need += getItemSize(child);
       }
-      if (line.blank && child.name === 'listItem') {
+      if (!line.blank && afterIndent && child.name === 'listItem') {
+        // The indent of a footnote definition around is a token on this
+        // line: an item that ends here ends at the line start, as the list.
+        raiseIndentEnd(child, lineStart);
+      }
+      if (line.blank && !quoted && child.name === 'listItem') {
         // A list item ends at its last content, or after the quote prefix of
         // this blank line when its last child kept its line ending.
-        child.closedAt?.(line.end, state.source.lineStarts[line.index]);
+        child.closedAt?.(line.end, lineStart);
+        if (child.openChild?.name === 'blockquote') {
+          // The quote in it ends here; a container that starts on a later
+          // line does not move the item's end there.
+          raiseIndentEnd(child, line.end);
+        }
       }
       if (child instanceof OpenContainerDirective) {
         // Its own content is handled by its own line.
@@ -586,6 +457,7 @@ class OpenContainerDirective implements TrackedContainer {
    */
   continuesAfter(state: BlockState, line: Line): boolean {
     this.lazyNext = false;
+    this.startsNext = false;
     if (!hasLaterLine(state, line)) {
       // Before a final line ending, in a quote, the content ends as before a lazy line.
       this.lazyNext = this.quoteLine === line.index;
@@ -606,27 +478,18 @@ class OpenContainerDirective implements TrackedContainer {
       next.end--;
     }
     measureLine(next);
-    const runs = this.runs;
-    for (let i = 0; i < runs.length; i++) {
-      const need = runs[i];
-      if (need > 0) {
-        if (!next.blank && next.indent < need) {
-          this.lazyNext = isLazy(state, next);
-          return false;
-        }
-        consumeColumns(next, need);
-      }
-      if (i === runs.length - 1) {
-        break;
-      }
-      if (next.indent >= 4 || text.charCodeAt(next.nonBlank) !== GREATER_THAN) {
-        this.lazyNext = isLazy(state, next);
+    const depth = state.getDepth(this);
+    let footnote = -1;
+    for (let i = 1; i < depth; i++) {
+      const block = state.getBlock(i)!;
+      const before = next.start;
+      if (!continuesNext(block, next, footnote)) {
+        // micromark reads the line as lazy unless a container starts on it.
+        this.startsNext = next.indent < 4 && isContainerStart(state, text, next.nonBlank, next.end);
+        this.lazyNext = !this.startsNext;
         return false;
       }
-      advanceLine(next, next.nonBlank + 1);
-      if (next.start < next.end && isSpaceOrTab(text.charCodeAt(next.start))) {
-        consumeColumns(next, 1);
-      }
+      footnote = block.name === 'footnoteDefinition' && next.start !== before ? next.start : -1;
     }
     return true;
   }
@@ -646,7 +509,7 @@ class OpenContainerDirective implements TrackedContainer {
       end = childEnd;
     }
     if (this.before !== undefined) {
-      hide(state, this.before, children, this.depth + 1, this.scope);
+      hide(state, this.before, this.taken, children, this.depth + 1, this.scope);
     }
     this.begin(state);
     leave(state);
@@ -672,6 +535,73 @@ class OpenContainerDirective implements TrackedContainer {
     result.position = { start: point(state.source, this.start), end: point(state.source, end) };
     return result;
   }
+}
+
+/**
+ * Whether `block`, a container around a directive, continues on `next`, a
+ * later line; consumes its prefix. It reads the block as its own `continue`
+ * would, without changing it. `footnote` is where the indent of a footnote
+ * definition just before ended, or -1.
+ */
+function continuesNext(block: OpenBlock, next: Line, footnote: number): boolean {
+  if (block instanceof OpenList) {
+    // The list decides for its open item, which needs its indent.
+    if (next.blank) {
+      return true;
+    }
+    const item = block.item;
+    if (item === undefined || item.furtherBlank || next.indent < item.size) {
+      return false;
+    }
+    consumeColumns(next, item.size);
+    return true;
+  }
+  if (block instanceof OpenContainerDirective) {
+    if (block.indent > 0) {
+      consumeColumns(next, block.indent);
+    }
+    return true;
+  }
+  switch (block.name) {
+    case 'blockquote': {
+      if (next.indent >= 4 || next.text.charCodeAt(next.nonBlank) !== GREATER_THAN) {
+        return false;
+      }
+      advanceLine(next, next.nonBlank + 1);
+      if (next.start < next.end && isSpaceOrTab(next.text.charCodeAt(next.start))) {
+        consumeColumns(next, 1);
+      }
+      return true;
+    }
+    case 'footnoteDefinition': {
+      if (next.blank || (next.indent === 0 && next.start === footnote)) {
+        return true;
+      }
+      if (next.indent < 4) {
+        return false;
+      }
+      consumeColumns(next, 4);
+      return true;
+    }
+    default:
+      // A list item continues where its list does.
+      return true;
+  }
+}
+
+/**
+ * Makes a list item end at `end` or later. `indentEnd` is the end of the last
+ * indent the item's walk back stops at (`src/blocks/list-item.ts`).
+ */
+function raiseIndentEnd(block: OpenBlock, end: number): void {
+  if ('indentEnd' in block && typeof block.indentEnd === 'number' && block.indentEnd < end) {
+    block.indentEnd = end;
+  }
+}
+
+/** Columns of indent the open item of `block` needs, when it is a list; else 0. */
+function getItemSize(block: OpenBlock): number {
+  return block instanceof OpenList && block.item !== undefined ? block.item.size : 0;
 }
 
 // Parses that made container directives, for the list item transform.
@@ -725,6 +655,16 @@ const containerDirective: BlockRule = {
     if (head === undefined) {
       return undefined;
     }
+    let open = openDirectives.get(state.source);
+    if (open !== undefined && open.length > 0) {
+      // Directives that did not match the line close when this block
+      // attaches, without line endings. Close them first, so the inline
+      // pass leaves their content before it reads this label (`scopes.ts`).
+      const reached = state.getDepth(state.container);
+      if (state.getDepth(open[open.length - 1]) > reached) {
+        state.closeOpenBlocks(reached, { keepsLineEnding: false });
+      }
+    }
     let label: Paragraph | undefined;
     if (head.labelStart !== -1) {
       label = {
@@ -740,7 +680,6 @@ const containerDirective: BlockRule = {
         queueLabel(state, label, head.labelStart, head.labelEnd);
       }
     }
-    let open = openDirectives.get(state.source);
     if (open === undefined) {
       open = [];
       openDirectives.set(state.source, open);
@@ -761,7 +700,6 @@ const containerDirective: BlockRule = {
       countDirectives(state, open),
       state.containerStartsOff,
     );
-    block.measurePrefix(state, line);
     open.push(block);
     // The content is a document of its own, where quotes and lists start.
     state.containerStartsOff = false;
@@ -772,15 +710,14 @@ const containerDirective: BlockRule = {
 };
 
 /**
- * Runs first on every line that is not blank, and starts nothing. When a
- * directive did not match the line, it closes on it, with the blocks inside.
- * If a container starts, the parser keeps the line ending of the blocks it
- * closes; inside a directive they keep it only when every container between
- * them and the directive continues over an empty line, so they close first
- * here when one does not.
+ * Runs first on every line that is not blank, and starts nothing. Each
+ * directive that did not match the line closes on it: what its content
+ * defined leaves the definition sets now, before a footnote definition on
+ * the line adds its label (`scopes.ts`). After `endContent`, the blocks
+ * inside close here, and the line is lazy again for the blocks that start.
  */
-const directiveEnd: BlockRule = {
-  name: 'directiveEnd',
+const directiveScope: BlockRule = {
+  name: 'directiveScope',
   priority: 1,
   canInterruptParagraph: true,
   start(state: BlockState, line: Line): undefined {
@@ -788,77 +725,31 @@ const directiveEnd: BlockRule = {
     if (open === undefined || open.length === 0) {
       return undefined;
     }
-    // The directives that close on this line, innermost first.
     const reached = state.getDepth(state.container);
-    const closing: OpenContainerDirective[] = [];
-    for (let i = open.length - 1; i >= 0 && state.getDepth(open[i]) > reached; i--) {
-      closing.push(open[i]);
+    let ended = false;
+    for (let i = open.length - 1; i >= 0; i--) {
+      const directive = open[i];
+      const depth = state.getDepth(directive);
+      if (depth <= reached) {
+        break;
+      }
+      if (directive.endedLine === line.index - 1) {
+        // The content ended on the line before (`endContent`), so the core
+        // shows this line as not lazy. That holds for the blocks inside,
+        // which close now; blocks that start on the line are outside.
+        state.closeOpenBlocks(depth, { keepsLineEnding: false });
+        ended = true;
+      }
+      if (directive.taken === undefined && directive.before !== undefined) {
+        directive.taken = takeEarly(state, directive.before);
+      }
     }
-    if (closing.length === 0) {
-      return undefined;
+    if (ended) {
+      state.unmatched = true;
     }
-    // A block that ends with a directive's content keeps its line ending when
-    // every container between it and the outermost closing directive
-    // continues over an empty line, and a container starts.
-    const keeps: boolean[] = [];
-    let all = true;
-    for (let i = closing.length - 1; i >= 0; i--) {
-      all = all && closing[i].segmentKeeps(state, line);
-      keeps[i] = all;
-    }
-    const starts = line.indent < 4 && isContainerStart(state, line.text, line.nonBlank, line.end);
-    // The content of each directive ended before this line, like a document
-    // ends: the line is not lazy for the blocks inside (a table there does
-    // not take it as a body row).
-    const unmatched = state.unmatched;
-    state.unmatched = false;
-    for (let i = 0; i < closing.length; i++) {
-      state.closeOpenBlocks(state.getDepth(closing[i]), { keepsLineEnding: keeps[i] && starts });
-    }
-    // The directives close too, before a definition on this line can add a
-    // label that their content defined as well (`scopes.ts`).
-    const outermost = closing[closing.length - 1];
-    state.closeOpenBlocks(state.getDepth(outermost) - 1, { keepsLineEnding: starts });
-    state.unmatched = unmatched;
     return undefined;
   },
 };
 
-/**
- * HTML (kind 7) that starts on a lazy line in a directive. The parser keeps
- * the containers it did not match open when the line has a line ending, as
- * micromark cannot finish the check before the next line. When the
- * directive's content ends with this line, micromark sees it without its
- * line ending, so the containers close.
- */
-const directiveHtml: BlockRule = {
-  name: 'directiveHtml',
-  priority: 399,
-  canInterruptParagraph: true,
-  triggers: '<',
-  start(state: BlockState, line: Line): OpenBlock | undefined {
-    const open = openDirectives.get(state.source);
-    if (!state.lazy || open === undefined || open.length === 0) {
-      return undefined;
-    }
-    const reached = state.getDepth(state.container);
-    let directive: OpenContainerDirective | undefined;
-    for (let i = open.length - 1; i >= 0 && directive === undefined; i--) {
-      const depth = state.getDepth(open[i]);
-      if (depth > 0 && depth <= reached) {
-        directive = open[i];
-      }
-    }
-    if (directive === undefined || directive.continuesAfter(state, line) || !directive.lazyNext) {
-      return undefined;
-    }
-    const block = html.start(state, line);
-    if (block !== undefined) {
-      block.keepsLazyContainers = false;
-    }
-    return block;
-  },
-};
-
-export { directiveEnd, directiveHtml };
+export { directiveScope };
 export default containerDirective;
