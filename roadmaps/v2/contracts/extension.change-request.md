@@ -16,10 +16,10 @@ Block side, `core/blocks.ts`:
 ```ts
 interface BlockState {
   // Index of `block` among the open blocks (0 is the document), or -1.
-  depthOf(block: OpenBlock): number;
+  getDepth(block: OpenBlock): number;
   // Closes the open blocks above `depth`, innermost first; the block at `depth` becomes the tip.
   // `closeKeepsLineEnding` is `options.keepsLineEnding` while they close, then its old value.
-  // Call it from a container's `continue`. Pass `state.depthOf(this)` or less.
+  // Call it from a container's `continue`. Pass `state.getDepth(this)` or less.
   closeOpenBlocks(depth: number, options: { keepsLineEnding: boolean }): void;
   // True: rules with `opensContainer` do not start for the rest of the document.
   // Writable: a rule may set it back to false.
@@ -53,7 +53,7 @@ Shared helpers extensions import instead of copying:
 
 - `strip(value, virtual, virtualEnd)` from `inline/code-span.ts`: code span and inline math padding.
 - `isClosingFence(line, marker, size)` and `trimLineEndings(raw)` from `blocks/code-fenced.ts`.
-- `createExhausted()`, `failedStart(cache, state, size)`, `markFailed(cache, size, start, known)` from `inline/exhausted.ts`: the "no closer up to the end of the leaf" cache of code span and inline math. Each rule creates its own cache.
+- `createExhausted()`, `getFailedStart(cache, state, size)`, `markFailed(cache, size, start, known)` from `inline/exhausted.ts`: the "no closer up to the end of the leaf" cache of code span and inline math. Each rule creates its own cache.
 
 ## Affected nodes
 
