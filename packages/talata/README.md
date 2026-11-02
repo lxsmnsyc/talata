@@ -1,6 +1,6 @@
 # talata
 
-A fast Markdown parser written in TypeScript. It returns the same [mdast](https://github.com/syntax-tree/mdast) tree as [`mdast-util-from-markdown`](https://github.com/syntax-tree/mdast-util-from-markdown), positions included. It covers CommonMark and GitHub Flavored Markdown (GFM), and parses about 22 to 24 times faster.
+A fast Markdown parser written in TypeScript. It returns the same [mdast](https://github.com/syntax-tree/mdast) tree as [`mdast-util-from-markdown`](https://github.com/syntax-tree/mdast-util-from-markdown), positions included. It covers CommonMark and GitHub Flavored Markdown (GFM), and parses about 17 to 21 times faster.
 
 Because the tree is the same, everything that reads mdast keeps working: remark plugins that transform the tree, `remark-rehype`, `mdast-util-to-hast`, `remark-stringify` and your own code.
 
@@ -130,16 +130,16 @@ talata decides some line ends inside a container directive by looking one line a
 
 ## Speed
 
-`pnpm --filter benchmark interleaved`: each round runs every parser once in random order, and the table shows the median of 15 rounds. Apple M2, Node 26.12.1. The load average was 8 to 25 from other jobs, so absolute times are higher than on a quiet machine. The ratios are the useful part.
+`pnpm --filter benchmark interleaved`: each round runs every parser once in random order, and the table shows the median of 15 rounds. Apple M2, Node 26.12.1, load average under 6.
 
 | Parser                           | Output | READMEs (174 files, 1.5 MB) | node `fs.md` (311 KB) | node `CHANGELOG_V22` (867 KB) |
 | -------------------------------- | ------ | --------------------------- | --------------------- | ----------------------------- |
-| `mdast-util-from-markdown` + GFM | mdast  | 2407.7 ms                   | 421.0 ms              | 840.2 ms                      |
-| **talata**, `gfm: true`          | mdast  | **100.5 ms**                | **19.2 ms**           | **36.2 ms**                   |
-| talata speedup                   |        | **24.0x**                   | **22.0x**             | **23.2x**                     |
-| `micromark` + GFM                | HTML   | 2115.7 ms                   | 365.0 ms              | 762.3 ms                      |
-| markdown-it                      | HTML   | 244.9 ms                    | 70.7 ms               | 130.5 ms                      |
-| marked                           | HTML   | 148.3 ms                    | 36.8 ms               | 92.8 ms                       |
+| `mdast-util-from-markdown` + GFM | mdast  | 782.1 ms                    | 189.1 ms              | 533.4 ms                      |
+| **talata**, `gfm: true`          | mdast  | **45.0 ms**                 | **10.3 ms**           | **25.2 ms**                   |
+| talata speedup                   |        | **17.4x**                   | **18.3x**             | **21.2x**                     |
+| `micromark` + GFM                | HTML   | 762.6 ms                    | 178.4 ms              | 503.6 ms                      |
+| markdown-it                      | HTML   | 108.2 ms                    | 35.6 ms               | 96.4 ms                       |
+| marked                           | HTML   | 68.4 ms                     | 17.5 ms               | 63.5 ms                       |
 
 markdown-it and marked build HTML, not mdast, so they are there for scale only.
 
@@ -156,7 +156,7 @@ Parse time grows linearly with input size, including on inputs that are quadrati
 
 talata ships one build for every runtime, with a table of the 2,125 named character references (about 9.5 KB gzip). In browser bundles, the reference decodes those names through the DOM and ships no table, so it is smaller there.
 
-Each extension adds to a bundle only when imported: `talata/frontmatter` is 1.3 KB gzip and `talata/math` is 12.8 KB gzip and `talata/directive` is 19.1 KB gzip. Both include the shared core code they reuse, so most of that is already in a bundle that imports `talata`.
+Each extension adds to a bundle only when imported: `talata/frontmatter` is 1.3 KB gzip and `talata/math` is 12.8 KB gzip and `talata/directive` is 19.4 KB gzip. Both include the shared core code they reuse, so most of that is already in a bundle that imports `talata`.
 
 ## How it is tested
 
