@@ -2,7 +2,7 @@ import type { PhrasingContent } from 'mdast';
 import type { InlineRule, InlineState } from '../../core/inline';
 import { point, skipLineEnding } from '../../core/source';
 import { strip } from '../../inline/code-span';
-import { createExhausted, failedStart, markFailed } from '../../inline/exhausted';
+import { createExhausted, getFailedStart, markFailed } from '../../inline/exhausted';
 import { linePrefix, prefixSplitColumns, reach, workSteps } from '../../inline/lines';
 import { appendText, pushNode } from '../../inline/text';
 
@@ -29,7 +29,7 @@ function parseMathText(state: InlineState, single: boolean): boolean {
     state.pos = open;
     return true;
   }
-  const known = failedStart(exhausted, state, size);
+  const known = getFailedStart(exhausted, state, size);
   if (known !== undefined && start > known) {
     appendText(state, text.slice(start, open), start, open);
     state.pos = open;

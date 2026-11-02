@@ -58,7 +58,7 @@ export interface BlockState extends DocumentState {
    * Index in the open blocks of `block` (0 is the document), or -1 when it is
    * not open. Use it with `closeOpenBlocks`.
    */
-  depthOf(block: OpenBlock): number;
+  getDepth(block: OpenBlock): number;
   /**
    * Closes the open blocks above `depth`, innermost first, so the block at
    * `depth` becomes the tip. A container calls it from its `continue` to end
@@ -66,7 +66,7 @@ export interface BlockState extends DocumentState {
    * `closeKeepsLineEnding` is `options.keepsLineEnding`: pass false when the
    * container's content is a document of its own for the reference, so fenced
    * code and HTML inside do not keep their last line ending. The block that
-   * calls it must still be open: pass `depthOf(this)` or less.
+   * calls it must still be open: pass `getDepth(this)` or less.
    */
   closeOpenBlocks(depth: number, options: { keepsLineEnding: boolean }): void;
   /**
@@ -474,7 +474,7 @@ export class BlockParser implements BlockState {
     return true;
   }
 
-  depthOf(block: OpenBlock): number {
+  getDepth(block: OpenBlock): number {
     return this.stack.lastIndexOf(block);
   }
 

@@ -11,7 +11,7 @@ import { advanceLine, consumeColumns, createLine, measureLine } from '../src/cor
 import type { Line } from '../src/core/line';
 import { point, skipLineEnding } from '../src/core/source';
 import { strip } from '../src/inline/code-span';
-import { createExhausted, failedStart, markFailed } from '../src/inline/exhausted';
+import { createExhausted, getFailedStart, markFailed } from '../src/inline/exhausted';
 import { pushNode } from '../src/inline/text';
 
 // Each hook of `roadmaps/v2/contracts/extension.change-request.md` is tested
@@ -50,8 +50,8 @@ class OpenFence implements OpenBlock {
       return false;
     }
     if (line.text.slice(line.nonBlank, line.end) === ':::') {
-      const depth = state.depthOf(this);
-      this.options.onDepth?.(depth, state.depthOf({} as OpenBlock));
+      const depth = state.getDepth(this);
+      this.options.onDepth?.(depth, state.getDepth({} as OpenBlock));
       this.closed = true;
       this.end = line.end;
       advanceLine(line, line.end);
@@ -175,7 +175,7 @@ function endOf(node: unknown): { line: number; column: number } {
   return { line: position.end.line, column: position.end.column };
 }
 
-describe('closeOpenBlocks and depthOf', () => {
+describe('closeOpenBlocks and getDepth', () => {
   const input = ':::\n```\na\n:::\nb\n';
 
   it('closes the blocks inside from continue', () => {
@@ -457,14 +457,14 @@ describe('helpers shared with extensions', () => {
     const cache = createExhausted();
     const leaf = { ranges: [0, 1] } as never;
     const other = { ranges: [0, 2] } as never;
-    let known = failedStart(cache, leaf, 2);
+    let known = getFailedStart(cache, leaf, 2);
     expect(known).toBeUndefined();
     markFailed(cache, 2, 10, known);
-    known = failedStart(cache, leaf, 2);
+    known = getFailedStart(cache, leaf, 2);
     expect(known).toBe(10);
     markFailed(cache, 2, 4, known);
-    expect(failedStart(cache, leaf, 2)).toBe(4);
-    expect(failedStart(cache, leaf, 3)).toBeUndefined();
-    expect(failedStart(cache, other, 2)).toBeUndefined();
+    expect(getFailedStart(cache, leaf, 2)).toBe(4);
+    expect(getFailedStart(cache, leaf, 3)).toBeUndefined();
+    expect(getFailedStart(cache, other, 2)).toBeUndefined();
   });
 });

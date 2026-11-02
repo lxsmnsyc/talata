@@ -18,7 +18,7 @@ export function createExhausted(): Exhausted {
 }
 
 /** The earliest failed start of a run of `size` in the leaf `state`, or undefined. */
-export function failedStart(
+export function getFailedStart(
   cache: Exhausted,
   state: InlineState,
   size: number,
@@ -30,7 +30,7 @@ export function failedStart(
   return cache.starts[size];
 }
 
-/** Records that the run of `size` at `start` found no closer. `known` is what `failedStart` returned. */
+/** Records that the run of `size` at `start` found no closer. `known` is what `getFailedStart` returned. */
 export function markFailed(
   cache: Exhausted,
   size: number,

@@ -1,6 +1,6 @@
 import type { InlineRule, InlineState } from '../core/inline';
 import { point, skipLineEnding } from '../core/source';
-import { createExhausted, failedStart, markFailed } from './exhausted';
+import { createExhausted, getFailedStart, markFailed } from './exhausted';
 import { linePrefix, prefixSplitColumns, reach, workSteps } from './lines';
 import { appendText, pushNode } from './text';
 
@@ -59,7 +59,7 @@ function parseCodeSpan(state: InlineState): boolean {
   }
   const size = pos - start;
   const open = pos;
-  const known = failedStart(exhausted, state, size);
+  const known = getFailedStart(exhausted, state, size);
   if (known !== undefined && start > known) {
     appendText(state, text.slice(start, open), start, open);
     state.pos = open;
