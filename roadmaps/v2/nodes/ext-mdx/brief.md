@@ -23,6 +23,9 @@ depends_on:
   - on: ext-api
     kind: contract
     via: extension
+  - on: core-hooks-3
+    kind: hard
+    why: JSX flow elements need the v4 container lookahead hooks
 ---
 
 # MDX extension

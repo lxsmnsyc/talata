@@ -1,7 +1,7 @@
 # Change request: extension v3 to v4
 
 - From node: ext-directive
-- Status: open
+- Status: accepted (2026-11-02)
 
 The v2-to-v3 request from this node was accepted on 2026-11-02 and built by core-hooks-2 (PR #22). Its text is in git history (`git show origin/main:roadmaps/v2/contracts/extension-directive.change-request.md`). This file holds the next request. Nothing in it blocks 0.3: the directive works on v3 with the workarounds below, and the fuzz is clean (see `roadmaps/v2/nodes/ext-directive/outcome.md`).
 
@@ -33,4 +33,4 @@ ext-directive (removes `isContainerStart`, `continuesNext` and the `unmatched` p
 
 ## Decision
 
-<Filled in by the orchestrator.>
+Accepted on 2026-11-02, not for 0.3. 0.3 ships with the workarounds above; a fresh review and a clean 1,000,000-document fuzz found them sound. Node core-hooks-3 (outline, before ext-mdx) builds these hooks as contract v4 and removes the workarounds. Point 2 must be fixed there, because ext-mdx hits the same problem.
