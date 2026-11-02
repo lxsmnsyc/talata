@@ -1,6 +1,6 @@
 # talata
 
-A fast Markdown parser written in TypeScript. It returns the same mdast tree as `mdast-util-from-markdown`, positions included, for CommonMark and GitHub Flavored Markdown. It parses about 17 to 22 times faster. It works as a drop-in parser for remark.
+A fast Markdown parser written in TypeScript. It returns the same mdast tree as `mdast-util-from-markdown`, positions included, for CommonMark and GitHub Flavored Markdown. It parses about 22 to 24 times faster. It works as a drop-in parser for remark.
 
 ```js
 import { fromMarkdown } from 'talata';
