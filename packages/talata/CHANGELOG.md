@@ -1,5 +1,15 @@
 # talata
 
+## 0.3.0
+
+### Minor Changes
+
+- 6931e15: Add the `talata/directive` subpath. `directive()` parses `:name[label]{attributes}`, `::name` and `:::name` directives and returns the same tree as `micromark-extension-directive` and `mdast-util-directive`, positions included. Pass it in `extensions`, with the core or the unified plugin. The main entry does not grow.
+
+### Patch Changes
+
+- c42a8ef: Fix `spread` of a list item in a GFM footnote definition when the item ends with blank lines inside a block quote, such as `[^a]:>7.\n    >\n    >`. It now matches `mdast-util-from-markdown`.
+
 ## 0.2.0
 
 ### Minor Changes
