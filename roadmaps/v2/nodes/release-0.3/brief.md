@@ -1,7 +1,7 @@
 ---
 id: release-0.3
 title: Docs and the 0.3 release
-status: active
+status: done
 priority: must
 type: release
 outline: false
@@ -13,6 +13,7 @@ spike: false
 verify:
 exclusive: [benchmark]
 fulfilled_by:
+spent: 309556
 gate: true
 added: 2026-11-02
 owns:
