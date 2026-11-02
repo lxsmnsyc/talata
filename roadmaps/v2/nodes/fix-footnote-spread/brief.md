@@ -1,7 +1,7 @@
 ---
 id: fix-footnote-spread
 title: Fix list spread inside a quote in a footnote
-status: active
+status: done
 priority: must
 type: fix
 outline: false
@@ -13,12 +13,14 @@ spike: false
 verify: cd packages/talata && pnpm fuzz --seed 20261105 --start 312807 --count 1 --all --no-save
 exclusive: []
 fulfilled_by:
+spent: 102114
 gate: false
 added: 2026-11-02
 owns:
   - packages/talata/src/gfm/footnote*.ts
   - packages/talata/src/blocks/**
   - packages/talata/test/fix-footnote-spread*.test.ts
+  - .changeset/fix-footnote-spread.md
 shared: []
 reserves: []
 provides: []
