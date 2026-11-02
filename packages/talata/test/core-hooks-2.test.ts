@@ -68,7 +68,7 @@ class OpenContent implements TrackedContainer {
     const closing = options.closing;
     const onClosing = options.onClosing;
     if (closing !== undefined || onClosing !== undefined) {
-      this.willClose = (state, keepsLineEnding) => {
+      this.willClose = (state, _line, keepsLineEnding) => {
         onClosing?.(this.name, keepsLineEnding);
         if (closing !== undefined) {
           state.closeOpenBlocks(state.getDepth(this), { keepsLineEnding: closing(state) });
@@ -88,7 +88,7 @@ class OpenContent implements TrackedContainer {
       onAbove(names);
     }
     if (this.options.endContent === true && endsHere(state, line)) {
-      state.endContent(this, line);
+      state.endContent(this);
     }
     this.end = line.end;
     return true;
@@ -204,7 +204,7 @@ describe('OpenBlock.willClose', () => {
         advanceLine(line, line.end);
         const block = new OpenContent({}, start, line.end);
         block.name = 'testOuter';
-        block.willClose = (_s, keeps) => {
+        block.willClose = (_s, _l, keeps) => {
           calls.push(`outer ${keeps}`);
         };
         return block;
@@ -375,8 +375,8 @@ describe('BlockState.endContent', () => {
   it('does not make the line after the content lazy for a table inside', () => {
     // The content ends before `b`: `b` and the next row start a table of their own.
     const input = '> :::x\n> | a |\n> | - |\nb\n| - |\n';
-    const control = tablesOf(parse(input, plain));
-    const tree = tablesOf(parse(input, ends));
+    const control = getTableTypes(parse(input, plain));
+    const tree = getTableTypes(parse(input, ends));
     expect(control).toEqual(['paragraph']);
     expect(tree).toEqual(['table']);
   });
@@ -450,6 +450,6 @@ function parse2(input: string, ...rules: BlockRule[]): Root {
 }
 
 /** The type of each root child that follows the first quote. */
-function tablesOf(tree: Root): string[] {
+function getTableTypes(tree: Root): string[] {
   return tree.children.slice(1).map((node) => node.type);
 }

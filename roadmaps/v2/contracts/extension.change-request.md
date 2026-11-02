@@ -22,24 +22,24 @@ interface OpenBlock {
   //   state.closeOpenBlocks(state.getDepth(this), { keepsLineEnding })
   // Pass getDepth(this) or less. A block already closed by an earlier call is not called.
   // Not called on other lines (lazy lines, blank lines, closing fences): use continue there.
-  willClose?(state: BlockState, keepsLineEnding: boolean): void;
+  willClose?(state: BlockState, line: Line, keepsLineEnding: boolean): void;
 }
 
 interface BlockState {
   // The open block at depth (0 is the document), or undefined. Read-only counterpart of getDepth.
   getBlock(depth: number): OpenBlock | undefined;
-  // Called from a container's continue: `line` is the last line of its content.
+  // Called from a container's continue: the current line is the last line of its content.
   // For the rest of this line isLastLine(line) is true, and the core remembers the block for the next line.
-  endContent(block: OpenBlock, line: Line): void;
+  endContent(block: OpenBlock): void;
 }
 
 interface Line {
-  // Index of the line on which endContent was last called, or -1. On that line, for blocks
-  // inside, the line is the last line of the document and has no line ending.
-  endsContent: number;
+  // True after endContent on this line. For blocks inside, the line is the last line of the
+  // document and has no line ending. Reset for every line.
+  endsContent: boolean;
 }
 
-// core/line.ts. True when line.end is the end of the text, or line.endsContent === line.index.
+// core/line.ts. True when line.end is the end of the text, or line.endsContent is true.
 function isLastLine(line: Line): boolean;
 ```
 
@@ -50,7 +50,7 @@ Behavior while `isLastLine(line)` is true because of `endContent`, in place of `
 - `keepsLazyContainers` in `processLine`: a block that interrupts a lazy paragraph closes the containers that did not match, as on a last line.
 - `matchedEnd` of list items and footnote definitions: it is now the end offset of the last line the block matched when that line was a last line (or `endContent` was called), or -1. It was a boolean, and the block then ended at `text.length`; it ends at that line's end instead, which is the same offset for a real last line.
 
-Behavior on the line after `endContent`, when the block that called it does not match that line (an outer block failed, or the container closed): `state.unmatched` is false for that line, so a table inside does not take it as a lazy body row (`table.ts`), and indented code and task items treat it as not lazy either. When the block matches the line, nothing changes.
+Behavior on the line after `endContent`, when the block that called it does not match that line (an outer block failed): `state.unmatched` is false for that line, so a table inside does not take it as a lazy body row (`table.ts`), and indented code and task items treat it as not lazy either. When the block matches the line, nothing changes.
 
 No other names change. `startsContainer`, `closeOpenBlocks`, `getDepth` and `containerStartsOff` of version 2 stay.
 

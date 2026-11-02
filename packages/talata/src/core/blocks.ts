@@ -76,7 +76,7 @@ export interface BlockState extends DocumentState {
    * not match it, the line is not lazy for the blocks that were inside
    * (`unmatched` is false): the content ended before it.
    */
-  endContent(block: OpenBlock, line: Line): void;
+  endContent(block: OpenBlock): void;
   /**
    * Closes the open blocks above `depth`, innermost first, so the block at
    * `depth` becomes the tip. A container calls it from its `continue` to end
@@ -170,7 +170,7 @@ export interface OpenBlock {
    * called. It runs for container starts only; blocks that close on other
    * lines do not call it.
    */
-  willClose?(state: BlockState, keepsLineEnding: boolean): void;
+  willClose?(state: BlockState, line: Line, keepsLineEnding: boolean): void;
   /** Containers: a paragraph inside may continue on a line that does not match this container. */
   acceptsLazy: boolean;
   /**
@@ -265,7 +265,10 @@ export class BlockParser implements BlockState {
   endOnlyLine = -1;
   closeKeepsLineEnding = false;
   containerStartsOff = false;
-  /** The block of the last `endContent` call. */
+  /** The line `run` reuses. */
+  line!: Line;
+  /** Line index and block of the last `endContent` call. */
+  contentEndsLine = -1;
   contentEndsBlock: OpenBlock | undefined;
   /** Open blocks from the document to the tip. */
   stack: OpenBlock[] = [document];
@@ -295,6 +298,7 @@ export class BlockParser implements BlockState {
       count--;
     }
     const line = createLine(text);
+    this.line = line;
     for (let i = 0; i < count; i++) {
       let end = text.length;
       if (i + 1 < starts.length) {
@@ -308,6 +312,7 @@ export class BlockParser implements BlockState {
       line.end = end;
       line.visualColumn = 0;
       line.partialTab = 0;
+      line.endsContent = false;
       measureLine(line);
       this.processLine(line);
     }
@@ -333,6 +338,7 @@ export class BlockParser implements BlockState {
     line.end = end;
     line.visualColumn = 0;
     line.partialTab = 0;
+    line.endsContent = false;
     measureLine(line);
     for (let i = 1; i < stack.length - 1; i++) {
       this.container = stack[i - 1];
@@ -381,7 +387,11 @@ export class BlockParser implements BlockState {
     this.tip = !tip.isContainer && matched >= top - 1 ? tip : undefined;
     this.unmatched = this.containerIndex < (tip.isContainer ? top : top - 1);
     // The line after `endContent`: its block not matching means the content ended before it.
-    if (line.endsContent === line.index - 1 && this.getDepth(this.contentEndsBlock!) > matched) {
+    if (
+      this.contentEndsBlock !== undefined &&
+      this.contentEndsLine === line.index - 1 &&
+      this.getDepth(this.contentEndsBlock) > matched
+    ) {
       this.unmatched = false;
     }
 
@@ -473,7 +483,7 @@ export class BlockParser implements BlockState {
     const stack = this.stack;
     // Blocks that close tell their container first, innermost first. A call may close the blocks above it, never the ones below.
     for (let i = this.closeKeepsLineEnding ? stack.length - 1 : 0; i > this.containerIndex; i--) {
-      stack[i].willClose?.(this, true);
+      stack[i].willClose?.(this, this.line, true);
     }
     this.closeTo(this.containerIndex);
     while (stack.length > 1) {
@@ -520,8 +530,9 @@ export class BlockParser implements BlockState {
     return this.stack[depth];
   }
 
-  endContent(block: OpenBlock, line: Line): void {
-    line.endsContent = line.index;
+  endContent(block: OpenBlock): void {
+    this.line.endsContent = true;
+    this.contentEndsLine = this.line.index;
     this.contentEndsBlock = block;
   }
 
