@@ -55,3 +55,7 @@
 ## Size
 
 - Estimated S, actual M. The generators and the review found more classes after the two in the brief.
+
+## Landed
+
+Direct commit 027839f on main (2026-11-02), after two fresh reviews. The first found two more classes (fixed here); the second, with its own generators (363,264 enumerated inputs and 400,000 random documents), found none.

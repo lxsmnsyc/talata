@@ -1,7 +1,7 @@
 ---
 id: fix-directive-nesting
 title: Fix directive spread and quote ends in deep nesting
-status: active
+status: done
 priority: must
 type: fix
 outline: false
@@ -13,6 +13,7 @@ spike: false
 verify:
 exclusive: []
 fulfilled_by:
+spent: 525023
 gate: false
 added: 2026-11-02
 owns:
