@@ -1,7 +1,7 @@
 ---
 id: core-hooks
 title: Core hooks for container extensions
-status: active
+status: done
 priority: must
 type: refactor
 outline: false
@@ -13,6 +13,7 @@ spike: false
 verify:
 exclusive: [benchmark]
 fulfilled_by:
+spent: 272693
 gate: false
 added: 2026-10-28
 owns:
@@ -50,7 +51,7 @@ Inputs:
 
 Hooks to add (names are a proposal; keep them if nothing better fits):
 
-1. `BlockState.closeOpenBlocks(depth, { keepsLineEnding })` and `BlockState.depthOf(block)`: close the open blocks above a stack depth from inside a rule's `continue`. Replaces the casts to `stack`, `containerIndex`, `container` and `closeTo`.
+1. `BlockState.closeOpenBlocks(depth, { keepsLineEnding })` and `BlockState.getDepth(block)`: close the open blocks above a stack depth from inside a rule's `continue`. Replaces the casts to `stack`, `containerIndex`, `container` and `closeTo`.
 2. `OpenBlock.startsContainer?: false`: a container whose start does not make the blocks it closes keep their line ending. Replaces the `isContainer` getter that answers false on its first read.
 3. `continuesOverEnd` also runs when a container or a paragraph is at the tip, so extensions do not repeat the end-of-document check.
 4. A nested `parseInline` from inside an inline rule's `parse` does not clobber the per-leaf state of other rules. Today that state is module-level, keyed by the owning `InlineState`: `src/inline/link.ts` (brackets, keys), `code-span.ts`, `html.ts`, `lines.ts`, `src/gfm/autolink-literal.ts`, `strikethrough.ts`. Either move it onto `InlineState` or save and restore it around a nested call. Pick the one with the lower cost in the interleaved benchmark and record both numbers in `log.md`. Cases that must pass: `~~:a[b]*~~*` and `[:a[[]]]()` with a test rule that parses its label in place.

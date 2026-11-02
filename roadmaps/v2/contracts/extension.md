@@ -1,6 +1,6 @@
 ---
 name: extension
-version: 1
+version: 2
 status: frozen
 defined_by: ext-api
 ---
@@ -128,9 +128,57 @@ Test plumbing:
 - In GFM tables `\|` stays inside `inlineMath`, because the reference's `unescapePipes` touches only `inlineCode`.
 - Combined runs use the order `[frontmatter, math, directive]`, the order GOAL.md uses.
 
+## Core hooks (v2)
+
+Supported hooks for parser state that extensions used to reach through casts, added by core-hooks. Extensions use these instead of casting to private fields. All paths are under `packages/talata/src/`.
+
+Block side, `core/blocks.ts`:
+
+```ts
+interface BlockState {
+  // Index of `block` among the open blocks (0 is the document), or -1.
+  getDepth(block: OpenBlock): number;
+  // Closes the open blocks above `depth`, innermost first; the block at `depth` becomes the tip.
+  // `closeKeepsLineEnding` is `options.keepsLineEnding` while they close, then its old value.
+  // Call it from a container's `continue`. Pass `state.getDepth(this)` or less.
+  closeOpenBlocks(depth: number, options: { keepsLineEnding: boolean }): void;
+  // True: rules with `opensContainer` do not start for the rest of the document.
+  // Writable: a rule may set it back to false.
+  containerStartsOff: boolean;
+}
+
+interface BlockRule {
+  // True for rules that start CommonMark containers (blockquote, listItem, footnoteDefinition).
+  // They are skipped while `containerStartsOff`.
+  opensContainer?: boolean;
+}
+
+interface OpenBlock {
+  // Containers: false when starting this block does not make the blocks it closes
+  // keep their line ending (`closeKeepsLineEnding`). For constructs that are flow for the reference.
+  startsContainer?: false;
+}
+```
+
+Behavior changes without new names:
+
+- `continuesOverEnd` runs for every tip after a final line ending, not only for a leaf other than a paragraph. `state.closeKeepsLineEnding` is then true in `close` of a tip container or paragraph, and of the containers above, when every open block above the tip continues over the empty line.
+- When a lazy line meets a container with `acceptsLazy: false`, `state.paragraph` is undefined and `state.lazy` is false for that line. Rules that need no paragraph (indented code, HTML kind 7) start on it. No built-in container refuses lazy lines, so built-in output is the same.
+
+Inline side, `core/inline.ts`:
+
+- The per-leaf state of the built-in rules that changes output lives on `InlineState`, not in module variables: `brackets` (link bracket stack), `reached` (furthest range looked into), `attentionFirst` (strikethrough order) and `task` (task list marker). A rule's `parse` may call `parseInline` on sub-ranges (`parseInline(state, ranges)`) and the outer leaf is unaffected.
+- Module state that stays (autolink literal, raw HTML and code span "exhausted" memos, link `keysFor`) is a cache keyed by the `InlineState` object. A nested call can only make the outer leaf rescan, never give a wrong answer.
+
+Shared helpers extensions import instead of copying:
+
+- `strip(value, virtual, virtualEnd)` from `inline/code-span.ts`: code span and inline math padding.
+- `isClosingFence(line, marker, size)` and `trimLineEndings(raw)` from `blocks/code-fenced.ts`.
+- `createExhausted()`, `getFailedStart(cache, state, size)`, `markFailed(cache, size, start, known)` from `inline/exhausted.ts`: the "no closer up to the end of the leaf" cache of code span and inline math. Each rule creates its own cache.
+
 ## What each reference extension needs, and where it fits
 
-Checked against the reference trees (mdast-util-frontmatter 2.0.1, mdast-util-math 3.0.0, mdast-util-directive 3.1.1) and a throwaway container rule run against the reference for `:::` fences. The interfaces of parser-core v5 are enough for all three. No core change was needed and none is planned.
+Checked against the reference trees (mdast-util-frontmatter 2.0.1, mdast-util-math 3.0.0, mdast-util-directive 3.1.1) and a throwaway container rule run against the reference for `:::` fences. The interfaces of parser-core v5 are enough for all three. No core change was needed for frontmatter and math. The directive container needed the v2 core hooks above.
 
 - frontmatter: a block rule on the first line. It starts only when `line.index === 0`, `state.container.name === 'root'`, `line.start === 0` and `line.nonBlank === line.start` (`anywhere: true` lifts only the `line.index === 0` and `line.start === 0` conditions and the paragraph-interrupt limit; the container must still be `root`: the reference never matches inside a quote or list, where `> x\n>\n> ---\n> a\n> ---` gives a thematic break and a heading, while `x\n---\na\n---` gives yaml at the root). `start` looks ahead and accepts only if a closing fence line exists; otherwise it returns undefined (`---\na\n` gives a thematic break and a paragraph, `---yaml\na\n---` a setext heading). Block `triggers` are ASCII only, so a custom matter whose fence starts with a non-ASCII character leaves `triggers` undefined. Leaf with `addLine` and `close`; node `{ type, value }` (`yaml`, `toml` or the custom type), no inline content. The text has had its BOM removed, so offset 0 is the first character after it.
 - math flow: meta may not contain `$`, otherwise the line falls back to a paragraph, and `$$ x $$` on one line is inline math. A leaf like `src/blocks/code-fenced.ts` (fence of 2 or more `$`, meta on the opening line, closing fence, `matchedOnlyAtEnd(state, line)` and `state.closeKeepsLineEnding` as fenced code uses them). Node `{ type: 'math', value, meta, data: { hName: 'pre', hChildren: [...] } }`; `data` must equal the reference.
@@ -146,3 +194,4 @@ Checked against the reference trees (mdast-util-frontmatter 2.0.1, mdast-util-ma
 ## Changes
 
 - v1 (2026-10-28): frozen by ext-api.
+- v2 (2026-11-02): core hooks for container extensions, from core-hooks (PR #15). Adds `getDepth`, `closeOpenBlocks`, `containerStartsOff`, `opensContainer`, `startsContainer`, per-leaf inline state on `InlineState`, and shared helpers. Tree output unchanged.
