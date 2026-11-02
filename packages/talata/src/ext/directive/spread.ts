@@ -70,12 +70,39 @@ function endsAfterBlank(node: RootContent): boolean {
   return end.line - last >= 2;
 }
 
+/**
+ * Whether a child of `node` ends at the start of a blank line and another
+ * child follows that line. The child ended after its line ending (a quote in
+ * a directive that ends on a blank line), so the blank line lies between
+ * the two children, though their lines are only one apart.
+ */
+function hasBlankAfterLineStart(node: RootContent): boolean {
+  const children = 'children' in node ? (node.children as RootContent[]) : [];
+  for (let i = 1; i < children.length; i++) {
+    const before = children[i - 1].position!;
+    // Lists hold the blank lines after them, and code that kept its line
+    // ending has no sibling after it in the item.
+    if (
+      children[i - 1].type === 'blockquote' &&
+      before.end.column === 1 &&
+      before.end.line > before.start.line &&
+      children[i].position!.start.line - before.end.line >= 1
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function visit(node: RootContent | Root, inDirective: boolean): void {
   if (!('children' in node)) {
     return;
   }
   const children = node.children as RootContent[];
   if (node.type === 'listItem' && !node.spread && inDirective && endsAfterBlank(node)) {
+    node.spread = true;
+  }
+  if (node.type === 'listItem' && !node.spread && hasBlankAfterLineStart(node)) {
     node.spread = true;
   }
   if (node.type === 'listItem' && !node.spread) {

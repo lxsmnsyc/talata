@@ -381,7 +381,7 @@ class OpenContainerDirective implements TrackedContainer {
       // end after the line ending before it. A line ending of this line
       // stays in the directive.
       const text = state.source.text;
-      this.end = line.end < text.length || !emptyBefore ? line.end : skipLineEnding(text, this.end);
+      this.end = emptyBefore ? skipLineEnding(text, this.end) : line.end;
       this.closeInside(state, line, false);
       return true;
     }
@@ -438,9 +438,11 @@ class OpenContainerDirective implements TrackedContainer {
         // A list item ends at its last content, or after the quote prefix of
         // this blank line when its last child kept its line ending.
         child.closedAt?.(line.end, lineStart);
-        if (child.openChild?.name === 'blockquote') {
+        const inner = child.openChild;
+        if (inner?.name === 'blockquote' && state.getDepth(inner) >= 0) {
           // The quote in it ends here; a container that starts on a later
-          // line does not move the item's end there.
+          // line does not move the item's end there. A quote that closed on
+          // an earlier blank line stays linked, and fixed the end then.
           raiseIndentEnd(child, line.end);
         }
       }
