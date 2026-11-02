@@ -1,7 +1,7 @@
 ---
 id: ext-directive
 title: Directive extension
-status: active
+status: todo
 priority: must
 type: feature
 outline: false
@@ -13,6 +13,7 @@ spike: false
 verify:
 exclusive: []
 fulfilled_by:
+spent: 409146
 gate: false
 added: 2026-10-28
 owns:
@@ -36,6 +37,9 @@ depends_on:
   - on: core-hooks
     kind: hard
     why: rebuilds on the core hooks of extension contract v2
+  - on: core-hooks-2
+    kind: hard
+    why: replaces the three guessed workarounds with the v3 hooks
   - on: ext-api
     kind: contract
     via: extension
@@ -73,3 +77,7 @@ Test inputs: the reference package's own test cases (inputs copied from its repo
 ## Sizing
 
 L: three rules, a container rebuilt on new hooks, the subpath wiring put back, and a 1,000,000-document fuzz run. Most code exists on `feat/ext-directive`.
+
+## Resume (2026-11-02)
+
+The first pass is on `feat/directive`, draft PR #20 (b508ea1). It met every criterion except the 1,000,000-document fuzz: 4 differences (seed 20261106, `--all`), all with a directive inside a quote or list item, next to a blank or last line. Its change request, `roadmaps/v2/contracts/extension-directive.change-request.md`, was accepted, and core-hooks-2 adds the three hooks. Resume on `feat/directive`: merge `main`, replace the workarounds (`directiveEnd`'s `isContainerStart` guess, the replayed prefixes, the case-by-case last-line handling in `directiveEnd` and `directiveHtml`) with the hooks, and rerun the fuzz. The remaining fuzz inputs are in `outcome.md` (Verification) on that branch. Release-0.3 adds the minor changeset.
