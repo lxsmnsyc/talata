@@ -26,7 +26,7 @@ For 0.2, and again for 0.3 with directive added to each item:
 
 - `pnpm --filter talata test` passes, including, for each extension, the reference package's own test inputs and the benchmark corpus with the extension on.
 - The differential fuzzer runs 1,000,000 documents with GFM, frontmatter and math on, with no difference from the reference.
-- `pnpm --filter benchmark size`: the `talata` entry holds no extension code and is within 0.5 KB gzip of 0.1.1 (32.6 KB). Shared helpers that extensions import cost a few bytes each in the main entry, through chunk splitting.
+- `pnpm --filter benchmark size`: the `talata` entry holds no extension code (`test/ext-api-bundle.test.ts`). Its gzip size is reported, not a gate (decision of 2026-11-02).
 - `pnpm --filter benchmark interleaved`: talata stays at least 4 times faster than "mdast + gfm".
 
 ## Priorities
@@ -75,6 +75,7 @@ For 0.2, and again for 0.3 with directive added to each item:
 - "this includes mdx in the future" (user) -> ext-mdx (outline, later)
 - 0.3 is directive only (user, 2026-11-02) -> core-hooks, ext-directive, release-0.3
 - "add to plan: a migration guide to talata" (user, 2026-11-02) -> docs-migration
+- GFM footnote bug found by the core-hooks-2 fuzz (2026-11-02) -> fix-footnote-spread
 - v1 outline nodes ext-frontmatter, ext-math, ext-directive, ext-mdx -> moved here
 
 ## Decisions
@@ -82,6 +83,7 @@ For 0.2, and again for 0.3 with directive added to each item:
 - 2026-10-28: the user chose subpaths of the `talata` package for extensions, so they do not need separate npm packages. This includes MDX later.
 - 2026-10-28: the user switched to auto-merge. The orchestrator merges every node pull request that passes review and CI, contract nodes included. Only the release, which publishes to npm, stays with the user.
 - 2026-10-28: the main-entry size limit is 0.5 KB over 0.1.1, not 0.2 KB. ext-api's cache took 177 bytes, and each extension adds a few dozen through shared chunks (math: 49 bytes). The test that the main entry holds no extension code stays.
+- 2026-11-02: the main-entry size is no longer a gate ("don't be too concerned with the size", user). Report it in outcomes; the test that the main entry holds no extension code stays. core-hooks-2 kept its faster build at 33141 bytes gzip.
 - 2026-10-28: directive is parked, and 0.2 ships frontmatter and math (the user's choice). The first directive build needed private parser state and had two fuzz failures. It returns after a core-hooks node, on the branch `feat/ext-directive`. The `talata/directive` stub is removed from 0.2.
 - 2026-11-02: 0.3 ships directive only (the user's choice). MDX stays parked until 0.3 is out. ext-directive is `must` again and rebuilds on the core hooks of extension contract v2.
 
