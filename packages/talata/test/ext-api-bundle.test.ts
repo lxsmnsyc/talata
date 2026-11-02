@@ -7,7 +7,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
-const names = ['frontmatter', 'math'];
+const names = ['frontmatter', 'math', 'directive'];
 const build = { out: '' };
 
 beforeAll(() => {
