@@ -22,13 +22,15 @@ function hasBlank(node: RootContent): boolean {
     }
     // A child that ends after its line ending holds only the lines before.
     // A list or footnote definition that ends so still holds the blank lines
-    // after it: the reference exits it after them.
+    // after it: the reference exits it after them. So does open fenced code
+    // or a directive in a footnote definition.
     const childEnd = child.position!.end;
     line =
       childEnd.column === 1 &&
       childEnd.line > start &&
       child.type !== 'list' &&
-      child.type !== 'footnoteDefinition'
+      child.type !== 'footnoteDefinition' &&
+      !(node.type === 'footnoteDefinition' && (child.type === 'code' || child.type === CONTAINER))
         ? childEnd.line - 1
         : childEnd.line;
     gap = 2;
@@ -39,13 +41,17 @@ function hasBlank(node: RootContent): boolean {
   return position.end.line - line >= gap;
 }
 
-/** Whether `node` is a footnote definition with a directive child that holds a blank line. */
+/**
+ * Whether `node` is a footnote definition with a directive child that holds a
+ * blank line. The reference does not count footnote definitions as
+ * containers for an item's blank lines, so it looks through nested ones.
+ */
 function holdsSpreadDirective(node: RootContent): boolean {
   if (node.type !== 'footnoteDefinition') {
     return false;
   }
   for (const child of node.children as RootContent[]) {
-    if (child.type === CONTAINER && hasBlank(child)) {
+    if (child.type === CONTAINER ? hasBlank(child) : holdsSpreadDirective(child)) {
       return true;
     }
   }
@@ -70,12 +76,49 @@ function endsAfterBlank(node: RootContent): boolean {
   return end.line - last >= 2;
 }
 
+/**
+ * Whether a quote child of `node` ends at the start of a blank line and
+ * `node` goes on after that line (another child, or whitespace it holds).
+ * The quote ended after its line ending (a quote in a directive that ends on
+ * a blank line), so the blank line lies inside `node`, though no two of its
+ * lines are two apart. Footnote definitions do not count as containers for
+ * an item's blank lines, so the check looks into them too.
+ */
+function hasBlankAfterQuote(node: RootContent): boolean {
+  const children = 'children' in node ? (node.children as RootContent[]) : [];
+  const end = node.position!.end.line;
+  for (let i = 0; i < children.length; i++) {
+    const child = children[i];
+    const position = child.position!;
+    if (child.type === 'footnoteDefinition' && hasBlankAfterQuote(child)) {
+      return true;
+    }
+    // Lists hold the blank lines after them, and code that kept its line
+    // ending has no sibling after it in the item.
+    if (
+      child.type === 'blockquote' &&
+      position.end.column === 1 &&
+      position.end.line > position.start.line
+    ) {
+      // The line the quote ends at is blank only when nothing starts on it.
+      const next = i + 1 < children.length ? children[i + 1].position!.start.line : end;
+      if (next > position.end.line) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 function visit(node: RootContent | Root, inDirective: boolean): void {
   if (!('children' in node)) {
     return;
   }
   const children = node.children as RootContent[];
   if (node.type === 'listItem' && !node.spread && inDirective && endsAfterBlank(node)) {
+    node.spread = true;
+  }
+  if (node.type === 'listItem' && !node.spread && hasBlankAfterQuote(node)) {
     node.spread = true;
   }
   if (node.type === 'listItem' && !node.spread) {

@@ -1,6 +1,6 @@
 import type { PhrasingContent } from 'mdast';
 import type { BlockState } from '../../core/blocks';
-import { TAB, isSpaceOrTab } from '../../core/chars';
+import { isSpaceOrTab } from '../../core/chars';
 import { parseInline } from '../../core/inline';
 import type { Source } from '../../core/source';
 import { point, skipLineEnding } from '../../core/source';
@@ -83,6 +83,19 @@ function labelIndents(
   return result;
 }
 
+/** Whether the line that ends at `lineEnd` keeps columns of a split tab after its prefixes. */
+function hasSplitTab(indents: number[] | undefined, lineEnd: number): boolean {
+  if (indents === undefined) {
+    return false;
+  }
+  for (let i = 0; i < indents.length; i += 3) {
+    if (indents[i] === lineEnd) {
+      return indents[i + 2] > 0;
+    }
+  }
+  return false;
+}
+
 /** Parses the inline content of a text directive label, in place. */
 export function parseLabel(
   state: DocumentState,
@@ -90,13 +103,15 @@ export function parseLabel(
   indents: number[] | undefined,
 ): PhrasingContent[] {
   const text = state.source.text;
-  const children = parseInline(state, ranges, labelIndents(text, ranges, indents));
+  const lines = labelIndents(text, ranges, indents);
+  const children = parseInline(state, ranges, lines);
   const stop = ranges[ranges.length - 1];
   const lastStart = ranges[ranges.length - 2];
-  if (ranges.length > 2 && lastStart === stop && text.charCodeAt(stop - 1) !== TAB) {
+  if (ranges.length > 2 && lastStart === stop && !hasSplitTab(lines, stop)) {
     // micromark feeds no empty last line to the label, so the line ending
     // before it ends at the line start, not after the container prefixes. A
-    // tab that a quote marker split leaves columns there, which it feeds.
+    // tab that a quote marker split leaves columns there, which it feeds; a
+    // tab that a footnote definition's indent takes whole leaves none.
     const tail = children.length > 0 ? children[children.length - 1] : undefined;
     const lineStart = skipLineEnding(text, ranges[ranges.length - 3]);
     const position = tail?.type === 'text' || tail?.type === 'break' ? tail.position : undefined;

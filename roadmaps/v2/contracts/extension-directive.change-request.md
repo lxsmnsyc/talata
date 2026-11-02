@@ -11,6 +11,7 @@ The v2-to-v3 request from this node was accepted on 2026-11-02 and built by core
 2. `state.unmatched` on the line after `endContent` is too broad. The core sets it to false for the whole line. That is right for blocks inside the content (a table there does not take the line as a lazy body row). It is wrong for blocks that start outside on that line: indented code at the document level then does not end with the lazy line (`2)  :::a\n\n    (\n   `, `>:::a\n>\n    ~\n3)`).
 3. How a container around the directive continues. The lookahead reads `OpenList.item.size` (an exported class of `src/blocks/list.ts`) and copies the quote-marker and footnote-indent rules of `blockquote` and `footnoteDefinition`. The copy has to track any change in those rules.
 4. Container ends. A container inside the directive can be given an end only through `closeEnd` and `closedAt`, and list items ignore `closeEnd`. A later `closedAt` from a new container overwrites the end that an earlier blank line gave.
+5. Prefixes inside the directive on the current line (from fix-directive-nesting, accepted 2026-11-02, deferred to core-hooks-3). `closeEnds` needs to know which quotes inside the directive continue on the line and whether a footnote definition around took its indent on it. v3 has neither: the first is read again with the copied rules of `continuesNext` on a copy of the line, the second comes from `footnoteIndentAt`, a core export of `src/gfm/footnote.ts` that the contract does not list.
 
 ## Proposed change
 
@@ -18,6 +19,7 @@ The v2-to-v3 request from this node was accepted on 2026-11-02 and built by core
 - `OpenBlock.matchesNext?(state, line): boolean` on core containers: the check from their `continue` with no side effects. The directive then walks `getBlock(1..depth)` with it instead of copying the rules.
 - A supported way to ask the blocks inside a container whether they continue over an empty line. `container.ts` sets `state.container` for a moment in `keepsFor`, `segmentKeeps` and `closeInside`, while it calls their `continue` with an empty line, then restores it. `container` is a public field and core does the same in `continuesOverEnd`, but it is not a contract hook. A `matchesNext`-style check that takes the parent as an argument would remove the write.
 - `TrackedContainer.endAtLeast?(offset: number): void`: a container ends at `offset` or later. It replaces the write to the list item's `indentEnd`.
+- Point 5: the `matchesNext` check above, run on a copy of the line through the blocks inside, and `BlockState.footnoteIndentAt(line)` (or a field on `Line`) for the footnote indent.
 - Point 2: apply the next-line `unmatched` override only while blocks at or above the `endContent` block close, then restore the computed value before start rules run. In other words, do in core what `directiveScope` now does.
 
 ## Affected nodes
@@ -30,6 +32,7 @@ ext-directive (removes `isContainerStart`, `continuesNext` and the `unmatched` p
 2. `directiveScope`, a block rule with no triggers at priority 1 that starts nothing. On the line after `endContent` it closes the blocks inside the directive while `unmatched` is false, then sets `unmatched` back to true.
 3. `continuesNext` in `container.ts` walks `getBlock(1..depth - 1)`: an `OpenList` needs `item.size` columns (blank lines continue), a quote needs `>` with under 4 columns of indent, a footnote definition needs 4 columns (blank lines continue), a directive consumes its own indent.
 4. `raiseIndentEnd` in `container.ts` writes the list item's `indentEnd` field through an `'indentEnd' in block` check. It is used when a quote in the item ends on a blank line inside the directive (`>:::é\n>* >\n>\n>>`), so a later `closedAt` does not move the item's end. A `TrackedContainer` method, `endAtLeast?(offset)`, would replace it.
+5. `closeEnds` reads the prefixes inside the directive with `continuesNext` on a copy of the line, and imports `footnoteIndentAt` from `src/gfm/footnote.ts`.
 
 ## Decision
 

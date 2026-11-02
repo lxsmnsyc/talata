@@ -24,6 +24,12 @@ shared:
 reserves: []
 provides: []
 depends_on:
+  - on: fix-directive-quote-end
+    kind: hard
+    why: its 1,000,000-document fuzz must pass on the fixed code
+  - on: fix-directive-nesting
+    kind: hard
+    why: same reason
   - on: ext-directive
     kind: hard
     why: documents and ships it
@@ -57,3 +63,7 @@ The v3-to-v4 change request from ext-directive is accepted and deferred to core-
 ## Sizing
 
 S: docs, one long fuzz run and a changeset.
+
+## Paused (2026-11-02)
+
+The first pass is on `release/release-0.3`, draft PR #26. Its fuzz (seed 20261301) found two directive differences, now node fix-directive-quote-end. Resume on that branch after the fix lands: merge `main`, rerun the 1,000,000-document fuzz with a new seed, and update the README numbers only if they changed.

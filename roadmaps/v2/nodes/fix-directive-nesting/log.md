@@ -1,0 +1,16 @@
+# Log: fix-directive-nesting
+
+- 2026-11-02: branch `fix/fix-directive-nesting` at 44abfb1; corpus copied (ignored by git).
+- Bug 2 (`> :::b\n> + :::c\n>   >\n> \n> :::`): `continuesAfter` of `c` read the next line `:::` as lazy, because the item around `c` does not continue on it. But `b` closes on that line before its content reads it, so `c`'s content ends as a document with a final line ending. Fix: stop the walk at a directive whose closing fence is the next line (unless a quote lies between, which keeps the old lazy reading: `> :::b\n> > :::c\n> > >\n> >\n> :::`).
+- Bug 1 (`> :::b\n> + [^1]: >\n> \n>  `): the spread rule for a quote that ends at a line start only looked at the item's direct children. Now `hasBlankAfterQuote` also looks into footnote definitions, and counts an item or definition that goes on after the quote's end line (the next child, or its own end). `holdsSpreadDirective` also looks through nested footnote definitions.
+- `closeEnds`: one "still open" check at the top of the loop (`state.getDepth(child) < 0` ends the walk). The raise of an item's end for its quote now runs on the quote's own turn, after that check.
+- First generator (random shapes) found 11 to 15 more, all on main too. Fixed:
+  - `afterIndent` now asks `footnoteIndentAt` (any footnote indent on the line, not only a parent footnote, and also on lines blank at the directive's level).
+  - Before a final line ending, only a real quote around makes the content end as before a lazy line; a footnote indent alone does not.
+  - `closeEnds` reads the markers of quotes inside that continue on the line (after item and footnote indents), so a line blank only inside such a quote counts as blank for the blocks in it.
+  - A container that starts on the next line outside a directive around this one, with a quote between that directive and this one, ends the content as before a lazy line.
+- Generator moved to an enumeration of all shapes of 1 to 4 containers with at least one directive (440 shapes) and 14 random endings each: 6,131 inputs. Main: 33 differences; this branch: 0.
+- Fuzz seed 20261401, 4 x 250,000 with --all: 0 failures. Fast check: 6398 tests pass.
+- Review of 61682e5: two more classes, both on main too. Tabs in prefixes (`skipIndent` gave up on a tab): `closeEnds` now reads prefixes inside with `continuesNext` on a copy of the line. An item ended before its last child in a footnote (`[^1]: > :::b\n    > * :::c\n    > \n> lazy`): no blank-line `closedAt` when a container starts next and no quote is open inside.
+- Generator moved to `test/fix-directive-nesting-inputs.ts` with the review's dimensions (markers, tabs, `::::`, indented fences, leaf and text directives, tables, fences, lazy lines, CRLF, depth 5); run script `test/fix-directive-nesting-run.ts`. It found three more classes: footnote definitions that follow the indent of the one around in the lookahead, code and directives in a footnote holding the blank lines after them (spread), and the blank-line `closedAt` inside a quote that continues. Seeds 1 to 6 (30,030 inputs each) and 7 to 10 (150,140 each): 0 differences.
+- Fuzz seed 20261402, 4 x 250,000 with --all: 0 failures. Fast check: 6444 tests pass.
