@@ -6,6 +6,7 @@ This guide covers three starting points:
 
 - [`mdast-util-from-markdown`](#from-mdast-util-from-markdown), with or without GFM.
 - [Frontmatter and math](#frontmatter-and-math) extensions.
+- [Directives](#directives).
 - [`unified` with `remark-parse`](#from-unified-and-remark-parse).
 
 Then it lists [what does not carry over](#what-does-not-carry-over) and shows how to [check your output](#check-your-output).
@@ -113,6 +114,64 @@ Notes:
 - `math(options?)` takes `{ singleDollarTextMath }`. The default is `true`.
 - `frontmatterFromMarkdown` and `mathFromMarkdown` have no counterpart. Each talata extension builds its own nodes.
 - The extensions also work without `gfm: true`.
+
+## Directives
+
+`talata/directive` replaces `micromark-extension-directive` with `mdast-util-directive`, and `remark-directive` in unified. It parses text (`:name[label]{attributes}`), leaf (`::name`) and container (`:::name`) directives into `textDirective`, `leafDirective` and `containerDirective` nodes. Like the reference, `directive()` takes no options.
+
+Before:
+
+```js before
+import { fromMarkdown } from 'mdast-util-from-markdown';
+import { directiveFromMarkdown } from 'mdast-util-directive';
+import { gfmFromMarkdown } from 'mdast-util-gfm';
+import { directive } from 'micromark-extension-directive';
+import { gfm } from 'micromark-extension-gfm';
+
+const tree = fromMarkdown(value, {
+  extensions: [gfm(), directive()],
+  mdastExtensions: [gfmFromMarkdown(), directiveFromMarkdown()],
+});
+```
+
+After:
+
+```js after
+import { fromMarkdown } from 'talata';
+import { directive } from 'talata/directive';
+
+const tree = fromMarkdown(value, { gfm: true, extensions: [directive()] });
+```
+
+With unified, before:
+
+```js before
+import remarkDirective from 'remark-directive';
+import remarkGfm from 'remark-gfm';
+import remarkParse from 'remark-parse';
+import { unified } from 'unified';
+
+const processor = unified().use(remarkParse).use(remarkGfm).use(remarkDirective);
+const tree = await processor.run(processor.parse(value));
+```
+
+After:
+
+```js after
+import { unified } from 'unified';
+import { directive } from 'talata/directive';
+import { talata } from 'talata/unified';
+
+const processor = unified().use(talata, { gfm: true, extensions: [directive()] });
+const tree = await processor.run(processor.parse(value));
+```
+
+Notes:
+
+- `directiveFromMarkdown` has no counterpart. The extension builds its own nodes.
+- Plugins that turn directives into HTML, for example by setting `data.hName` in a transform, keep working. They only read the tree.
+- `directive()` combines with `frontmatter()` and `math()` in the same `extensions` list, and works without `gfm: true`.
+- With `remark-stringify`, keep `remark-directive` in the pipeline for its serializer, the same way as [the other extensions](#with-remark-stringify).
 
 ## From unified and `remark-parse`
 
@@ -253,7 +312,7 @@ const markdown = String(
 
 ## What does not carry over
 
-- **micromark syntax extensions.** talata does not run micromark. Plugins that add syntax through it do not work, for example `remark-directive`, `remark-mdx` and `remark-wiki-link`. With the unified plugin, their syntax is parsed as plain Markdown. Plugins that only transform the tree are not affected.
+- **micromark syntax extensions.** talata does not run micromark. Plugins that add syntax through it do not work, for example `remark-mdx` and `remark-wiki-link`. With the unified plugin, their syntax is parsed as plain Markdown. Plugins that only transform the tree are not affected.
 - **`mdastExtensions`.** There is no such option. The `extensions` option takes talata extensions only, and a micromark extension passed there does not work.
 - **The `encoding` argument.** `mdast-util-from-markdown` accepts `fromMarkdown(value, encoding, options)`. talata has `fromMarkdown(value, options)`. A string in the second place is ignored without an error, so the options after it are lost.
 - **`Buffer` input.** Pass a string. Call `buffer.toString('utf8')` first.
@@ -262,11 +321,6 @@ const markdown = String(
 - **HTML output.** talata returns mdast and does not render HTML. Use `remark-rehype` in a unified pipeline, or `mdast-util-to-hast` with `hast-util-to-html` on the tree. The README shows both.
 - **Third-party extensions.** The extension interface is internal. Only the extensions in the package work.
 - **MDX.** Not supported.
-- **Directive.** The next section holds the placeholder. `talata/directive` is not on `main` yet.
-
-<!-- directive: release-0.3 replaces the next paragraph with the migration steps for `remark-directive` and `talata/directive`. -->
-
-Directive is not available in this version of talata. Keep `remark-parse` with `remark-directive` for documents that use directives.
 
 ### Known differences
 

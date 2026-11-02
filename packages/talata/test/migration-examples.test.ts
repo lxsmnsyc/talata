@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import type { Root } from 'mdast';
 import { describe, expect, it } from 'vitest';
 import * as talataIndex from '../src/index';
+import * as talataDirective from '../src/directive';
 import * as talataFrontmatter from '../src/frontmatter';
 import * as talataMath from '../src/math';
 import * as talataUnified from '../src/unified';
@@ -37,10 +38,17 @@ const value = [
   '',
   '[^1]: The note.',
   '',
+  ':::note{.tip}',
+  'A :abbr[HTML]{title="HyperText"} hint.',
+  ':::',
+  '',
+  '::youtube[Video]{#a1}',
+  '',
 ].join('\n');
 
 const local: Record<string, unknown> = {
   talata: talataIndex,
+  'talata/directive': talataDirective,
   'talata/frontmatter': talataFrontmatter,
   'talata/math': talataMath,
   'talata/unified': talataUnified,
