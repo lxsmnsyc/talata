@@ -1,7 +1,7 @@
 ---
 id: fix-footnote-spread
 title: Fix list spread inside a quote in a footnote
-status: todo
+status: active
 priority: must
 type: fix
 outline: false
