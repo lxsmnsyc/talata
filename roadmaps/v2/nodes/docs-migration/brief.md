@@ -1,7 +1,7 @@
 ---
 id: docs-migration
 title: Migration guide to talata
-status: todo
+status: active
 priority: must
 type: docs
 outline: false
