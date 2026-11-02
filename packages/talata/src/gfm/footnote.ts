@@ -18,7 +18,7 @@ import type { BlockRule, BlockState, OpenBlock } from '../core/blocks';
 import { CR, LF, SPACE, TAB, isSpaceOrTab } from '../core/chars';
 import type { Delimiter, InlineRule, InlineState } from '../core/inline';
 import { nodeIndex } from '../core/inline';
-import { advanceLine, consumeColumns } from '../core/line';
+import { advanceLine, consumeColumns, isLastLine } from '../core/line';
 import type { Line } from '../core/line';
 import { point, skipLineEnding } from '../core/source';
 import { normalizeIdentifier } from '../core/state';
@@ -131,7 +131,8 @@ class OpenFootnoteDefinition implements TrackedContainer {
   nextEnd = -1;
   nextLineStart = -1;
   /** The block continued on the last line, which has no line ending. */
-  matchedEnd = false;
+  /** End of the last line this block matched when that was a last line (see `isLastLine`), or -1. */
+  matchedEnd = -1;
   /** The last non-blank line this block matched, and the offset after its indent. */
   indentLine = -1;
   indentEnd = -1;
@@ -171,7 +172,7 @@ class OpenFootnoteDefinition implements TrackedContainer {
       this.end = line.end;
       indentLines.set(state, state.source.lineStarts[line.index]);
     }
-    this.matchedEnd = line.end === line.text.length;
+    this.matchedEnd = isLastLine(line) ? line.end : -1;
     return true;
   }
 
@@ -201,8 +202,8 @@ class OpenFootnoteDefinition implements TrackedContainer {
       if (before === LF || before === CR) {
         if (this.nextLineStart === childEnd) {
           end = this.nextEnd;
-        } else if (this.matchedEnd) {
-          end = text.length;
+        } else if (this.matchedEnd >= 0) {
+          end = this.matchedEnd;
         }
       }
     }

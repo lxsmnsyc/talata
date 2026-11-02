@@ -1,11 +1,11 @@
-# Change request: extension v1 to v2
+# Change request: extension v2 to v3
 
-- From node: core-hooks
-- Status: accepted (2026-11-02), copied into `extension.md` v2
+- From node: core-hooks-2
+- Status: proposed. The orchestrator copies the interface below into `extension.md` as version 3.
 
 ## Problem
 
-The directive build (branch `feat/ext-directive`, `roadmaps/v2/contracts/extension-directive.change-request.md`) reached private parser state through casts to `stack`, `containerIndex`, `container` and `closeTo`, and through tricks on rule objects. Frontmatter kept a list of rule names, and math kept copies of core helpers. Version 2 adds supported hooks for each. The tree output of talata, with and without extensions, does not change.
+`roadmaps/v2/contracts/extension-directive.change-request.md` (accepted 2026-11-02) lists three things a container extension needs to hold flow content the way micromark does, without guessing: closing its inner blocks when a container starts outside it, reading the containers around it, and marking the last line of its content. Version 3 adds one hook for each. The tree output of talata, with and without the 0.2 extensions, does not change.
 
 All paths are under `packages/talata/src/`.
 
@@ -14,51 +14,50 @@ All paths are under `packages/talata/src/`.
 Block side, `core/blocks.ts`:
 
 ```ts
-interface BlockState {
-  // Index of `block` among the open blocks (0 is the document), or -1.
-  getDepth(block: OpenBlock): number;
-  // Closes the open blocks above `depth`, innermost first; the block at `depth` becomes the tip.
-  // `closeKeepsLineEnding` is `options.keepsLineEnding` while they close, then its old value.
-  // Call it from a container's `continue`. Pass `state.getDepth(this)` or less.
-  closeOpenBlocks(depth: number, options: { keepsLineEnding: boolean }): void;
-  // True: rules with `opensContainer` do not start for the rest of the document.
-  // Writable: a rule may set it back to false.
-  containerStartsOff: boolean;
-}
-
-interface BlockRule {
-  // True for rules that start CommonMark containers (blockquote, listItem, footnoteDefinition).
-  // They are skipped while `containerStartsOff`.
-  opensContainer?: boolean;
-}
-
 interface OpenBlock {
-  // Containers: false when starting this block does not make the blocks it closes
-  // keep their line ending (`closeKeepsLineEnding`). For constructs that are flow for the reference.
-  startsContainer?: false;
+  // Containers. Called on each open block that a starting container closes, before any of them
+  // closes, innermost first, with keepsLineEnding true. Starting containers are those with
+  // startsContainer !== false (block quote, list item, footnote definition, directive does not).
+  // The block may close the blocks inside itself with its own answer:
+  //   state.closeOpenBlocks(state.getDepth(this), { keepsLineEnding })
+  // Pass getDepth(this) or less. A block already closed by an earlier call is not called.
+  // Not called on other lines (lazy lines, blank lines, closing fences): use continue there.
+  willClose?(state: BlockState, line: Line, keepsLineEnding: boolean): void;
 }
+
+interface BlockState {
+  // The open block at depth (0 is the document), or undefined. Read-only counterpart of getDepth.
+  getBlock(depth: number): OpenBlock | undefined;
+  // Called from a container's continue: the current line is the last line of its content.
+  // For the rest of this line isLastLine(line) is true, and the core remembers the block for the next line.
+  endContent(block: OpenBlock): void;
+}
+
+interface Line {
+  // True after endContent on this line. For blocks inside, the line is the last line of the
+  // document and has no line ending. Reset for every line.
+  endsContent: boolean;
+}
+
+// core/line.ts. True when line.end is the end of the text, or line.endsContent is true.
+function isLastLine(line: Line): boolean;
 ```
 
-Behavior changes without new names:
+Behavior while `isLastLine(line)` is true because of `endContent`, in place of `line.end === line.text.length`:
 
-- `continuesOverEnd` runs for every tip after a final line ending, not only for a leaf other than a paragraph. `state.closeKeepsLineEnding` is then true in `close` of a tip container or paragraph, and of the containers above, when every open block above the tip continues over the empty line.
-- When a lazy line meets a container with `acceptsLazy: false`, `state.paragraph` is undefined and `state.lazy` is false for that line. Rules that need no paragraph (indented code, HTML kind 7) start on it. No built-in container refuses lazy lines, so built-in output is the same.
+- `isEmptyLastLine(line)` (`blocks/code-indented.ts`): fenced code, HTML and math (flow) end before the line.
+- The block quote's end-only rule (`blocks/blockquote.ts`): a quote matches a line with nothing left after an outer quote prefix, and sets `endOnlyLine`.
+- `keepsLazyContainers` in `processLine`: a block that interrupts a lazy paragraph closes the containers that did not match, as on a last line.
+- `matchedEnd` of list items and footnote definitions: it is now the end offset of the last line the block matched when that line was a last line (or `endContent` was called), or -1. It was a boolean, and the block then ended at `text.length`; it ends at that line's end instead, which is the same offset for a real last line.
 
-Inline side, `core/inline.ts`:
+Behavior on the line after `endContent`, when the block that called it does not match that line (an outer block failed): `state.unmatched` is false for that line, so a table inside does not take it as a lazy body row (`table.ts`), and indented code and task items treat it as not lazy either. When the block matches the line, nothing changes.
 
-- The per-leaf state of the built-in rules that changes output lives on `InlineState`, not in module variables: `brackets` (link bracket stack), `reached` (furthest range looked into), `attentionFirst` (strikethrough order) and `task` (task list marker). A rule's `parse` may call `parseInline` on sub-ranges (`parseInline(state, ranges)`) and the outer leaf is unaffected.
-- Module state that stays (autolink literal, raw HTML and code span "exhausted" memos, link `keysFor`) is a cache keyed by the `InlineState` object. A nested call can only make the outer leaf rescan, never give a wrong answer.
-
-Shared helpers extensions import instead of copying:
-
-- `strip(value, virtual, virtualEnd)` from `inline/code-span.ts`: code span and inline math padding.
-- `isClosingFence(line, marker, size)` and `trimLineEndings(raw)` from `blocks/code-fenced.ts`.
-- `createExhausted()`, `getFailedStart(cache, state, size)`, `markFailed(cache, size, start, known)` from `inline/exhausted.ts`: the "no closer up to the end of the leaf" cache of code span and inline math. Each rule creates its own cache.
+No other names change. `startsContainer`, `closeOpenBlocks`, `getDepth` and `containerStartsOff` of version 2 stay.
 
 ## Affected nodes
 
-ext-directive (rebuilds on the hooks), ext-mdx (JSX flow elements need the same hooks), ext-api (contract text).
+ext-directive (replaces `directiveEnd`, `directiveHtml`, the prefix replay and `isContainerStart` with the hooks), ext-mdx (JSX flow elements hold flow content the same way).
 
 ## Decision
 
-Accepted. Copied into `extension.md` as version 2 after PR #15 merged.
+Pending. The orchestrator accepts it by copying it into `extension.md`.

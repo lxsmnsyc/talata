@@ -27,6 +27,12 @@ export interface Line {
   nonBlank: number;
   /** True when only spaces and tabs remain. */
   blank: boolean;
+  /**
+   * True when a container's `continue` called `BlockState.endContent` on this
+   * line: for the blocks inside, it is the last line of the document and has
+   * no line ending. Reset for each line. Read it with `isLastLine`.
+   */
+  endsContent: boolean;
 }
 
 export function createLine(text: string): Line {
@@ -40,7 +46,13 @@ export function createLine(text: string): Line {
     indent: 0,
     nonBlank: 0,
     blank: true,
+    endsContent: false,
   };
+}
+
+/** Whether `line` is the last line of the text or of a container's content (`endContent`): no line ending follows. */
+export function isLastLine(line: Line): boolean {
+  return line.end === line.text.length || line.endsContent;
 }
 
 /** Recomputes `indent`, `nonBlank` and `blank` from `start`. */

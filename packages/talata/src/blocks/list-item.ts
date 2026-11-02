@@ -1,7 +1,7 @@
 import type { BlockContent, DefinitionContent, ListItem, RootContent } from 'mdast';
 import type { BlockRule, BlockState, OpenBlock } from '../core/blocks';
 import { CR, LF } from '../core/chars';
-import { advanceLine, consumeColumns } from '../core/line';
+import { advanceLine, consumeColumns, isLastLine } from '../core/line';
 import type { Line } from '../core/line';
 import { point } from '../core/source';
 import {
@@ -43,7 +43,8 @@ class OpenListItem implements TrackedContainer, ItemState, TaskTarget {
   /** Start of the line of `nextEnd`. */
   nextLineStart = -1;
   /** The item continued on the last line, which has no line ending. */
-  matchedEnd = false;
+  /** End of the last line this block matched when that was a last line (see `isLastLine`), or -1. */
+  matchedEnd = -1;
   /** GFM: where the item's first flow content starts, or -1 (`TaskTarget`). */
   contentStart = -1;
   lazyStarts: number[] | undefined = undefined;
@@ -70,7 +71,7 @@ class OpenListItem implements TrackedContainer, ItemState, TaskTarget {
     if (line.blank) {
       this.furtherBlank = this.furtherBlank || this.initialBlank;
       consumeColumns(line, this.size);
-      this.matchedEnd = line.end === line.text.length;
+      this.matchedEnd = isLastLine(line) ? line.end : -1;
       return true;
     }
     const further = this.furtherBlank;
@@ -80,7 +81,7 @@ class OpenListItem implements TrackedContainer, ItemState, TaskTarget {
       return false;
     }
     consumeColumns(line, this.size);
-    this.matchedEnd = line.end === line.text.length;
+    this.matchedEnd = isLastLine(line) ? line.end : -1;
     return true;
   }
 
@@ -108,8 +109,8 @@ class OpenListItem implements TrackedContainer, ItemState, TaskTarget {
       if (before === LF || before === CR) {
         if (this.nextLineStart === childEnd) {
           end = this.nextEnd;
-        } else if (this.matchedEnd) {
-          end = text.length;
+        } else if (this.matchedEnd >= 0) {
+          end = this.matchedEnd;
         }
       }
     }

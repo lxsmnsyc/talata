@@ -1,17 +1,18 @@
 import type { Code } from 'mdast';
 import type { BlockRule, BlockState, OpenBlock } from '../core/blocks';
 import { CR, LF } from '../core/chars';
-import { consumeColumns } from '../core/line';
+import { consumeColumns, isLastLine } from '../core/line';
 import type { Line } from '../core/line';
 import { point, skipLineEnding } from '../core/source';
 
 /**
  * Whether `line` is the last line, has no line ending and nothing is left
  * after the container prefixes (`> ```\n> a\n>`). micromark then ends an open
- * fenced code or HTML block right after the previous line ending.
+ * fenced code or HTML block right after the previous line ending. A line that
+ * a container marked with `BlockState.endContent` counts as a last line.
  */
 export function isEmptyLastLine(line: Line): boolean {
-  return line.start === line.end && line.partialTab === 0 && line.end === line.text.length;
+  return line.start === line.end && line.partialTab === 0 && isLastLine(line);
 }
 
 /**
