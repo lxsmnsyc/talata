@@ -1,7 +1,7 @@
 import type { PhrasingContent, RootContent } from 'mdast';
 import openParagraph from '../blocks/paragraph';
 import { CR, LF } from './chars';
-import { createLine, measureLine } from './line';
+import { createLine, isLastLine, measureLine } from './line';
 import type { Line } from './line';
 import type { Registry } from './registry';
 import type { DocumentState, ParseOptions } from './state';
@@ -59,6 +59,24 @@ export interface BlockState extends DocumentState {
    * not open. Use it with `closeOpenBlocks`.
    */
   getDepth(block: OpenBlock): number;
+  /**
+   * The open block at `depth` (0 is the document), or undefined. Read it to
+   * ask the containers around a block; the counterpart of `getDepth`. Do not
+   * close or change what it returns.
+   */
+  getBlock(depth: number): OpenBlock | undefined;
+  /**
+   * A container calls it from its `continue` to say the current line is the
+   * last line of its content. The content is then a document of its own for
+   * the reference, and a last line has no line ending. For the rest of the
+   * line `isLastLine(line)` is true, and the rules that look for a last
+   * line (empty last line of fenced code, HTML and extension leaves, the
+   * block quote's end-only rule, `keepsLazyContainers`, `matchedEnd` of list
+   * items and footnote definitions) read it. On the next line, if `block` does
+   * not match it, the line is not lazy for the blocks that were inside
+   * (`unmatched` is false): the content ended before it.
+   */
+  endContent(block: OpenBlock, line: Line): void;
   /**
    * Closes the open blocks above `depth`, innermost first, so the block at
    * `depth` becomes the tip. A container calls it from its `continue` to end
@@ -143,6 +161,16 @@ export interface OpenBlock {
    * flow construct for the reference, not a container of the document.
    */
   startsContainer?: false;
+  /**
+   * Containers: called on each open block that a starting container closes
+   * (see `startsContainer`), innermost first and before any of them closes,
+   * with `keepsLineEnding` true. The container may close the blocks inside
+   * itself with its own answer: `state.closeOpenBlocks(state.getDepth(this),
+   * { keepsLineEnding })`. A block that is closed by an earlier call is not
+   * called. It runs for container starts only; blocks that close on other
+   * lines do not call it.
+   */
+  willClose?(state: BlockState, keepsLineEnding: boolean): void;
   /** Containers: a paragraph inside may continue on a line that does not match this container. */
   acceptsLazy: boolean;
   /**
@@ -237,6 +265,8 @@ export class BlockParser implements BlockState {
   endOnlyLine = -1;
   closeKeepsLineEnding = false;
   containerStartsOff = false;
+  /** The block of the last `endContent` call. */
+  contentEndsBlock: OpenBlock | undefined;
   /** Open blocks from the document to the tip. */
   stack: OpenBlock[] = [document];
   /** Closed child nodes of each open block, parallel to `stack`. */
@@ -350,6 +380,10 @@ export class BlockParser implements BlockState {
     }
     this.tip = !tip.isContainer && matched >= top - 1 ? tip : undefined;
     this.unmatched = this.containerIndex < (tip.isContainer ? top : top - 1);
+    // The line after `endContent`: its block not matching means the content ended before it.
+    if (line.endsContent === line.index - 1 && this.getDepth(this.contentEndsBlock!) > matched) {
+      this.unmatched = false;
+    }
 
     let started = false;
     while (!line.blank) {
@@ -360,7 +394,7 @@ export class BlockParser implements BlockState {
         break;
       }
       started = true;
-      if (this.lazy && block.keepsLazyContainers === true && line.end < line.text.length) {
+      if (this.lazy && block.keepsLazyContainers === true && !isLastLine(line)) {
         // Close only the paragraph; the block takes its place.
         this.containerIndex = stack.length - 2;
       }
@@ -436,8 +470,12 @@ export class BlockParser implements BlockState {
    */
   attach(block: OpenBlock): void {
     this.closeKeepsLineEnding = block.isContainer && block.startsContainer !== false;
-    this.closeTo(this.containerIndex);
     const stack = this.stack;
+    // Blocks that close tell their container first, innermost first. A call may close the blocks above it, never the ones below.
+    for (let i = this.closeKeepsLineEnding ? stack.length - 1 : 0; i > this.containerIndex; i--) {
+      stack[i].willClose?.(this, true);
+    }
+    this.closeTo(this.containerIndex);
     while (stack.length > 1) {
       const parent = stack[stack.length - 1];
       if (parent.canContain === undefined || parent.canContain(block)) {
@@ -476,6 +514,15 @@ export class BlockParser implements BlockState {
 
   getDepth(block: OpenBlock): number {
     return this.stack.lastIndexOf(block);
+  }
+
+  getBlock(depth: number): OpenBlock | undefined {
+    return this.stack[depth];
+  }
+
+  endContent(block: OpenBlock, line: Line): void {
+    line.endsContent = line.index;
+    this.contentEndsBlock = block;
   }
 
   closeOpenBlocks(depth: number, options: { keepsLineEnding: boolean }): void {
