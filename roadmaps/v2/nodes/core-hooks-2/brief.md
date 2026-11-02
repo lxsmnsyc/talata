@@ -1,7 +1,7 @@
 ---
 id: core-hooks-2
 title: Core hooks for directive content
-status: active
+status: done
 priority: must
 type: refactor
 outline: false
@@ -13,6 +13,7 @@ spike: false
 verify:
 exclusive: [benchmark]
 fulfilled_by:
+spent: 256139
 gate: false
 added: 2026-11-02
 owns:

@@ -1,7 +1,7 @@
 # Change request: extension v2 to v3
 
 - From node: core-hooks-2
-- Status: proposed. The orchestrator copies the interface below into `extension.md` as version 3.
+- Status: accepted (2026-11-02), copied into `extension.md` v3
 
 ## Problem
 
@@ -60,4 +60,4 @@ ext-directive (replaces `directiveEnd`, `directiveHtml`, the prefix replay and `
 
 ## Decision
 
-Pending. The orchestrator accepts it by copying it into `extension.md`.
+Accepted. Copied into `extension.md` as version 3 after PR #22 merged.
