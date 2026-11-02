@@ -17,9 +17,10 @@ gate: false
 added: 2026-11-02
 owns:
   - packages/talata/src/ext/directive/**
-  - packages/talata/test/fix-directive-nesting*.test.ts
+  - packages/talata/test/fix-directive-nesting*.ts
   - .changeset/fix-directive-nesting.md
-shared: []
+shared:
+  - roadmaps/v2/contracts/extension-directive.change-request.md
 reserves: []
 provides: []
 depends_on:
