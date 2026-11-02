@@ -1,7 +1,7 @@
 ---
 id: ext-directive
 title: Directive extension
-status: active
+status: done
 priority: must
 type: feature
 outline: false
@@ -13,7 +13,7 @@ spike: false
 verify:
 exclusive: []
 fulfilled_by:
-spent: 409146
+spent: 780017
 gate: false
 added: 2026-10-28
 owns:

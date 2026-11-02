@@ -67,3 +67,7 @@
 ## Size
 
 - Estimated L, actual L. The hooks removed the guesses, but each 1,000,000 run still found one to four new classes of container ends, which took five fuzz rounds.
+
+## Landed
+
+PR #20 merged into main as 724bfb7 (2026-11-02), after one fresh review (clean) and one round of review fixes (4959fe0).
