@@ -37,19 +37,19 @@ const EOL = -2;
  * micromark reads a tab as a code that is neither whitespace nor punctuation
  * where it classifies characters, so a tab can be part of a name.
  */
-function kindOf(code: number): number {
+function classifyCode(code: number): number {
   return code === TAB ? 0 : classifyCharacter(code);
 }
 
 /** Offset after the name that starts at `start`, or -1 when there is none. */
 export function readName(text: string, start: number, end: number): number {
-  if (start >= end || kindOf(text.charCodeAt(start)) !== 0) {
+  if (start >= end || classifyCode(text.charCodeAt(start)) !== 0) {
     return -1;
   }
   let i = start + 1;
   while (i < end) {
     const code = text.charCodeAt(i);
-    const kind = kindOf(code);
+    const kind = classifyCode(code);
     if (kind === WHITESPACE || (kind === PUNCTUATION && code !== DASH && code !== UNDERSCORE)) {
       break;
     }
@@ -226,7 +226,7 @@ export function readAttributes(
       if (c === EOF || c === EOL) {
         break;
       }
-      const k = kindOf(c);
+      const k = classifyCode(c);
       if (
         k === WHITESPACE ||
         (k === PUNCTUATION && c !== DASH && c !== DOT && c !== COLON && c !== UNDERSCORE)

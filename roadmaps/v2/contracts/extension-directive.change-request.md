@@ -16,6 +16,7 @@ The v2-to-v3 request from this node was accepted on 2026-11-02 and built by core
 
 - `BlockState.startsContainer(line: Line): boolean`: whether a rule with `opensContainer` would start on `line` at its current position, with no side effects. It can run the container rules' start checks on a copy of the line, or each such rule can get a pure `matches(line)`.
 - `OpenBlock.matchesNext?(state, line): boolean` on core containers: the check from their `continue` with no side effects. The directive then walks `getBlock(1..depth)` with it instead of copying the rules.
+- A supported way to ask the blocks inside a container whether they continue over an empty line. `container.ts` sets `state.container` for a moment in `keepsFor`, `segmentKeeps` and `closeInside`, while it calls their `continue` with an empty line, then restores it. `container` is a public field and core does the same in `continuesOverEnd`, but it is not a contract hook. A `matchesNext`-style check that takes the parent as an argument would remove the write.
 - `TrackedContainer.endAtLeast?(offset: number): void`: a container ends at `offset` or later. It replaces the write to the list item's `indentEnd`.
 - Point 2: apply the next-line `unmatched` override only while blocks at or above the `endContent` block close, then restore the computed value before start rules run. In other words, do in core what `directiveScope` now does.
 
