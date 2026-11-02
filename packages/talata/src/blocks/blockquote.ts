@@ -1,7 +1,7 @@
 import type { BlockContent, Blockquote, DefinitionContent, RootContent } from 'mdast';
 import type { BlockRule, BlockState, OpenBlock } from '../core/blocks';
 import { isSpaceOrTab } from '../core/chars';
-import { advanceLine, consumeColumns } from '../core/line';
+import { advanceLine, consumeColumns, isLastLine } from '../core/line';
 import type { Line } from '../core/line';
 import { point } from '../core/source';
 
@@ -150,7 +150,7 @@ class OpenBlockquote implements TrackedContainer {
     if (
       line.start === line.end &&
       line.partialTab === 0 &&
-      line.end === line.text.length &&
+      isLastLine(line) &&
       quoteLine === line.index
     ) {
       this.quoteLine = quoteLine;

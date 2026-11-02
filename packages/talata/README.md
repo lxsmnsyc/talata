@@ -6,6 +6,8 @@ Because the tree is the same, everything that reads mdast keeps working: remark 
 
 The name is Tagalog for "paragraph".
 
+Coming from `mdast-util-from-markdown` or `remark-parse`? See the [migration guide](../../docs/migration.md).
+
 ## Install
 
 ```sh

@@ -30,6 +30,9 @@ depends_on:
   - on: docs-migration
     kind: hard
     why: ships the guide and fills in its directive section
+  - on: fix-footnote-spread
+    kind: hard
+    why: the release fuzz run needs main free of known differences
 ---
 
 # Docs and the 0.3 release

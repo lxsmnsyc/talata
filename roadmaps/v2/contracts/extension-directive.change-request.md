@@ -1,7 +1,7 @@
 # Change request: extension v2 to v3
 
 - From node: ext-directive
-- Status: open
+- Status: accepted (2026-11-02), built by core-hooks-2
 
 ## Problem
 
@@ -28,3 +28,5 @@ ext-directive, ext-mdx (JSX flow elements hold flow content the same way), relea
 3. Case by case: a line that holds only the markers of the quotes inside closes the blocks inside keeping their line ending; `directiveHtml` (priority 399) runs the core HTML rule and turns `keepsLazyContainers` off; `directiveEnd` closes the content with `state.unmatched` off before a lazy line. Other leaves on such a line are not covered.
 
 ## Decision
+
+Accepted by the user on 2026-11-02. Node core-hooks-2 adds the three hooks and writes the v3 interface into `extension.change-request.md`; the orchestrator copies it into `extension.md`. ext-directive then replaces its workarounds with the hooks.

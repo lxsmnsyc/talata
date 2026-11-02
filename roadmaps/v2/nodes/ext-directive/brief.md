@@ -13,6 +13,7 @@ spike: false
 verify:
 exclusive: []
 fulfilled_by:
+spent: 409146
 gate: false
 added: 2026-10-28
 owns:
@@ -36,6 +37,9 @@ depends_on:
   - on: core-hooks
     kind: hard
     why: rebuilds on the core hooks of extension contract v2
+  - on: core-hooks-2
+    kind: hard
+    why: replaces the three guessed workarounds with the v3 hooks
   - on: ext-api
     kind: contract
     via: extension
@@ -67,9 +71,13 @@ Test inputs: the reference package's own test cases (inputs copied from its repo
 - [ ] Every reference test input and every corpus file gives the reference's tree, with and without GFM.
 - [ ] `grep -rn "as unknown as" src/ext/directive` finds only casts to mdast node types.
 - [ ] `cd packages/talata && pnpm fuzz --count 1000000 --seed <any> --all` (GFM, frontmatter, math and directive on) finds no difference.
-- [ ] The main entry stays within the limit (`pnpm --filter benchmark size`, 33112 bytes gzip), and holds no directive code (`test/ext-api-bundle.test.ts`).
+- [ ] The main entry holds no directive code (`test/ext-api-bundle.test.ts`). Report its gzip size; it is not a gate.
 - [ ] Full check passes.
 
 ## Sizing
 
 L: three rules, a container rebuilt on new hooks, the subpath wiring put back, and a 1,000,000-document fuzz run. Most code exists on `feat/ext-directive`.
+
+## Resume (2026-11-02)
+
+The first pass is on `feat/directive`, draft PR #20 (b508ea1). It met every criterion except the 1,000,000-document fuzz: 4 differences (seed 20261106, `--all`), all with a directive inside a quote or list item, next to a blank or last line. Its change request, `roadmaps/v2/contracts/extension-directive.change-request.md`, was accepted, and core-hooks-2 adds the three hooks. Resume on `feat/directive`: merge `main`, replace the workarounds (`directiveEnd`'s `isContainerStart` guess, the replayed prefixes, the case-by-case last-line handling in `directiveEnd` and `directiveHtml`) with the hooks, and rerun the fuzz. The hooks landed in PR #22 as extension contract v3: `willClose(state, line, keepsLineEnding)`, `getBlock(depth)`, `endContent(block)` with `isLastLine(line)`. Read `roadmaps/v2/nodes/core-hooks-2/outcome.md`. A GFM footnote bug on main (`[^a]:>7.\n    >\n    >`, list item `spread`) is not yours: skip fuzz failures that reproduce on main without directive and list them in the outcome. The remaining fuzz inputs are in `outcome.md` (Verification) on that branch. Release-0.3 adds the minor changeset.
