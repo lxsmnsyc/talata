@@ -1,7 +1,7 @@
 ---
 id: core-hooks-2
 title: Core hooks for directive content
-status: todo
+status: active
 priority: must
 type: refactor
 outline: false
