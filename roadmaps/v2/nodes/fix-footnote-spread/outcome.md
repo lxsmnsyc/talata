@@ -33,3 +33,7 @@
 ## Size
 
 - Estimated S, actual S.
+
+## Landed
+
+Direct commit c42a8ef on main (2026-11-02), after one fresh review round.
