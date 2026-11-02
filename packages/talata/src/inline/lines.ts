@@ -37,23 +37,17 @@ export function peek(state: InlineState, cursor: Cursor): number {
 // line ending's end point skips the next line's container prefixes only
 // when that line was fed before the line ending was consumed: after a
 // lookahead (a code span, raw HTML or link resource attempt) reached it.
-let reachState: InlineState | undefined;
-let reached = 0;
 
 /** Records that a construct looked into range `range`. */
 export function reach(state: InlineState, range: number): void {
-  if (reachState !== state) {
-    reachState = state;
-    reached = 0;
-  }
-  if (range > reached) {
-    reached = range;
+  if (range > state.reached) {
+    state.reached = range;
   }
 }
 
 /** Whether a construct has looked into range `range`. */
 export function wasReached(state: InlineState, range: number): boolean {
-  return reachState === state && reached >= range;
+  return state.reached >= range;
 }
 
 /** Moves the cursor to the start of the next range. */

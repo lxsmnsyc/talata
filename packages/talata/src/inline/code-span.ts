@@ -1,5 +1,6 @@
 import type { InlineRule, InlineState } from '../core/inline';
 import { point, skipLineEnding } from '../core/source';
+import { createExhausted, failedStart, markFailed } from './exhausted';
 import { linePrefix, prefixSplitColumns, reach, workSteps } from './lines';
 import { appendText, pushNode } from './text';
 
@@ -12,11 +13,7 @@ const SPACE = 32;
 const LF = 10;
 const CR = 13;
 
-// Opening sizes with no closer up to the end of the leaf, by size: the
-// earliest such start. A later run of that size has no closer either.
-// Keyed on the inline state, which is new for every leaf.
-let exhaustedState: InlineState | undefined;
-let exhausted: (number | undefined)[] = [];
+const exhausted = createExhausted();
 
 function isPadding(code: number): boolean {
   return code === SPACE || code === LF || code === CR;
@@ -27,7 +24,7 @@ function isPadding(code: number): boolean {
  * value is not all padding. `virtual`: the value holds split-tab columns
  * (micromark's virtual spaces, which are data); `virtualEnd`: it ends in them.
  */
-function strip(value: string, virtual: boolean, virtualEnd: boolean): string {
+export function strip(value: string, virtual: boolean, virtualEnd: boolean): string {
   const length = value.length;
   if (
     length < 2 ||
@@ -62,11 +59,7 @@ function parseCodeSpan(state: InlineState): boolean {
   }
   const size = pos - start;
   const open = pos;
-  if (exhaustedState !== state) {
-    exhaustedState = state;
-    exhausted = [];
-  }
-  const known = exhausted[size];
+  const known = failedStart(exhausted, state, size);
   if (known !== undefined && start > known) {
     appendText(state, text.slice(start, open), start, open);
     state.pos = open;
@@ -104,9 +97,7 @@ function parseCodeSpan(state: InlineState): boolean {
   }
   if (close === -1) {
     // No closer: the whole opening run is text.
-    if (known === undefined || start < known) {
-      exhausted[size] = start;
-    }
+    markFailed(exhausted, size, start, known);
     appendText(state, text.slice(start, open), start, open);
     state.pos = open;
     return true;

@@ -231,6 +231,7 @@ function followsIndent(parent: OpenBlock, line: Line): boolean {
 
 const footnoteDefinition: BlockRule = {
   name: 'footnoteDefinition',
+  opensContainer: true,
   priority: 150,
   canInterruptParagraph: true,
   triggers: '[',

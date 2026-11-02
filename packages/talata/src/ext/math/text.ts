@@ -1,6 +1,8 @@
 import type { PhrasingContent } from 'mdast';
 import type { InlineRule, InlineState } from '../../core/inline';
 import { point, skipLineEnding } from '../../core/source';
+import { strip } from '../../inline/code-span';
+import { createExhausted, failedStart, markFailed } from '../../inline/exhausted';
 import { linePrefix, prefixSplitColumns, reach, workSteps } from '../../inline/lines';
 import { appendText, pushNode } from '../../inline/text';
 
@@ -9,49 +11,8 @@ import { appendText, pushNode } from '../../inline/text';
 // in the value and one space or line ending of padding is stripped.
 
 const DOLLAR = 36;
-const SPACE = 32;
-const LF = 10;
-const CR = 13;
 
-// Opening sizes with no closer up to the end of the leaf, by size: the
-// earliest such start. A later run of that size has no closer either.
-// Keyed on the inline state, which is new for every leaf.
-let exhaustedState: InlineState | undefined;
-let exhausted: (number | undefined)[] = [];
-
-function isPadding(code: number): boolean {
-  return code === SPACE || code === LF || code === CR;
-}
-
-/**
- * Strips one space or line ending from both ends when both have one and the
- * value is not all padding. `virtual`: the value holds split-tab columns
- * (micromark's virtual spaces, which are data); `virtualEnd`: it ends in them.
- */
-function strip(value: string, virtual: boolean, virtualEnd: boolean): string {
-  const length = value.length;
-  if (
-    length < 2 ||
-    virtualEnd ||
-    !isPadding(value.charCodeAt(0)) ||
-    !isPadding(value.charCodeAt(length - 1))
-  ) {
-    return value;
-  }
-  let data = virtual;
-  for (let i = 0; i < length && !data; i++) {
-    if (!isPadding(value.charCodeAt(i))) {
-      data = true;
-      break;
-    }
-  }
-  if (!data) {
-    return value;
-  }
-  const head = value.charCodeAt(0) === CR && value.charCodeAt(1) === LF ? 2 : 1;
-  const tail = value.charCodeAt(length - 1) === LF && value.charCodeAt(length - 2) === CR ? 2 : 1;
-  return value.slice(head, length - tail);
-}
+const exhausted = createExhausted();
 
 function parseMathText(state: InlineState, single: boolean): boolean {
   const text = state.source.text;
@@ -68,11 +29,7 @@ function parseMathText(state: InlineState, single: boolean): boolean {
     state.pos = open;
     return true;
   }
-  if (exhaustedState !== state) {
-    exhaustedState = state;
-    exhausted = [];
-  }
-  const known = exhausted[size];
+  const known = failedStart(exhausted, state, size);
   if (known !== undefined && start > known) {
     appendText(state, text.slice(start, open), start, open);
     state.pos = open;
@@ -110,9 +67,7 @@ function parseMathText(state: InlineState, single: boolean): boolean {
   }
   if (close === -1) {
     // No closer: the whole opening run is text.
-    if (known === undefined || start < known) {
-      exhausted[size] = start;
-    }
+    markFailed(exhausted, size, start, known);
     appendText(state, text.slice(start, open), start, open);
     state.pos = open;
     return true;
