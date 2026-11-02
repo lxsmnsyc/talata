@@ -17,6 +17,7 @@ import type { TrackedContainer } from '../../blocks/blockquote';
 import { isClosingFence } from '../../blocks/code-fenced';
 import { isEmptyLastLine } from '../../blocks/code-indented';
 import OpenList, { isThematicBreak } from '../../blocks/list';
+import { footnoteIndentAt } from '../../gfm/footnote';
 import { queueLabel } from './labels';
 import { enter, hide, leave, snapshot, takeEarly } from './scopes';
 import type { Scope, Snapshot, Taken } from './scopes';
@@ -408,43 +409,77 @@ class OpenContainerDirective implements TrackedContainer {
     let need = 0;
     // A quote does not continue over a blank line: the blocks in it end with it.
     let quoted = false;
-    // The prefix around this block on the line is a footnote definition's indent.
-    const parent = state.getBlock(state.getDepth(this) - 1);
-    const afterIndent = parent?.name === 'footnoteDefinition';
+    // A footnote definition around this block took its indent on this line.
+    // The other prefixes around (quote markers, item indents) do not stop the
+    // reference's walk back from a list's end; that indent does.
+    const afterIndent = footnoteIndentAt(state, lineStart);
+    // The open block the loop saw before `child`.
+    let previous: TrackedContainer | undefined;
+    // The line after the prefixes of the quotes inside that continue on it,
+    // while only such quotes are between this block and `child`.
+    let direct = true;
+    // A container starts on the next line and no quote is open inside: this
+    // block's content keeps its final line ending, and the blocks inside end
+    // after it, as their last children do, not at this blank line.
+    const keepsEnding = this.startsNext && !hasQuoteInside(this.getInside(state));
+    const rest: Line = { ...line };
+    // Where the indent of a footnote definition just before ended, or -1.
+    let follow = -1;
+    let blank = line.blank;
+    let indent = line.indent;
     for (
       let child: TrackedContainer | undefined = this.openChild;
       child !== undefined;
-      child = child.openChild
+      previous = child, child = child.openChild
     ) {
+      if (state.getDepth(child) < 0) {
+        // `openChild` stays linked after a block closes, and so do the blocks
+        // in it: a closed block keeps the end it had.
+        break;
+      }
+      if (!blank && direct) {
+        // Quote markers and item and footnote indents on the line, read by
+        // column, so that a quote marker after them is read where its block
+        // expects it.
+        direct = continuesNext(child, rest, follow);
+        follow = child.name === 'footnoteDefinition' && !rest.blank ? rest.start : -1;
+        if (direct && child.name === 'blockquote') {
+          // The quote continues on this line; the blocks in it see the rest.
+          blank = rest.blank;
+          indent = rest.indent;
+          need = 0;
+          continue;
+        }
+      }
       if (child.name === 'blockquote') {
+        if (blank && !quoted && previous?.name === 'listItem') {
+          // The quote in an item ends here; a container that starts on a
+          // later line does not move the item's end there. A quote that
+          // closed on an earlier blank line fixed the end then.
+          raiseIndentEnd(previous, line.end);
+        }
         // On a blank line, whitespace left after those prefixes is not one.
-        const prefixOnly = !line.blank || (line.indent <= need && !quoted);
+        const prefixOnly = !blank || (indent <= need && !quoted);
         child.closeEnd =
           atLineEnd && indented && prefixOnly && line.start < line.end ? line.end : lineStart;
         quoted = true;
       } else {
         // In a quote that ends on this blank line, the blocks end with it.
-        child.closeEnd = line.blank && quoted ? lineStart : end;
+        child.closeEnd = blank && quoted ? lineStart : end;
         indented = indented || child.name === 'listItem' || child.name === 'footnoteDefinition';
         // A footnote definition takes no indent on a blank line.
         need += getItemSize(child);
       }
-      if (!line.blank && afterIndent && child.name === 'listItem') {
+      if (afterIndent && child.name === 'listItem') {
         // The indent of a footnote definition around is a token on this
         // line: an item that ends here ends at the line start, as the list.
         raiseIndentEnd(child, lineStart);
       }
-      if (line.blank && !quoted && child.name === 'listItem') {
+      if (line.blank && !quoted && child.name === 'listItem' && !keepsEnding) {
         // A list item ends at its last content, or after the quote prefix of
-        // this blank line when its last child kept its line ending.
+        // this blank line when its last child kept its line ending. A quote
+        // inside that continues on the line keeps the item open past it.
         child.closedAt?.(line.end, lineStart);
-        const inner = child.openChild;
-        if (inner?.name === 'blockquote' && state.getDepth(inner) >= 0) {
-          // The quote in it ends here; a container that starts on a later
-          // line does not move the item's end there. A quote that closed on
-          // an earlier blank line stays linked, and fixed the end then.
-          raiseIndentEnd(child, line.end);
-        }
       }
       if (child instanceof OpenContainerDirective) {
         // Its own content is handled by its own line.
@@ -462,7 +497,9 @@ class OpenContainerDirective implements TrackedContainer {
     this.startsNext = false;
     if (!hasLaterLine(state, line)) {
       // Before a final line ending, in a quote, the content ends as before a lazy line.
-      this.lazyNext = this.quoteLine === line.index;
+      // A footnote definition's indent alone does not count.
+      this.lazyNext =
+        this.quoteLine === line.index && hasQuoteBetween(state, 0, state.getDepth(this));
       return false;
     }
     // The containers around this block, on the next line.
@@ -484,14 +521,30 @@ class OpenContainerDirective implements TrackedContainer {
     let footnote = -1;
     for (let i = 1; i < depth; i++) {
       const block = state.getBlock(i)!;
-      const before = next.start;
+      if (
+        block instanceof OpenContainerDirective &&
+        isClosingFence(next, COLON, block.size) &&
+        !hasQuoteBetween(state, i, depth)
+      ) {
+        // A directive around closes on the next line before its content reads
+        // it, so this block's content ends with that content document. At the
+        // end of a content document, micromark marks the next line lazy when
+        // a block quote does not continue at EOF. List items and footnote
+        // definitions do continue there, through their blank-line rule.
+        return true;
+      }
       if (!continuesNext(block, next, footnote)) {
         // micromark reads the line as lazy unless a container starts on it.
         this.startsNext = next.indent < 4 && isContainerStart(state, text, next.nonBlank, next.end);
-        this.lazyNext = !this.startsNext;
+        // A container that starts outside a directive around this block ends
+        // that directive's content. When a quote in that content holds this
+        // block, this block's content ends as before a lazy line.
+        this.lazyNext = !this.startsNext || isQuotedInDirective(state, i, depth);
         return false;
       }
-      footnote = block.name === 'footnoteDefinition' && next.start !== before ? next.start : -1;
+      // A definition that matched a line that is not blank (its indent, or right
+      // after the indent of the one around) lets the next one follow it.
+      footnote = block.name === 'footnoteDefinition' && !next.blank ? next.start : -1;
     }
     return true;
   }
@@ -589,6 +642,43 @@ function continuesNext(block: OpenBlock, next: Line, footnote: number): boolean 
       // A list item continues where its list does.
       return true;
   }
+}
+
+/** Whether one of `blocks` is a block quote. */
+function hasQuoteInside(blocks: TrackedContainer[]): boolean {
+  for (const block of blocks) {
+    if (block.name === 'blockquote') {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Whether a block quote is open between the depths `outer` and `inner`, both
+ * left out, above a container directive that is also between them.
+ */
+function isQuotedInDirective(state: BlockState, outer: number, inner: number): boolean {
+  let directive = false;
+  for (let depth = outer + 1; depth < inner; depth++) {
+    const block = state.getBlock(depth);
+    if (block instanceof OpenContainerDirective) {
+      directive = true;
+    } else if (directive && block?.name === 'blockquote') {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** Whether a block quote is open between the depths `outer` and `inner`, both left out. */
+function hasQuoteBetween(state: BlockState, outer: number, inner: number): boolean {
+  for (let depth = outer + 1; depth < inner; depth++) {
+    if (state.getBlock(depth)?.name === 'blockquote') {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
