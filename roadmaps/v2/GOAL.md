@@ -1,5 +1,5 @@
 ---
-milestones: [m1-extension-api, m2-extensions, m3-release, m4-mdx]
+milestones: [m1-extension-api, m2-extensions, m3-release, m4-directive, m5-mdx]
 merge:
   mode: auto
   method: merge
@@ -12,13 +12,17 @@ release:
   fence: merge
 ---
 
-# Talata 0.2: frontmatter and math as subpaths
+# Talata 0.2 and 0.3: extensions as subpaths
 
 ## Outcome
 
 `talata` 0.2 is published on npm with two extensions in the same package, each behind its own subpath: `talata/frontmatter` and `talata/math`. `fromMarkdown(value, { gfm, extensions: [frontmatter(), math()] })` returns the same mdast tree, positions included, as `mdast-util-from-markdown` with the matching micromark and mdast extensions. The unified plugin takes the same `extensions` option. The main entry does not grow.
 
+`talata` 0.3 adds the third subpath, `talata/directive`, on the same terms: `extensions: [frontmatter(), math(), directive()]` gives the tree of `mdast-util-from-markdown` with `micromark-extension-directive` and `mdast-util-directive`. 0.2.0 was published on 2026-10-28 (63728b7). 0.3 is the target now.
+
 ## Acceptance
+
+For 0.2, and again for 0.3 with directive added to each item:
 
 - `pnpm --filter talata test` passes, including, for each extension, the reference package's own test inputs and the benchmark corpus with the extension on.
 - The differential fuzzer runs 1,000,000 documents with GFM, frontmatter and math on, with no difference from the reference.
@@ -27,8 +31,8 @@ release:
 
 ## Priorities
 
-- must: needed for the 0.2 release.
-- should: makes 0.2 more trustworthy, but 0.2 can ship without it.
+- must: needed for the next release (0.3: directive).
+- should: makes the release more trustworthy, but it can ship without it.
 - later: parked (MDX).
 
 ## Constraints
@@ -46,7 +50,7 @@ release:
 
 - HTML output (`roadmaps/v1/debate-html/debate.md`).
 - A documented third-party extension API. It comes after these three extensions work without core changes.
-- MDX in 0.2. It is the outline node ext-mdx.
+- MDX in 0.2 and 0.3. It is the outline node ext-mdx.
 
 ## Verification
 
@@ -69,6 +73,7 @@ release:
 
 - "add frontmatter, math and directives as subpaths of talata" (user, 2026-10-28) -> ext-api, ext-frontmatter, ext-math, ext-directive
 - "this includes mdx in the future" (user) -> ext-mdx (outline, later)
+- 0.3 is directive only (user, 2026-11-02) -> core-hooks, ext-directive, release-0.3
 - v1 outline nodes ext-frontmatter, ext-math, ext-directive, ext-mdx -> moved here
 
 ## Decisions
@@ -77,7 +82,9 @@ release:
 - 2026-10-28: the user switched to auto-merge. The orchestrator merges every node pull request that passes review and CI, contract nodes included. Only the release, which publishes to npm, stays with the user.
 - 2026-10-28: the main-entry size limit is 0.5 KB over 0.1.1, not 0.2 KB. ext-api's cache took 177 bytes, and each extension adds a few dozen through shared chunks (math: 49 bytes). The test that the main entry holds no extension code stays.
 - 2026-10-28: directive is parked, and 0.2 ships frontmatter and math (the user's choice). The first directive build needed private parser state and had two fuzz failures. It returns after a core-hooks node, on the branch `feat/ext-directive`. The `talata/directive` stub is removed from 0.2.
+- 2026-11-02: 0.3 ships directive only (the user's choice). MDX stays parked until 0.3 is out. ext-directive is `must` again and rebuilds on the core hooks of extension contract v2.
 
 ## Gates
 
 - release-0.2: the user merges the Version Packages pull request, which publishes to npm.
+- release-0.3: the same, for 0.3.0.

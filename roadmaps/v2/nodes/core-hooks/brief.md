@@ -5,7 +5,7 @@ status: done
 priority: must
 type: refactor
 outline: false
-milestone: m4-mdx
+milestone: m4-directive
 target:
 from:
 size: M
