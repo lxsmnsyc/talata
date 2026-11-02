@@ -2,13 +2,13 @@
 id: ext-directive
 title: Directive extension
 status: todo
-priority: later
+priority: must
 type: feature
 outline: false
-milestone: m4-mdx
+milestone: m4-directive
 target:
 from:
-size: M
+size: L
 spike: false
 verify:
 exclusive: []
@@ -20,6 +20,14 @@ owns:
   - packages/talata/src/directive.ts
   - packages/talata/test/directive*.test.ts
   - packages/talata/test/fuzz/ext-directive.ts
+  - packages/talata/test/fuzz/ext.ts
+  - packages/talata/test/parsers.ts
+  - packages/talata/test/ext-api.test.ts
+  - packages/talata/test/ext-api-bundle.test.ts
+  - packages/talata/package.json
+  - packages/talata/tsdown.config.ts
+  - benchmark/size/size.mjs
+  - pnpm-lock.yaml
 shared:
   - roadmaps/v2/contracts/extension-directive.change-request.md
 reserves: []
@@ -27,7 +35,7 @@ provides: []
 depends_on:
   - on: core-hooks
     kind: hard
-    why: the first build reached into private block parser state; it needs real hooks
+    why: rebuilds on the core hooks of extension contract v2
   - on: ext-api
     kind: contract
     via: extension
@@ -37,25 +45,31 @@ depends_on:
 
 ## Goal
 
-`talata/directive`: Text (`:name[label]{attrs}`), leaf (`::name`) and container (`:::name`) directives. The tree has `textDirective`, `leafDirective` and `containerDirective` nodes with `attributes`. The tree equals `mdast-util-from-markdown` with `micromark-extension-directive` and `mdast-util-directive`, positions included, with and without GFM.
+`talata/directive`: text (`:name[label]{attrs}`), leaf (`::name`) and container (`:::name`) directives. The tree has `textDirective`, `leafDirective` and `containerDirective` nodes with `attributes`. The tree equals `mdast-util-from-markdown` with `micromark-extension-directive` 4.0.0 and `mdast-util-directive` 3.1.1, positions included, with and without GFM. This is the 0.3 feature.
 
 ## Context
 
-Build against `roadmaps/v2/contracts/extension.md`. Put the rules in `src/ext/directive/` and export the factory from `src/directive.ts`, which ext-api created as a stub. If the contract cannot express something this syntax needs, write `roadmaps/v2/contracts/extension-directive.change-request.md` and adapt locally; do not edit core files.
+Start from `main`, not from the old branch. A first build is on `feat/ext-directive` (c85cccf). It matched all 260 reference inputs, but it reads private block parser state through casts, parses text directive labels in a separate pass (`fixes.ts`, `scopes.ts`), and two 100,000-document fuzz runs failed once each (seed 77 without GFM, seed 5 with GFM, tabs or deep indent in a quote or list). Its change request, `roadmaps/v2/contracts/extension-directive.change-request.md` on that branch, lists what the casts work around. Port the parts that hold (syntax, entities, leaf, text, the tests and the fuzz hook) and rebuild the rest on the v2 hooks in `roadmaps/v2/contracts/extension.md`:
 
-Test inputs: the reference package's own test cases (copy the inputs from its repository's tests, with the license note), the benchmark corpus with the extension on, and the fuzz hook in `test/fuzz/ext-directive.ts`. Interactions with GFM and with containers (block quotes, lists, footnotes) need cases of their own.
+- The container rule closes inner blocks with `state.closeOpenBlocks(depth, { keepsLineEnding })` and `state.getDepth(this)`, and sets `startsContainer: false`. No casts to `stack`, `containerIndex`, `container` or `closeTo`.
+- Inside a directive, CommonMark container starts work again: set `state.containerStartsOff = false` while a directive is open and restore the old value when it closes. Frontmatter no longer keeps a rule name list, so nothing else needs the rule name.
+- Text directive labels parse in place with a nested `parseInline` from the rule's `parse`. Remove the separate label pass.
+- `acceptsLazy: false` on the container now leaves `state.paragraph` undefined on a line it does not match.
+
+0.2 removed the `talata/directive` subpath. Put it back: revert the directive parts of commit 361462c (subpath export and devDependencies in `package.json`, the `tsdown.config.ts` entry, `src/directive.ts`, `test/parsers.ts`, `test/fuzz/ext.ts`, `test/fuzz/ext-directive.ts`, the bundle and ext-api tests, `benchmark/size/size.mjs`, the lock file).
+
+If the v2 contract still cannot express something, write `roadmaps/v2/contracts/extension-directive.change-request.md` and adapt locally. Do not edit core files. Read the Gotchas in `roadmaps/v2/nodes/core-hooks/outcome.md`.
+
+Test inputs: the reference package's own test cases (inputs copied from its repository's tests, with the license note), the benchmark corpus with the extension on, and the fuzz hook. Interactions with GFM and with containers (block quotes, lists, footnotes) need cases of their own, including the two old fuzz failures.
 
 ## Acceptance
 
 - [ ] Every reference test input and every corpus file gives the reference's tree, with and without GFM.
-- [ ] `cd packages/talata && pnpm fuzz --count 200000 --seed <any>` with this extension on finds no difference.
-- [ ] The main entry size does not change (`pnpm --filter benchmark size`).
-- [ ] Fast check passes.
+- [ ] `grep -rn "as unknown as" src/ext/directive` finds only casts to mdast node types.
+- [ ] `cd packages/talata && pnpm fuzz --count 1000000 --seed <any> --all` (GFM, frontmatter, math and directive on) finds no difference.
+- [ ] The main entry stays within the limit (`pnpm --filter benchmark size`, 33112 bytes gzip), and holds no directive code (`test/ext-api-bundle.test.ts`).
+- [ ] Full check passes.
 
 ## Sizing
 
-M: block and inline rules plus their interaction with containers.
-
-## Parked (2026-10-28)
-
-A first build is on the branch `feat/ext-directive` (c85cccf). It matched all 260 reference inputs, but it reads private block parser state through casts, parses text directive labels in a separate pass, and two 100,000-document fuzz runs (seed 77 without GFM, seed 5 with GFM) each found one failure with tabs or deep indent in a quote or list. See `roadmaps/v2/contracts/extension-directive.change-request.md` on that branch. The user chose to ship 0.2 without it. Its container rule is named `directiveFence`; frontmatter's container list must include it when this lands.
+L: three rules, a container rebuilt on new hooks, the subpath wiring put back, and a 1,000,000-document fuzz run. Most code exists on `feat/ext-directive`.
