@@ -201,6 +201,8 @@ describe('migration guide examples', () => {
       { gfm: true },
     ) as { children: { type: string }[] };
     expect(withEncoding.children[0].type).toBe('paragraph');
+    const unknownKey = talataIndex.fromMarkdown(table, { gfm: true, other: 1 } as never);
+    expect(unknownKey.children[0].type).toBe('table');
     const tree = talataIndex.fromMarkdown('---\na: 1\n---\n', {
       extensions: [talataFrontmatter.frontmatter()],
     });

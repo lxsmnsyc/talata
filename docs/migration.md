@@ -257,7 +257,7 @@ const markdown = String(
 - **`mdastExtensions`.** There is no such option. The `extensions` option takes talata extensions only, and a micromark extension passed there does not work.
 - **The `encoding` argument.** `mdast-util-from-markdown` accepts `fromMarkdown(value, encoding, options)`. talata has `fromMarkdown(value, options)`. A string in the second place is ignored without an error, so the options after it are lost.
 - **`Buffer` input.** Pass a string. Call `buffer.toString('utf8')` first.
-- **Other options.** `fromMarkdown` takes `gfm` and `extensions`, and no others. Other options that you pass to `remark-parse` are ignored.
+- **Other options.** `fromMarkdown` takes `gfm` and `extensions`, and no others. Other keys in the options object are ignored without an error.
 - **GFM settings.** `gfm` is a boolean. The `singleTilde` option of `micromark-extension-gfm` and the `firstLineBlank` option of `mdast-util-gfm` have no counterpart.
 - **HTML output.** talata returns mdast and does not render HTML. Use `remark-rehype` in a unified pipeline, or `mdast-util-to-hast` with `hast-util-to-html` on the tree. The README shows both.
 - **Third-party extensions.** The extension interface is internal. Only the extensions in the package work.
