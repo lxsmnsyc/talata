@@ -1,7 +1,7 @@
 # Change request: extension v1 to v2
 
 - From node: core-hooks
-- Status: open
+- Status: accepted (2026-11-02), copied into `extension.md` v2
 
 ## Problem
 
@@ -61,4 +61,4 @@ ext-directive (rebuilds on the hooks), ext-mdx (JSX flow elements need the same 
 
 ## Decision
 
-Open. The orchestrator copies this into `extension.md` as version 2.
+Accepted. Copied into `extension.md` as version 2 after PR #15 merged.

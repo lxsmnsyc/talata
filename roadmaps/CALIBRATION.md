@@ -18,3 +18,4 @@
 | v1      | bundle-size         | S        | M      | 2 rounds, 1 blocking; browser build dropped |
 | v1      | ci                  | M        | M+     | 4 rounds; release flow redone to match user |
 | v1      | release             | S        | S      | READMEs; 0.1.0 published by CI              |
+| v2      | core-hooks          | M        | M      | clean first review; bench A/B under load, worst +2.2%; ~273k tokens |

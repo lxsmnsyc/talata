@@ -1,7 +1,7 @@
 ---
 id: core-hooks
 title: Core hooks for container extensions
-status: active
+status: done
 priority: must
 type: refactor
 outline: false
@@ -13,6 +13,7 @@ spike: false
 verify:
 exclusive: [benchmark]
 fulfilled_by:
+spent: 272693
 gate: false
 added: 2026-10-28
 owns:
