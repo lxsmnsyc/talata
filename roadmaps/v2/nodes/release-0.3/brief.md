@@ -27,6 +27,9 @@ depends_on:
   - on: fix-directive-quote-end
     kind: hard
     why: its 1,000,000-document fuzz must pass on the fixed code
+  - on: fix-directive-nesting
+    kind: hard
+    why: same reason
   - on: ext-directive
     kind: hard
     why: documents and ships it
