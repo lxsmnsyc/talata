@@ -1,7 +1,7 @@
 ---
 id: mdx-core
 title: Extensions can turn off core rules (contract v4)
-status: active
+status: done
 priority: must
 type: refactor
 outline: false
@@ -15,6 +15,7 @@ exclusive: []
 fulfilled_by:
 gate: false
 added: 2026-11-09
+spent: 314000
 owns:
   - packages/talata/src/core/**
   - packages/talata/src/ext/api.ts

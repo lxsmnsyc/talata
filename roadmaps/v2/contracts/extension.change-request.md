@@ -67,7 +67,7 @@ Accepted. Copied into `extension.md` as version 3 after PR #22 merged.
 # Change request: extension v3 to v4
 
 - From node: mdx-core
-- Status: open
+- Status: accepted (2026-11-21), copied into `extension.md` v4
 
 ## Problem
 
@@ -120,4 +120,4 @@ None needed. Built and tested in `packages/talata/test/mdx-core.test.ts` against
 
 ## Decision
 
-To be filled in by the orchestrator.
+Accepted 2026-11-21. Review added two more limit readers: list item content width and inline HTML line prefix (see `extension.md` v4).

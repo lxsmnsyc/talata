@@ -45,3 +45,5 @@ Extension contract v4: an extension turns off core rules by name. Paths are unde
 ## Size
 
 - Estimated S, actual S.
+
+Landed as e28a9a9 on batch/v2.
