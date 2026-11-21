@@ -173,6 +173,8 @@ class OpenContainerDirective implements TrackedContainer {
   startsNext = false;
   /** The last line this block called `endContent` on. */
   endedLine = -1;
+  /** The depth of this block among the open blocks, once known (`depthOf`). */
+  openDepth = -1;
 
   constructor(
     size: number,
@@ -202,10 +204,10 @@ class OpenContainerDirective implements TrackedContainer {
    * of a document. Called innermost first.
    */
   willClose(state: BlockState, line: Line, keepsLineEnding: boolean): void {
-    const reached = state.getDepth(state.container);
+    const reached = depthOf(state, state.container);
     let keeps = keepsLineEnding;
     for (const directive of openDirectives.get(state.source) ?? []) {
-      if (state.getDepth(directive) > reached) {
+      if (depthOf(state, directive) > reached) {
         keeps = keeps && directive.segmentKeeps(state, line);
       }
       if (directive === this) {
@@ -217,7 +219,7 @@ class OpenContainerDirective implements TrackedContainer {
     const unmatched = state.unmatched;
     state.unmatched = false;
     const sizes = snapshot(state);
-    state.closeOpenBlocks(state.getDepth(this), { keepsLineEnding: keeps });
+    state.closeOpenBlocks(depthOf(state, this), { keepsLineEnding: keeps });
     state.unmatched = unmatched;
     if (this.taken !== undefined) {
       // Definitions that close now are part of the content.
@@ -245,7 +247,7 @@ class OpenContainerDirective implements TrackedContainer {
   /** The open containers above this block, innermost last. */
   getInside(state: BlockState): TrackedContainer[] {
     const inside: TrackedContainer[] = [];
-    for (let depth = state.getDepth(this) + 1; ; depth++) {
+    for (let depth = depthOf(state, this) + 1; ; depth++) {
       const block = state.getBlock(depth);
       if (block === undefined || !block.isContainer || !isTracked(block)) {
         break;
@@ -290,20 +292,30 @@ class OpenContainerDirective implements TrackedContainer {
    * block's content read this, as the blocks of a document read it at its end.
    */
   segmentKeeps(state: BlockState, line: Line): boolean {
-    const empty = createEmptyLine(state, line);
+    // The blocks are read up to the next directive only, not all of
+    // `getInside`: in a chain of directives that is one block.
+    let empty: Line | undefined;
     const container = state.container;
     let keeps = true;
-    const blocks = this.getInside(state);
-    for (let i = 0; i < blocks.length; i++) {
-      const inside = blocks[i];
-      if (inside instanceof OpenContainerDirective) {
+    // The block under `inside`, when it is not this one.
+    let parent: OpenBlock | undefined;
+    for (let depth = depthOf(state, this) + 1; ; depth++) {
+      const inside = state.getBlock(depth);
+      if (
+        inside === undefined ||
+        !inside.isContainer ||
+        !isTracked(inside) ||
+        inside instanceof OpenContainerDirective
+      ) {
         break;
       }
-      state.container = this.getParent(blocks, i);
+      empty ??= createEmptyLine(state, line);
+      state.container = parent ?? this;
       if (!continuesOverEmpty(state, inside, empty)) {
         keeps = false;
         break;
       }
+      parent = inside;
     }
     state.container = container;
     return keeps;
@@ -335,7 +347,7 @@ class OpenContainerDirective implements TrackedContainer {
     }
     state.container = container;
     const keepsLineEnding = this.keepsFor(state, line);
-    const depth = state.getDepth(this);
+    const depth = depthOf(state, this);
     state.closeOpenBlocks(itself ? depth - 1 : depth, { keepsLineEnding });
   }
 
@@ -432,7 +444,7 @@ class OpenContainerDirective implements TrackedContainer {
       child !== undefined;
       previous = child, child = child.openChild
     ) {
-      if (state.getDepth(child) < 0) {
+      if (depthOf(state, child) < 0) {
         // `openChild` stays linked after a block closes, and so do the blocks
         // in it: a closed block keeps the end it had.
         break;
@@ -495,56 +507,38 @@ class OpenContainerDirective implements TrackedContainer {
   continuesAfter(state: BlockState, line: Line): boolean {
     this.lazyNext = false;
     this.startsNext = false;
-    if (!hasLaterLine(state, line)) {
+    const depth = depthOf(state, this);
+    const walk = walkTo(state, line, depth);
+    // The innermost block quote around this block, or 0.
+    const quote = findBelow(walk.quotes, depth);
+    if (walk.next === undefined) {
       // Before a final line ending, in a quote, the content ends as before a lazy line.
       // A footnote definition's indent alone does not count.
-      this.lazyNext =
-        this.quoteLine === line.index && hasQuoteBetween(state, 0, state.getDepth(this));
+      this.lazyNext = this.quoteLine === line.index && quote > 0;
       return false;
     }
-    // The containers around this block, on the next line.
-    const text = state.source.text;
-    const starts = state.source.lineStarts;
-    const next = createLine(text, line.indentLimit);
-    next.index = line.index + 1;
-    next.start = starts[next.index];
-    next.end = next.index + 1 < starts.length ? starts[next.index + 1] - 1 : text.length;
-    if (
-      next.end > next.start &&
-      text.charCodeAt(next.end) === 10 &&
-      text.charCodeAt(next.end - 1) === 13
-    ) {
-      next.end--;
+    const failed = walk.failed > 0 && walk.failed < depth ? walk.failed : 0;
+    // The first directive around with its closing fence on the next line and
+    // no quote between it and this block.
+    const fence = findAbove(walk.fences, quote);
+    if (fence > 0 && fence < depth && (failed === 0 || fence < failed)) {
+      // That directive closes on the next line before its content reads it,
+      // so this block's content ends with that content document. At the end
+      // of a content document, micromark marks the next line lazy when a
+      // block quote does not continue at EOF. List items and footnote
+      // definitions do continue there, through their blank-line rule.
+      return true;
     }
-    measureLine(next);
-    const depth = state.getDepth(this);
-    let footnote = -1;
-    for (let i = 1; i < depth; i++) {
-      const block = state.getBlock(i)!;
-      if (
-        block instanceof OpenContainerDirective &&
-        isClosingFence(next, COLON, block.size) &&
-        !hasQuoteBetween(state, i, depth)
-      ) {
-        // A directive around closes on the next line before its content reads
-        // it, so this block's content ends with that content document. At the
-        // end of a content document, micromark marks the next line lazy when
-        // a block quote does not continue at EOF. List items and footnote
-        // definitions do continue there, through their blank-line rule.
-        return true;
-      }
-      if (!continuesNext(block, next, footnote)) {
-        // micromark reads the line as lazy unless a container starts on it.
-        this.startsNext = next.indent < 4 && isContainerStart(state, text, next.nonBlank, next.end);
-        // A container that starts outside a directive around this block ends
-        // that directive's content. When a quote in that content holds this
-        // block, this block's content ends as before a lazy line.
-        this.lazyNext = !this.startsNext || isQuotedInDirective(state, i, depth);
-        return false;
-      }
-      // A definition that matched a line that is not blank (its indent, or right
-      // after the indent of the one around) lets the next one follow it.
-      footnote = block.name === 'footnoteDefinition' && !next.blank ? next.start : -1;
+    if (failed > 0) {
+      // A container around does not continue on the next line. micromark
+      // reads the line as lazy unless a container starts on it.
+      this.startsNext = walk.startsNext;
+      // A container that starts outside a directive around this block ends
+      // that directive's content. When a quote in that content holds this
+      // block, this block's content ends as before a lazy line.
+      const directive = walk.directiveAfter;
+      this.lazyNext = !this.startsNext || (directive > 0 && directive < depth && quote > directive);
+      return false;
     }
     return true;
   }
@@ -590,6 +584,36 @@ class OpenContainerDirective implements TrackedContainer {
     result.position = { start: point(state.source, this.start), end: point(state.source, end) };
     return result;
   }
+}
+
+// Depths
+
+/** The depth each block had when it was last found open. */
+const knownDepths = new WeakMap<OpenBlock, number>();
+
+/**
+ * `state.getDepth(block)` without the walk over the open blocks. A block keeps
+ * its depth while it is open, and a closed block does not open again, so a
+ * block that is not at the depth it had is closed.
+ */
+function depthOf(state: BlockState, block: OpenBlock): number {
+  if (block instanceof OpenContainerDirective) {
+    // Kept on the block: each directive asks for its own depth on each line.
+    if (block.openDepth < 0) {
+      block.openDepth = state.getDepth(block);
+      return block.openDepth;
+    }
+    return state.getBlock(block.openDepth) === block ? block.openDepth : -1;
+  }
+  const known = knownDepths.get(block);
+  if (known !== undefined) {
+    return state.getBlock(known) === block ? known : -1;
+  }
+  const depth = state.getDepth(block);
+  if (depth >= 0) {
+    knownDepths.set(block, depth);
+  }
+  return depth;
 }
 
 /**
@@ -655,30 +679,144 @@ function hasQuoteInside(blocks: TrackedContainer[]): boolean {
 }
 
 /**
- * Whether a block quote is open between the depths `outer` and `inner`, both
- * left out, above a container directive that is also between them.
+ * The open blocks around the directives that continue on one line, read on
+ * the next line. Each directive reads the blocks below it, so one walk serves
+ * them all: a directive goes on from where the one around it stopped. The
+ * open blocks below an open block do not change, so the walk holds while the
+ * block at `scanned` is the one it read there.
  */
-function isQuotedInDirective(state: BlockState, outer: number, inner: number): boolean {
-  let directive = false;
-  for (let depth = outer + 1; depth < inner; depth++) {
-    const block = state.getBlock(depth);
-    if (block instanceof OpenContainerDirective) {
-      directive = true;
-    } else if (directive && block?.name === 'blockquote') {
-      return true;
-    }
-  }
-  return false;
+interface NextWalk {
+  line: Line;
+  index: number;
+  /** The open blocks read, from depth 1. */
+  blocks: OpenBlock[];
+  /** Depths 1 to `scanned` are read. */
+  scanned: number;
+  /** Depths of the block quotes read, in order. */
+  quotes: number[];
+  /** The next line, after the prefixes of the blocks walked; undefined when no line follows. */
+  next: Line | undefined;
+  /** Where the indent of a footnote definition just before ended, or -1. */
+  footnote: number;
+  /** Depths of the directives whose closing fence is the next line, in order. */
+  fences: number[];
+  /** The depth of the first block that does not continue on the next line, or 0. */
+  failed: number;
+  /** A container starts on the next line, after the blocks up to `failed`. */
+  startsNext: boolean;
+  /** The depth of the first directive above `failed`, or 0. */
+  directiveAfter: number;
 }
 
-/** Whether a block quote is open between the depths `outer` and `inner`, both left out. */
-function hasQuoteBetween(state: BlockState, outer: number, inner: number): boolean {
-  for (let depth = outer + 1; depth < inner; depth++) {
-    if (state.getBlock(depth)?.name === 'blockquote') {
-      return true;
+const walks = new WeakMap<Source, NextWalk>();
+
+/** The next line after `line`, or undefined when no real line follows. */
+function createNextLine(state: BlockState, line: Line): Line | undefined {
+  if (!hasLaterLine(state, line)) {
+    return undefined;
+  }
+  const text = state.source.text;
+  const starts = state.source.lineStarts;
+  const next = createLine(text, line.indentLimit);
+  next.index = line.index + 1;
+  next.start = starts[next.index];
+  next.end = next.index + 1 < starts.length ? starts[next.index + 1] - 1 : text.length;
+  if (
+    next.end > next.start &&
+    text.charCodeAt(next.end) === 10 &&
+    text.charCodeAt(next.end - 1) === 13
+  ) {
+    next.end--;
+  }
+  measureLine(next);
+  return next;
+}
+
+/** The walk for `line`, with the open blocks below `depth` read. */
+function walkTo(state: BlockState, line: Line, depth: number): NextWalk {
+  let walk = walks.get(state.source);
+  if (
+    walk === undefined ||
+    walk.line !== line ||
+    walk.index !== line.index ||
+    (walk.scanned > 0 && state.getBlock(walk.scanned) !== walk.blocks[walk.scanned - 1])
+  ) {
+    walk = {
+      line,
+      index: line.index,
+      blocks: [],
+      scanned: 0,
+      quotes: [],
+      next: createNextLine(state, line),
+      footnote: -1,
+      fences: [],
+      failed: 0,
+      startsNext: false,
+      directiveAfter: 0,
+    };
+    walks.set(state.source, walk);
+  }
+  const next = walk.next;
+  for (let i = walk.scanned + 1; i < depth; i++) {
+    const block = state.getBlock(i)!;
+    walk.blocks.push(block);
+    walk.scanned = i;
+    if (block.name === 'blockquote') {
+      walk.quotes.push(i);
+    }
+    if (next === undefined) {
+      continue;
+    }
+    if (walk.failed > 0) {
+      if (walk.directiveAfter === 0 && block instanceof OpenContainerDirective) {
+        walk.directiveAfter = i;
+      }
+      continue;
+    }
+    if (block instanceof OpenContainerDirective && isClosingFence(next, COLON, block.size)) {
+      walk.fences.push(i);
+    }
+    if (!continuesNext(block, next, walk.footnote)) {
+      walk.failed = i;
+      walk.startsNext =
+        next.indent < 4 && isContainerStart(state, next.text, next.nonBlank, next.end);
+      continue;
+    }
+    // A definition that matched a line that is not blank (its indent, or right
+    // after the indent of the one around) lets the next one follow it.
+    walk.footnote = block.name === 'footnoteDefinition' && !next.blank ? next.start : -1;
+  }
+  return walk;
+}
+
+/** The largest of `depths` (ascending) under `depth`, or 0. */
+function findBelow(depths: number[], depth: number): number {
+  let low = 0;
+  let high = depths.length;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if (depths[middle] < depth) {
+      low = middle + 1;
+    } else {
+      high = middle;
     }
   }
-  return false;
+  return low > 0 ? depths[low - 1] : 0;
+}
+
+/** The smallest of `depths` (ascending) over `depth`, or 0. */
+function findAbove(depths: number[], depth: number): number {
+  let low = 0;
+  let high = depths.length;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if (depths[middle] <= depth) {
+      low = middle + 1;
+    } else {
+      high = middle;
+    }
+  }
+  return low < depths.length ? depths[low] : 0;
 }
 
 /**
@@ -712,10 +850,10 @@ export function hasContainers(source: Source): boolean {
 
 /** Directive containers that matched the current line, around a block that starts on it. */
 function countDirectives(state: BlockState, open: OpenContainerDirective[]): number {
-  const reached = state.getDepth(state.container);
+  const reached = depthOf(state, state.container);
   let count = 0;
   for (const directive of open) {
-    const depth = state.getDepth(directive);
+    const depth = depthOf(state, directive);
     if (depth > 0 && depth <= reached) {
       count++;
     }
@@ -752,8 +890,8 @@ const containerDirective: BlockRule = {
       // Directives that did not match the line close when this block
       // attaches, without line endings. Close them first, so the inline
       // pass leaves their content before it reads this label (`scopes.ts`).
-      const reached = state.getDepth(state.container);
-      if (state.getDepth(open[open.length - 1]) > reached) {
+      const reached = depthOf(state, state.container);
+      if (depthOf(state, open[open.length - 1]) > reached) {
         state.closeOpenBlocks(reached, { keepsLineEnding: false });
       }
     }
@@ -817,11 +955,11 @@ const directiveScope: BlockRule = {
     if (open === undefined || open.length === 0) {
       return undefined;
     }
-    const reached = state.getDepth(state.container);
+    const reached = depthOf(state, state.container);
     let ended = false;
     for (let i = open.length - 1; i >= 0; i--) {
       const directive = open[i];
-      const depth = state.getDepth(directive);
+      const depth = depthOf(state, directive);
       if (depth <= reached) {
         break;
       }
