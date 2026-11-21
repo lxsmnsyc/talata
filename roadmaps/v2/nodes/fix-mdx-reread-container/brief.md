@@ -1,7 +1,7 @@
 ---
 id: fix-mdx-reread-container
 title: Container directives in re-read MDX lines
-status: active
+status: done
 priority: must
 type: fix
 outline: false
@@ -15,6 +15,7 @@ exclusive: []
 fulfilled_by:
 gate: false
 added: 2026-11-21
+spent: 610000
 owns:
   - packages/talata/src/core/**
   - packages/talata/src/ext/mdx/reread.ts

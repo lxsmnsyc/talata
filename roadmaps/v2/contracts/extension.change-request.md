@@ -125,7 +125,7 @@ Accepted 2026-11-21. Review added two more limit readers: list item content widt
 # Change request: extension v4 to v5
 
 - From node: fix-mdx-reread-container
-- Status: open
+- Status: accepted (2026-11-22), copied into `extension.md` v5
 
 ## Problem
 
@@ -167,3 +167,5 @@ interface OpenParagraph {
 None: the hooks are in `packages/talata/src/core/blocks.ts` and `src/blocks/paragraph.ts` on the branch `fix/fix-mdx-reread-container`, used as written above.
 
 ## Decision
+
+Accepted 2026-11-22 after a fresh review: no speed cost on the corpus, non-MDX output identical.

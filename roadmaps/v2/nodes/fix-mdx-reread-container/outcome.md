@@ -146,3 +146,5 @@ Changes:
 ## Size
 
 - Estimated M, actual L. The generator and the review found ten older classes and two quadratic paths, fixed here so the 1M runs are clean. The second class came in as a scope addition.
+
+Landed as e6ae43f on batch/v2.
