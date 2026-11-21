@@ -15,7 +15,7 @@ exclusive: []
 fulfilled_by:
 gate: false
 added: 2026-11-21
-spent: 610000
+spent: 680000
 owns:
   - packages/talata/src/core/**
   - packages/talata/src/ext/mdx/reread.ts

@@ -1,7 +1,7 @@
 ---
 id: fix-directive-nested-growth
 title: Deep unclosed directive chains parse in linear time
-status: todo
+status: active
 priority: must
 type: fix
 outline: false
