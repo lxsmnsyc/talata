@@ -1,7 +1,7 @@
 ---
 id: mdx-core
 title: Extensions can turn off core rules (contract v4)
-status: todo
+status: active
 priority: must
 type: refactor
 outline: false
