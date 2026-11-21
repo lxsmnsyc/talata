@@ -5,7 +5,7 @@ status: todo
 priority: should
 type: fix
 outline: false
-milestone: m5-mdx
+milestone:
 target:
 from:
 size: S
