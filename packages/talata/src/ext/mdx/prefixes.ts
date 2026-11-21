@@ -16,6 +16,8 @@ export function prefixEnd(state: BlockState, bound: number, at: number): number 
   const text = state.source.text;
   let pos = at;
   let directive = false;
+  // A quote inside a directive took a marker on this line.
+  let quotedInside = false;
   for (let depth = 1; depth <= bound; depth++) {
     const name = state.getBlock(depth)?.name;
     if (name === 'blockquote') {
@@ -32,8 +34,10 @@ export function prefixEnd(state: BlockState, bound: number, at: number): number 
       if (text.charCodeAt(i) !== 62) {
         // In the content of a directive, a line that is not blank is lazy
         // from its start, and so is one that ends right after a quote
-        // marker and its space.
-        if (directive && (!isBlankText(text, at) || endsAfterSpace(text, at, pos))) {
+        // marker and its space, unless that quote is inside the directive
+        // and a line ending follows.
+        const afterSpace = endsAfterSpace(text, at, pos) && (!quotedInside || pos === text.length);
+        if (directive && (!isBlankText(text, at) || afterSpace)) {
           return at;
         }
         return pos;
@@ -42,6 +46,7 @@ export function prefixEnd(state: BlockState, bound: number, at: number): number 
       if (text.charCodeAt(pos) === SPACE || text.charCodeAt(pos) === TAB) {
         pos++;
       }
+      quotedInside ||= directive;
     } else if (name === 'listItem') {
       // A list item takes its content width; a footnote definition nothing.
       const block = state.getBlock(depth);
@@ -74,11 +79,23 @@ export function prefixEnd(state: BlockState, bound: number, at: number): number 
           ? block.indent
           : 0;
       let after = pos;
-      for (let taken = 0; taken < indent && text.charCodeAt(after) === SPACE; taken++) {
+      // A tab counts its columns; one that the indent only partly takes is
+      // still consumed (micromark splits it).
+      let column = 0;
+      for (let i = at; i < pos; i++) {
+        column = text.charCodeAt(i) === TAB ? column + 4 - (column % 4) : column + 1;
+      }
+      const goal = column + indent;
+      while (
+        column < goal &&
+        (text.charCodeAt(after) === SPACE || text.charCodeAt(after) === TAB)
+      ) {
+        column = text.charCodeAt(after) === TAB ? column + 4 - (column % 4) : column + 1;
         after++;
       }
-      // Only on a blank line that the end of the text does not follow.
-      if (after < text.length && isBlankText(text, after)) {
+      // Only on a blank line that the end of the text does not follow, or
+      // whose tab the indent split (its columns are left).
+      if ((after < text.length || column > goal) && isBlankText(text, after)) {
         pos = after;
       }
     }

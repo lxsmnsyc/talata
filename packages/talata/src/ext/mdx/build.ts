@@ -5,6 +5,7 @@ import { point } from '../../core/source';
 import type { DocumentState } from '../../core/state';
 import type { Transform } from '../../core/transform';
 import { MdxError, span, stringifyPlace } from './error';
+import { reparse } from './esm';
 import { throwWaiting } from './order';
 import type { Item, Tag } from './scanner';
 import {
@@ -593,6 +594,9 @@ class Builder {
 }
 
 function buildJsx(tree: Root, state: DocumentState): void {
+  if (reparse(tree, state)) {
+    return;
+  }
   throwWaiting(tree, state.source);
   const tags = markedTags(state.source);
   if (tags !== undefined) {

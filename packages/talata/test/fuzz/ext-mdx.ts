@@ -4,7 +4,9 @@ import type { Random } from './random';
 // Mostly valid MDX: matched elements, self-closing tags, fragments and
 // expressions, with attributes of every kind. Now and then a tag that does
 // not match, a broken attribute or an open brace, so the error messages are
-// compared too.
+// compared too. For `mdx({ acorn })` (`pnpm fuzz --acorn`): braces in
+// strings, comments, templates and regexes, code acorn rejects, and ESM.
+// Without acorn the ESM lines are paragraphs.
 
 const names = ['a', 'b', 'B', 'Card', 'x.y', 'a.b.c', 'svg:rect', 'a-b', 'é', '$', '_'];
 const spaces = ['', '', ' ', '  ', '\t'];
@@ -23,8 +25,67 @@ const attributeParts = [
   'b = "c"',
   'b="c\nd"',
   'b={c\n  d}',
+  'b={"}"}',
+  '{...{a: "}"}}',
+  'b={/* } */ 1}',
 ];
-const expressions = ['a', '', ' a ', '1 + 1', '{a}', '/* c */', 'a\n  b', '"}"', '`a`', '...b'];
+// Attributes acorn rejects.
+const badAttributes = ['{...a, b}', '{a}', 'b={a b}'];
+const expressions = [
+  'a',
+  '',
+  ' a ',
+  '1 + 1',
+  '{a}',
+  '/* c */',
+  'a\n  b',
+  '"}"',
+  '`a`',
+  '...b',
+  "'}'",
+  '`}\n`',
+  '/}/',
+  '/* } */',
+  'a // }\n',
+  '// c\n',
+  'a b',
+  '<b />',
+  '(a)',
+  'a}',
+  '`a\n\tb`',
+];
+// Expressions acorn rejects.
+const badExpressions = ['a b', '"a', '?', 'a =>'];
+
+// ESM: one statement or a few, some across lines or blank lines, some that
+// acorn rejects, and names imported twice.
+const esm = [
+  ['import a from "b"'],
+  ['import {a, b} from "c"'],
+  ['import * as b from "c"'],
+  ['import "a"'],
+  ['export const a = 1'],
+  ['export default function () {}'],
+  ['export {a}'],
+  ['export {', '  a', '} from "b"'],
+  ['export {', '', '  a', '', '} from "b"'],
+  ['export var a = `', '', '`'],
+  ['export var a = /* }', '', '*/ 1'],
+  ['import a from "b"', 'export {a}'],
+  ['export var a = <b />'],
+];
+// ESM acorn rejects.
+const badEsm = [
+  ['export var a = 1', 'var b'],
+  ['export {'],
+  ['import a'],
+  ['import a from "b";', 'a()'],
+  ['export var a = "'],
+];
+
+function pickEsm(random: Random): string[] {
+  return [...random.pick(random.chance(0.15) ? badEsm : esm)];
+}
 const broken = [
   '<3',
   '< a',
@@ -47,7 +108,9 @@ function attributes(random: Random): string {
   let out = '';
   const count = random.chance(0.5) ? 0 : 1 + random.int(3);
   for (let i = 0; i < count; i++) {
-    out += random.pick([' ', ' ', '  ', '\n  ']) + random.pick(attributeParts);
+    out +=
+      random.pick([' ', ' ', '  ', '\n  ']) +
+      random.pick(random.chance(0.05) ? badAttributes : attributeParts);
   }
   return out;
 }
@@ -66,7 +129,7 @@ function selfClosing(random: Random): string {
 }
 
 function expression(random: Random): string {
-  return '{' + random.pick(expressions) + '}';
+  return '{' + random.pick(random.chance(0.05) ? badExpressions : expressions) + '}';
 }
 
 function inline(random: Random, text: () => string): string {
@@ -88,6 +151,9 @@ function inline(random: Random, text: () => string): string {
 }
 
 function block(random: Random, text: () => string): string[] {
+  if (random.chance(0.1)) {
+    return pickEsm(random);
+  }
   const kind = random.int(10);
   if (kind < 4) {
     const name = pickName(random);
@@ -141,7 +207,14 @@ function block(random: Random, text: () => string): string[] {
 const fuzz: ExtensionFuzz = {
   name: 'mdx',
   ready: true,
-  nodeTypes: ['mdxJsxFlowElement', 'mdxJsxTextElement', 'mdxFlowExpression', 'mdxTextExpression'],
+  nodeTypes: [
+    'mdxJsxFlowElement',
+    'mdxJsxTextElement',
+    'mdxFlowExpression',
+    'mdxTextExpression',
+    'mdxjsEsm',
+  ],
+  start: (random: Random) => [...pickEsm(random), ''],
   block,
   inline,
 };

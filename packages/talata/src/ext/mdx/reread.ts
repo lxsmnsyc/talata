@@ -1,6 +1,7 @@
 import type { BlockRule, BlockState, OpenParagraph } from '../../core/blocks';
 import { createLine, measureLine } from '../../core/line';
 import type { Source } from '../../core/source';
+import { startsEsm } from './esm';
 import { FLOW, MORE, NOK, Scanner } from './scanner';
 import type { Item } from './scanner';
 
@@ -30,6 +31,10 @@ export const found: {
 } = { constructs: [], tableAt: -1, tableEnd: -1, openFence: -1, directiveAt: -1, openAt: -1 };
 
 const probe = new Scanner();
+
+// The whitespace an expression keeps at the start of each line (see
+// `interruptAt`), or undefined: none.
+let keptOf: ((index: number) => string) | undefined;
 
 /** Content ranges of the cells of a table row, trimmed, as flat pairs. */
 export function tableCells(text: string, start: number, end: number): number[] {
@@ -195,9 +200,20 @@ export function isRun(
 /**
  * The lines from `from` on that end a paragraph in flow: blank lines and
  * flow constructs that can interrupt it, as pairs of indexes in `lines` of
- * their first and last line. The lines read start at `base`.
+ * their first and last line. The lines read start at `base`. `kept` gives
+ * the whitespace an expression keeps at the start of a line; with `stop`,
+ * nothing starts on the lines from `stop` on (they are ESM data), though a
+ * construct before reads them.
  */
-export function interruptAt(state: BlockState, lines: number[], from: number, base = 0): number[] {
+export function interruptAt(
+  state: BlockState,
+  lines: number[],
+  from: number,
+  base = 0,
+  kept?: (index: number) => string,
+  stop: number = lines.length,
+): number[] {
+  keptOf = kept;
   const text = state.source.text;
   const spans: number[] = [];
   found.constructs = [];
@@ -205,7 +221,7 @@ export function interruptAt(state: BlockState, lines: number[], from: number, ba
   found.openFence = -1;
   found.directiveAt = -1;
   found.openAt = -1;
-  for (let i = from; i < lines.length; i += 2) {
+  for (let i = from; i < stop; i += 2) {
     const start = lines[i];
     const end = lines[i + 1];
     if (start === end) {
@@ -230,7 +246,7 @@ export function interruptAt(state: BlockState, lines: number[], from: number, ba
       }
       // Body rows up to a blank line or a flow construct, which may throw.
       let row = i + 2;
-      while (row < lines.length && lines[row] !== lines[row + 1]) {
+      while (row < stop && lines[row] !== lines[row + 1]) {
         const first = text.charCodeAt(lines[row]);
         // A setext underline is a row: no paragraph is open in a table.
         const flow =
@@ -239,7 +255,8 @@ export function interruptAt(state: BlockState, lines: number[], from: number, ba
             : startsFlow(state, lines, row) &&
               first !== 61 &&
               (first !== 45 || isRun(text, lines[row], lines[row + 1], 45, 3, true));
-        if (flow) {
+        // ESM starts on a row too, and ends the table.
+        if (flow || startsEsm(state, lines, base, row)) {
           break;
         }
         row += 2;
@@ -380,7 +397,14 @@ function probeConstruct(lines: number[], i: number, text: string, source: Source
       return -1;
     }
     const lineEnd = lines[last + 1];
-    probe.feed(lines[last], lineEnd, lineEnd === text.length, '', lines[last], false);
+    probe.feed(
+      lines[last],
+      lineEnd,
+      lineEnd === text.length,
+      keptOf?.(last) ?? '',
+      lines[last],
+      false,
+    );
     result = probe.run();
   }
   return result === NOK ? -1 : last;

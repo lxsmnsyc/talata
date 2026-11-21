@@ -17,6 +17,8 @@ import {
   isIdStart,
   isUnicodeWhitespace,
 } from './chars';
+import { jsOf, parseExpression } from './acorn';
+import type { Js } from './acorn';
 import decodeLiteral from './entities';
 import { MdxError, span } from './error';
 
@@ -28,10 +30,11 @@ import { MdxError, span } from './error';
 // rules feed the ranges of a leaf at once; the flow rule feeds the lines the
 // block parser gives it.
 //
-// Where a JS parser plugs in (ext-mdx-acorn): the `}` with `size === 0` in
-// `EXPRESSION_BEFORE` calls `expressionEnd`, where the reference asks acorn
-// whether the text so far parses; `value`, `expressionStart` and
-// `expressionKind` say what it is.
+// With acorn (`js`), braces are not counted: at each `}` the scanner asks
+// acorn whether the text so far parses (`parseExpression`), and when it
+// does not, the `}` is data and the expression goes on. `code` collects what
+// acorn reads: the chunks without the whitespace micromark drops and their
+// source offsets, to map acorn's error places back.
 
 /** The construct ended; `end` is the offset after it. */
 export const DONE = 0;
@@ -198,6 +201,16 @@ export class Scanner {
   size = 0;
   value = '';
   chunkStart = 0;
+  /** The acorn bound to the parse, or undefined. */
+  js: Js | undefined;
+  /** With acorn: the code before the current chunk, and where the chunk starts in the source. */
+  code = '';
+  stops: number[] = [];
+  codeStart = 0;
+  /** With acorn: the chunk starts with columns of a split tab, so it exists even when empty. */
+  virtualStart = false;
+  /** With acorn: the error of the last `}` that did not end the expression. */
+  lastCrash: MdxError | undefined;
 
   /** Starts a scan at `pos`, on `<` or `{`. */
   begin(source: Source, mode: number, pos: number, end: number, last: boolean): void {
@@ -210,6 +223,7 @@ export class Scanner {
     this.last = last;
     this.items = [];
     this.item = undefined;
+    this.js = jsOf(source);
     this.startConstruct();
   }
 
@@ -217,6 +231,7 @@ export class Scanner {
   copy(other: Scanner): void {
     Object.assign(this, other);
     this.items = [...other.items];
+    this.stops = [...other.stops];
     if (other.tag !== undefined) {
       this.tag = { ...other.tag, attributes: [...other.tag.attributes] };
     }
@@ -253,7 +268,46 @@ export class Scanner {
     this.size = 0;
     this.value = '';
     this.chunkStart = this.pos;
+    this.lastCrash = undefined;
     this.state = EXPRESSION_BEFORE;
+    if (this.js !== undefined) {
+      this.code = '';
+      this.stops = [];
+      this.codeStart = this.pos;
+      this.virtualStart = false;
+    }
+  }
+
+  /** With acorn: adds the source from `codeStart` to `pos` to the code. */
+  addChunk(): void {
+    if (this.pos > this.codeStart || this.virtualStart) {
+      this.stops.push(this.code.length, this.codeStart);
+      this.code += this.text.slice(this.codeStart, this.pos);
+    }
+  }
+
+  /**
+   * With acorn, at a `}`: whether the expression ends here. When the code
+   * does not parse, the error becomes the last crash and the `}` is data.
+   */
+  parsesAtBrace(): boolean {
+    const length = this.code.length;
+    const stops = this.stops.length;
+    this.addChunk();
+    const error = parseExpression(
+      this.js!,
+      this.source,
+      { value: this.code, stops: this.stops, start: this.expressionStart + 1 },
+      this.expressionKind,
+    );
+    // The chunk goes on past the `}`: take it back out.
+    this.code = this.code.slice(0, length);
+    this.stops.length = stops;
+    if (error === undefined) {
+      return true;
+    }
+    this.lastCrash = error;
+    return false;
   }
 
   /**
@@ -284,6 +338,20 @@ export class Scanner {
       this.value += kept;
       this.chunkStart = pos;
       this.state = EXPRESSION_BEFORE;
+      if (this.js !== undefined) {
+        // acorn reads the kept whitespace from the source: a tab split by
+        // the line prefix keeps its columns in `kept` but not in the code.
+        let real = 0;
+        while (
+          real < kept.length &&
+          pos - real - 1 >= 0 &&
+          this.text.charCodeAt(pos - real - 1) === kept.charCodeAt(kept.length - real - 1)
+        ) {
+          real++;
+        }
+        this.codeStart = pos - real;
+        this.virtualStart = real < kept.length;
+      }
     } else {
       this.state = WHITESPACE;
     }
@@ -727,14 +795,24 @@ export class Scanner {
         );
       case EXPRESSION_BEFORE:
         if (code === EOF) {
-          throw new MdxError(eofExpression, point(this.source, this.pos));
+          throw this.lastCrash ?? new MdxError(eofExpression, point(this.source, this.pos));
         }
         if (code === EOL) {
-          this.value += text(this, this.chunkStart) + this.lineEndingText();
+          const ending = this.lineEndingText();
+          this.value += text(this, this.chunkStart) + ending;
+          if (this.js !== undefined) {
+            this.addChunk();
+            this.virtualStart = false;
+            this.stops.push(this.code.length, this.pos);
+            this.code += ending;
+          }
           return this.lineEnding(EXPRESSION_EOL_AFTER);
         }
         if (code === RIGHT_BRACE && this.size === 0) {
-          return this.expressionEnd();
+          if (this.js === undefined || this.parsesAtBrace()) {
+            return this.expressionEnd();
+          }
+          this.pos++;
         }
         this.state = EXPRESSION_INSIDE;
         return -1;
@@ -744,7 +822,10 @@ export class Scanner {
           return -1;
         }
         if (code === LEFT_BRACE) {
-          this.size++;
+          // With acorn braces are not counted.
+          if (this.js === undefined) {
+            this.size++;
+          }
         } else if (code === RIGHT_BRACE) {
           this.size--;
         }

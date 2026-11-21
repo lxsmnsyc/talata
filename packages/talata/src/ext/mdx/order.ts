@@ -50,11 +50,44 @@ function add(source: Source, entry: Waiting): void {
   list.push(entry);
 }
 
+// Lines whose flow errors the reference never meets (see `quietFlowErrors`).
+const quiet = new WeakMap<Source, number[]>();
+
+/**
+ * Flow errors from `from` to `to` in blocks deeper than `depth` are
+ * dropped: a construct the reference tried over those lines failed, so it
+ * checked no containers on them, and they are rows of the table at `depth`.
+ * Flow constructs that start in the table's container still run there.
+ */
+export function quietFlowErrors(source: Source, from: number, to: number, depth: number): void {
+  let list = quiet.get(source);
+  if (list === undefined) {
+    list = [];
+    quiet.set(source, list);
+  }
+  list.push(from, to, depth);
+}
+
+function isQuiet(source: Source, at: number, bound: number): boolean {
+  const list = quiet.get(source);
+  if (list !== undefined) {
+    for (let i = 0; i < list.length; i += 3) {
+      if (list[i] <= at && at <= list[i + 1] && bound > list[i + 2]) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 /**
  * A flow error at `at` in a block whose container is at depth `bound`:
  * thrown now outside container directives, else kept.
  */
 export function flowError(state: BlockState, bound: number, error: MdxError, at: number): void {
+  if (isQuiet(state.source, at, bound)) {
+    return;
+  }
   if (containerDepth(state, bound) === 0) {
     throw error;
   }

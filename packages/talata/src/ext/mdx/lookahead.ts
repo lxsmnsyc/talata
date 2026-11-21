@@ -1,6 +1,7 @@
 import type { BlockState } from '../../core/blocks';
 import type { Line } from '../../core/line';
 import { MdxError } from './error';
+import { quietFlowErrors } from './order';
 import { MORE, NOK, Scanner } from './scanner';
 
 const SPACE = 32;
@@ -71,6 +72,11 @@ export default function endsInText(state: BlockState, line: Line, first: Scanner
       ahead.feed(pos, end, end === text.length, '', pos, false);
       const result = ahead.run();
       if (result !== MORE) {
+        if (result === NOK) {
+          // The lines it read are rows of the table for the reference: no
+          // container starts on them, so errors inside one do not happen.
+          quietFlowErrors(source, starts[line.index + 1], end, state.getDepth(state.container));
+        }
         return result === NOK;
       }
     }

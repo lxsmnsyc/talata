@@ -14,6 +14,10 @@ import { frontmatter } from 'micromark-extension-frontmatter';
 import { math } from 'micromark-extension-math';
 import { mdxFromMarkdown } from 'mdast-util-mdx';
 import { mdx } from 'micromark-extension-mdx';
+import { mdxjs } from 'micromark-extension-mdxjs';
+import { Parser } from 'acorn';
+import type { Options as AcornOptions } from 'acorn';
+import acornJsx from 'acorn-jsx';
 import { fromMarkdown } from '../src';
 import { directive as talataDirective } from '../src/directive';
 import type { Extension } from '../src/ext/api';
@@ -45,6 +49,18 @@ export type ExtensionName = 'frontmatter' | 'math' | 'directive' | 'mdx';
 export interface ExtensionOptions {
   frontmatter?: Parameters<typeof frontmatter>[0];
   math?: Parameters<typeof math>[0];
+  /** With `acorn`: `micromark-extension-mdxjs` on the reference side. */
+  mdx?: { acorn?: typeof acorn; acornOptions?: Partial<AcornOptions> };
+}
+
+/** acorn with JSX, as `micromark-extension-mdxjs` uses it. */
+export const acorn: typeof Parser = Parser.extend(acornJsx());
+
+// `pnpm fuzz --acorn` sets it: MDX runs with acorn on both sides by default.
+const fuzzAcorn = process.env.TALATA_FUZZ_ACORN === '1';
+
+function mdxOptions(options: ExtensionOptions): ExtensionOptions['mdx'] {
+  return options.mdx ?? (fuzzAcorn ? { acorn } : undefined);
 }
 
 type ReferenceOptions = NonNullable<Parameters<typeof reference>[1]>;
@@ -70,7 +86,20 @@ function referenceExtensions(
       extensions.push(directive());
       mdastExtensions.push(directiveFromMarkdown());
     } else {
-      extensions.push(mdx());
+      const settings = mdxOptions(options);
+      if (settings?.acorn === undefined) {
+        extensions.push(mdx());
+      } else {
+        // No `data.estree`: talata does not make it.
+        extensions.push(
+          mdxjs({
+            acorn: settings.acorn,
+            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the reference fills in `ecmaVersion`
+            acornOptions: settings.acornOptions as AcornOptions | undefined,
+            addResult: false,
+          }),
+        );
+      }
       mdastExtensions.push(mdxFromMarkdown());
     }
   }
@@ -91,7 +120,7 @@ export function talataExtensions(
     } else if (name === 'directive') {
       result.push(talataDirective());
     } else {
-      result.push(talataMdx());
+      result.push(talataMdx(mdxOptions(options)));
     }
   }
   return result;

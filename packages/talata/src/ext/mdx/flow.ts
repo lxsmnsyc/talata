@@ -10,8 +10,10 @@ import { point } from '../../core/source';
 import { MdxError, span } from './error';
 import endsInText from './lookahead';
 import { flowError } from './order';
+import { jsOf } from './acorn';
+import { startsEsm } from './esm';
 import { prefixEnd } from './prefixes';
-import { found, interruptAt, isRun, tableCells } from './reread';
+import { found, interruptAt, isRun } from './reread';
 import { DONE, FLOW, MORE, NOK, Scanner } from './scanner';
 import type { Item } from './scanner';
 import { dropNode, dropParagraph, flowMarker, markSource, nodesMarker } from './tags';
@@ -32,18 +34,28 @@ const SPACE = 32;
  * prefix.
  */
 function keptWhitespace(line: Line): string {
-  const text = line.text;
+  return keptAt(line.text, line.start, line.nonBlank, line.visualColumn, line.partialTab);
+}
+
+/** `keptWhitespace` from the parts of a line. */
+function keptAt(
+  text: string,
+  start: number,
+  nonBlank: number,
+  visualColumn: number,
+  partialTab: number,
+): string {
   let result = '';
   let skipped = 0;
-  for (let v = line.partialTab; v > 0; v--) {
+  for (let v = partialTab; v > 0; v--) {
     if (skipped < 2) {
       skipped++;
     } else {
       result += ' ';
     }
   }
-  let column = line.visualColumn + line.partialTab;
-  for (let i = line.start; i < line.nonBlank; i++) {
+  let column = visualColumn + partialTab;
+  for (let i = start; i < nonBlank; i++) {
     if (text.charCodeAt(i) === SPACE) {
       column++;
       if (skipped < 2) {
@@ -370,6 +382,8 @@ class OpenMdxFlow implements OpenBlock {
 
   /** Index in `lines` of the first line this block reads again; earlier ones belong to blocks before it. */
   base = 0;
+  /** True when the line at `base` starts flow again (after a directive's fence or ESM). */
+  fresh = false;
 
   /**
    * Reads the lines from `first` on again as flow, the lines before `from`
@@ -377,25 +391,44 @@ class OpenMdxFlow implements OpenBlock {
    * that reads the lines after a container directive, if any.
    */
   reread(state: BlockState, line: Line, first: number, from: number): OpenMdxFlow | undefined {
-    let spans: number[];
-    try {
-      spans = interruptAt(state, this.lines, from, first);
-    } catch (error) {
-      failWith(state, this.bound, error, line.start);
-      spans = [this.lines.length - 2, this.lines.length - 2];
+    const esm = this.esmStart(state, first, from);
+    const esmAt = esm === undefined ? -1 : esm.at;
+    // With ESM, the spans `esmStart` read, with `found` from the same call.
+    let spans = esm?.spans ?? [];
+    if (esm === undefined) {
+      try {
+        spans = interruptAt(state, this.lines, from, first, this.keptOf(state));
+      } catch (error) {
+        failWith(state, this.bound, error, line.start);
+        spans = [this.lines.length - 2, this.lines.length - 2];
+      }
+    }
+    if (esmAt !== -1) {
+      // The lines from the ESM on are its data: only the spans before it.
+      let keep = 0;
+      while (keep < spans.length && spans[keep + 1] < esmAt) {
+        keep += 2;
+      }
+      spans.length = keep;
+      found.openAt = -1;
+      found.directiveAt = -1;
+      found.tableAt = -1;
     }
     if (found.openAt !== -1) {
-      this.waitFor(state, found.openAt, from);
+      this.waitFor(state, line, found.openAt, from);
       return undefined;
     }
     const directiveAt = found.directiveAt;
     const tableAt = found.tableAt;
     const tableEnd = found.tableEnd;
-    if (spans.length > 0 || directiveAt !== -1 || tableAt !== -1) {
+    if (spans.length > 0 || directiveAt !== -1 || tableAt !== -1 || esmAt !== -1) {
       // Paragraphs before, between and after the lines that end them.
       // The first fails on the open tag when its text has it as a tag.
       // The one after the last goes on as this block.
       const tail = spans.length > 0 ? this.rereadNodes(state, spans, first) : first;
+      if (esmAt !== -1) {
+        return this.handOver(state, line, tail, esmAt, -2);
+      }
       if (directiveAt !== -1) {
         return this.handOver(state, line, tail, directiveAt, -1);
       }
@@ -421,20 +454,144 @@ class OpenMdxFlow implements OpenBlock {
   }
 
   /**
+   * The whitespace an expression keeps at the start of line `i` of the
+   * lines read again, from `raw`; none for lines before this block's own.
+   */
+  keptOf(state: BlockState): (index: number) => string {
+    const lines = this.lines;
+    const raw = this.raw;
+    const own = lines.length - raw.length / 2;
+    const text = state.source.text;
+    return (i) => {
+      if (i < own) {
+        return '';
+      }
+      const r = (i - own) * 2;
+      return keptAt(text, raw[r + 1], lines[i], raw[r + 2], raw[r + 3]);
+    };
+  }
+
+  /**
+   * The line of ESM in the lines read again and the spans before it, or
+   * undefined. ESM starts where flow
+   * starts again: after a blank line, a leaf block (a heading, a thematic
+   * break, a closed fence, a setext underline, a leaf directive) or tags and
+   * expressions, and at the first line after a directive's fence or other
+   * ESM (`fresh`), and on the header row of a table. Only when no
+   * directive, table or open construct comes before it, which hand the
+   * lines over.
+   */
+  esmStart(
+    state: BlockState,
+    first: number,
+    from: number,
+  ): { at: number; spans: number[] } | undefined {
+    const lines = this.lines;
+    if (jsOf(state.source) === undefined) {
+      return undefined;
+    }
+    const low = Math.max(first, from);
+    const kept = this.keptOf(state);
+    let spans: number[] | undefined;
+    try {
+      spans = interruptAt(state, lines, from, first, kept);
+    } catch {
+      // A construct in the lines throws when probed. When it is in ESM
+      // data, micromark never reads it as flow: start nothing after each
+      // line that can start ESM (from the line itself, or after the delimiter row
+      // for a table header there).
+    }
+    if (spans !== undefined) {
+      const at = this.esmIn(state, spans, first, low);
+      return at === -1 ? undefined : { at, spans };
+    }
+    for (let i = low; i < lines.length; i += 2) {
+      if (!startsEsm(state, lines, low, i)) {
+        continue;
+      }
+      for (const stop of [i, i + 4]) {
+        try {
+          spans = interruptAt(state, lines, from, first, kept, stop);
+        } catch {
+          return undefined;
+        }
+        if (this.esmIn(state, spans, first, low) === i) {
+          return { at: i, spans };
+        }
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * The first line from `low` on that starts ESM after one of `spans` (or
+   * at `first` when `fresh`), when no directive, table or open construct
+   * of the same `interruptAt` call comes before it; else -1.
+   */
+  esmIn(state: BlockState, spans: number[], first: number, low: number): number {
+    const lines = this.lines;
+    let at = -1;
+    if (this.fresh && first >= low && startsEsm(state, lines, first, first)) {
+      at = first;
+    }
+    for (let k = 0; k < spans.length && at === -1; k += 2) {
+      const next = spans[k + 1] + 2;
+      if (next >= low && next < lines.length && startsEsm(state, lines, low, next)) {
+        at = next;
+      }
+    }
+    // A table that interrupts a paragraph: once its check passes, micromark
+    // reads the header line again with no paragraph, and ESM, tried before
+    // tables, starts there (`createEsmHeader`).
+    const table = found.tableAt;
+    if (
+      table !== -1 &&
+      table >= low &&
+      (at === -1 || table < at) &&
+      startsEsm(state, lines, low, table)
+    ) {
+      at = table;
+    }
+    if (
+      at === -1 ||
+      (found.openAt !== -1 && found.openAt < at) ||
+      (found.directiveAt !== -1 && found.directiveAt < at) ||
+      (found.tableAt !== -1 && found.tableAt < at)
+    ) {
+      return -1;
+    }
+    return at;
+  }
+
+  /**
    * Tags and expressions that start on line `at` of the lines read again
    * are still open at their end. They read the next lines as an open
    * construct does (a lazy line or the end of the content throws); once
    * they end, the lines are read again with those lines.
    */
-  waitFor(state: BlockState, at: number, from: number): void {
+  waitFor(state: BlockState, current: Line, at: number, from: number): void {
     const lines = this.lines;
     const text = state.source.text;
     const scanner = new Scanner();
-    scanner.begin(state.source, FLOW, lines[at], lines[at + 1], lines[at + 1] === text.length);
-    scanner.run();
-    for (let i = at + 2; i < lines.length; i += 2) {
-      scanner.feed(lines[i], lines[i + 1], lines[i + 1] === text.length, '', lines[i], false);
+    // The last of the lines is the current one, which may end the content
+    // (`endContent`): the construct then meets the end of the content.
+    const lastAt = lines.length - 2;
+    const isLast = (i: number): boolean =>
+      i === lastAt ? isLastLine(current) : lines[i + 1] === text.length;
+    try {
+      scanner.begin(state.source, FLOW, lines[at], lines[at + 1], isLast(at));
       scanner.run();
+      const kept = this.keptOf(state);
+      for (let i = at + 2; i < lines.length; i += 2) {
+        scanner.feed(lines[i], lines[i + 1], isLast(i), kept(i), lines[i], false);
+        scanner.run();
+      }
+    } catch (error) {
+      // The error waits (in a container directive); nothing after it shows.
+      failWith(state, this.bound, error, current.start);
+      this.ended = true;
+      this.lines.length = 0;
+      return;
     }
     this.scanner = scanner;
     this.waiting = true;
@@ -476,8 +633,8 @@ class OpenMdxFlow implements OpenBlock {
   }
 
   /**
-   * A container directive (`last` is -1) or a GFM table (rows `at` to
-   * `last`) starts on line `at` of the failed lines. The block parser reads
+   * A container directive (`last` is -1), ESM (`last` is -2) or a GFM table
+   * (rows `at` to `last`) starts on line `at` of the failed lines. The block parser reads
    * it: this block closes with the nodes before (the lines from `tail`, a
    * paragraph), and the lines from `at` go through the parser again inside
    * the containers around. A directive's content is a document of its own
@@ -515,20 +672,13 @@ class OpenMdxFlow implements OpenBlock {
       }
     }
     let directive: OpenBlock | undefined;
+    let esm: OpenBlock | undefined;
     let rest = lines.length;
-    let from = at;
+    const from = at;
     const startsOff = state.containerStartsOff;
-    if (last !== -1 && at === own) {
-      // The header row is the first line of this construct, which is text
-      // and fails first: the table only makes its header cells text chunks,
-      // for the order of errors.
-      const cells = tableCells(state.source.text, lines[at], lines[at + 1]);
-      for (let i = 0; i < cells.length; i += 2) {
-        state.inline({ children: [] }, [cells[i], cells[i + 1]]);
-      }
-      rest = last + 2;
-      from = rest;
-    }
+    // When the header row is this construct's own first line, it is text
+    // and fails first; the rows still go to the block parser, as the table
+    // body takes the lines after it and ESM may start on one.
     for (let i = from; i < rest; i += 2) {
       const r = (i - own) * 2;
       line.index = raw[r];
@@ -540,6 +690,21 @@ class OpenMdxFlow implements OpenBlock {
       measureLine(line);
       for (const around of quoted) {
         around.quoteLine = line.index;
+      }
+      if (last === -2) {
+        // ESM takes the lines up to a blank line where it parses.
+        state.readLineAt(line, depth);
+        if (i === at) {
+          esm = state.getBlock(depth + 1);
+          if (esm?.name !== 'mdxjsEsm') {
+            rest = i + 2;
+            break;
+          }
+        } else if (state.getDepth(esm!) === -1) {
+          rest = i + 2;
+          break;
+        }
+        continue;
       }
       if (last !== -1) {
         // Table rows are flow: no container starts on them. The header row
@@ -586,6 +751,8 @@ class OpenMdxFlow implements OpenBlock {
     block.lines = lines;
     block.raw = raw;
     block.base = rest;
+    // After a directive's fence, ESM or a table, flow starts again: ESM may too.
+    block.fresh = true;
     block.indents = this.indents;
     block.failed = true;
     block.bound = this.bound;
