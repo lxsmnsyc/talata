@@ -1,7 +1,7 @@
 ---
 id: fix-directive-list-indent
 title: Nested container directive in a list item ends on the right line
-status: active
+status: done
 priority: must
 type: fix
 outline: false
@@ -15,6 +15,7 @@ exclusive: []
 fulfilled_by:
 gate: false
 added: 2026-11-22
+spent: 30000
 owns:
   - packages/talata/src/ext/directive/**
   - packages/talata/test/directive*.test.ts

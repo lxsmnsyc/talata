@@ -47,3 +47,5 @@
 ## Size
 
 - Estimated S, actual S.
+
+Landed as e52e314 on batch/v2. Changeset dropped by the orchestrator: the bug shows only with `talata/mdx`, which is unreleased.
