@@ -778,8 +778,10 @@ function walkTo(state: BlockState, line: Line, depth: number): NextWalk {
     }
     if (!continuesNext(block, next, walk.footnote)) {
       walk.failed = i;
+      // Containers start under the indent limit, which MDX lifts (no indented code).
       walk.startsNext =
-        next.indent < 4 && isContainerStart(state, next.text, next.nonBlank, next.end);
+        next.indent < next.indentLimit &&
+        isContainerStart(state, next.text, next.nonBlank, next.end);
       continue;
     }
     // A definition that matched a line that is not blank (its indent, or right
