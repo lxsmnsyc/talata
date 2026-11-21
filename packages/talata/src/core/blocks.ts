@@ -297,7 +297,7 @@ export class BlockParser implements BlockState {
     if (starts[count - 1] === text.length) {
       count--;
     }
-    const line = createLine(text);
+    const line = createLine(text, this.rules.indentLimit);
     this.line = line;
     for (let i = 0; i < count; i++) {
       let end = text.length;

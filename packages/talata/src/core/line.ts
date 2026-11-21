@@ -33,9 +33,15 @@ export interface Line {
    * no line ending. Reset for each line. Read it with `isLastLine`.
    */
   endsContent: boolean;
+  /**
+   * Columns of indentation from which a line cannot start a construct (the
+   * line is indented code): 4, or Infinity when an extension turned off
+   * `codeIndented`. Rules compare `indent >= indentLimit`.
+   */
+  indentLimit: number;
 }
 
-export function createLine(text: string): Line {
+export function createLine(text: string, indentLimit = 4): Line {
   return {
     text,
     index: 0,
@@ -47,6 +53,7 @@ export function createLine(text: string): Line {
     nonBlank: 0,
     blank: true,
     endsContent: false,
+    indentLimit,
   };
 }
 

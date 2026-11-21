@@ -412,6 +412,7 @@ let headerLine: Line | undefined;
 function headerHtml(state: BlockState, line: Line, end: number): OpenBlock | undefined {
   const text = line.text;
   headerLine ??= createLine(text);
+  headerLine.indentLimit = line.indentLimit;
   const header = headerLine;
   header.text = text;
   header.index = line.index - 1;
@@ -439,7 +440,7 @@ const table: BlockRule = {
   gfm: true,
   start(state: BlockState, line: Line): OpenBlock | undefined {
     const paragraph = state.paragraph;
-    if (paragraph === undefined || state.lazy || line.indent >= 4) {
+    if (paragraph === undefined || state.lazy || line.indent >= line.indentLimit) {
       return undefined;
     }
     const lines = paragraph.lines;
@@ -463,7 +464,7 @@ const table: BlockRule = {
     headerPrefix(state, lines);
     // A continuation line with 4 or more columns of indentation does not try
     // an interrupt in micromark, so it cannot be a header.
-    if (count > 2 && indentColumns(text, prefixStart, headerStart, prefixTab) >= 4) {
+    if (count > 2 && indentColumns(text, prefixStart, headerStart, prefixTab) >= line.indentLimit) {
       return undefined;
     }
     const header = state.splitParagraph(1);

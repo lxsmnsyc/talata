@@ -425,7 +425,7 @@ function parseHtml(state: InlineState): boolean {
   for (let r = state.range; r < cursor.range; r += 2) {
     const lineEnd = ranges[r + 1];
     value += text.slice(from, lineEnd) + text.slice(lineEnd, skipLineEnding(text, lineEnd));
-    value += linePrefix(state, r + 2, 3);
+    value += linePrefix(state, r + 2, state.rules.indentLimit - 1);
     from = ranges[r + 2];
   }
   value += text.slice(from, end);

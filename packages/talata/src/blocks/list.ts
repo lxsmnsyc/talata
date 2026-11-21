@@ -118,7 +118,7 @@ export default class OpenList implements TrackedContainer {
 
   /** True when `line` starts an item of this list. */
   startsSibling(line: Line): boolean {
-    if (line.indent >= 4) {
+    if (line.indent >= line.indentLimit) {
       return false;
     }
     const text = line.text;

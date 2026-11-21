@@ -61,3 +61,63 @@ ext-directive (replaces `directiveEnd`, `directiveHtml`, the prefix replay and `
 ## Decision
 
 Accepted. Copied into `extension.md` as version 3 after PR #22 merged.
+
+---
+
+# Change request: extension v3 to v4
+
+- From node: mdx-core
+- Status: open
+
+## Problem
+
+`micromark-extension-mdx` 2.1.0 builds on `micromark-extension-mdx-md` 2.0.0, which turns off the core constructs `autolink`, `codeIndented`, `htmlFlow` and `htmlText` with `disable: { null: [...] }`. An `Extension` cannot remove a core rule, so ext-mdx cannot match the reference. Turning off `codeIndented` also changes other rules: in micromark a flow construct limits its leading whitespace to 3 columns only while `codeIndented` is on. With it off, `    - a` is a list, `    # a` a heading, and `a\n    ---` a setext heading (checked against `mdast-util-from-markdown`). The same holds for block quotes, fences (open and close), block HTML, tables and footnote definitions.
+
+## Proposed change
+
+Paths are under `packages/talata/src/`. Tree output with no `disable` list does not change.
+
+```ts
+// ext/api.ts
+interface Extension {
+  // Core rules to leave out by name, as micromark's `disable.null` does. Block and inline names
+  // overlap (`html`), so there are two lists. Applies to every registered rule, including rules
+  // of other extensions, in any order. Unknown names are ignored.
+  disable?: { block?: string[]; inline?: string[] };
+}
+```
+
+Names: block `codeIndented` and `html`; inline `html` and `autolink`. Reference names map as `htmlFlow` to block `html`, `htmlText` to inline `html`.
+
+```ts
+// core/registry.ts
+interface RuleSet {
+  disableBlock?: string[];
+  disableInline?: string[];
+} // joined from all extensions
+interface Registry {
+  indentLimit: number;
+} // 4, or Infinity when block codeIndented is off
+
+// core/line.ts
+interface Line {
+  indentLimit: number;
+} // copied from Registry.indentLimit
+function createLine(text: string, indentLimit = 4): Line;
+```
+
+- Filtering happens once per registry in `createRegistry` (`select(rules, options, disabled)`). `index.ts` only collects the lists into the `RuleSet`. The registry cache already keys on the extension objects.
+- Rules that refuse a line at 4 columns compare `line.indent >= line.indentLimit`: block quote, ATX and setext heading, thematic break, fenced code (open and close), block HTML, list item and list sibling, table, footnote definition start. The 4-column indent that continues a footnote definition is not a limit and stays.
+- Extension rules that keep a literal 4 (math flow, directive leaf and container) keep the old limit. A rule that must match micromark with `codeIndented` off, such as the JSX flow rule of ext-mdx, uses `line.indentLimit`.
+
+## Affected nodes
+
+ext-mdx (sets `disable: { block: ['codeIndented', 'html'], inline: ['autolink', 'html'] }` and uses `line.indentLimit`), ext-mdx-acorn through it. Existing extensions are not affected.
+
+## Workaround in place
+
+None needed. Built and tested in `packages/talata/test/mdx-core.test.ts` against `mdast-util-from-markdown` with `{ disable: { null: [...] } }`.
+
+## Decision
+
+To be filled in by the orchestrator.

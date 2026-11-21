@@ -37,7 +37,7 @@ const headingSetext: BlockRule = {
   canInterruptParagraph: true,
   triggers: '=-',
   start(state: BlockState, line: Line): OpenBlock | undefined {
-    if (state.paragraph === undefined || state.lazy || line.indent >= 4) {
+    if (state.paragraph === undefined || state.lazy || line.indent >= line.indentLimit) {
       return undefined;
     }
     const text = line.text;
