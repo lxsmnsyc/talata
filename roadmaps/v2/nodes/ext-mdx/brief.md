@@ -1,7 +1,7 @@
 ---
 id: ext-mdx
 title: MDX extension without a JS parser
-status: todo
+status: active
 priority: must
 type: feature
 outline: false
