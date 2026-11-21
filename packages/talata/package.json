@@ -80,6 +80,17 @@
       },
       "default": "./dist/directive.js"
     },
+    "./mdx": {
+      "import": {
+        "types": "./dist/mdx.d.ts",
+        "default": "./dist/mdx.js"
+      },
+      "require": {
+        "types": "./dist/mdx.d.cts",
+        "default": "./dist/mdx.cjs"
+      },
+      "default": "./dist/mdx.js"
+    },
     "./package.json": "./package.json"
   },
   "publishConfig": {
@@ -104,11 +115,13 @@
     "mdast-util-frontmatter": "^2.0.1",
     "mdast-util-gfm": "^3.1.0",
     "mdast-util-math": "^3.0.0",
+    "mdast-util-mdx": "^3.0.0",
     "mdast-util-to-hast": "^13.2.0",
     "micromark-extension-directive": "^4.0.0",
     "micromark-extension-frontmatter": "^2.0.0",
     "micromark-extension-gfm": "^3.0.0",
     "micromark-extension-math": "^3.1.0",
+    "micromark-extension-mdx": "^2.1.0",
     "rehype-stringify": "^10.0.1",
     "remark-directive": "^4.0.0",
     "remark-frontmatter": "^5.0.0",

@@ -66,7 +66,7 @@ function createEmptyLine(state: BlockState, line: Line): Line {
     padded = line.text + ' ';
     paddedTexts.set(state.source, padded);
   }
-  const empty = createLine(padded);
+  const empty = createLine(padded, line.indentLimit);
   // No quote prefix is ever on this line, whatever the containers say.
   empty.index = -2;
   empty.start = line.end;
@@ -505,7 +505,7 @@ class OpenContainerDirective implements TrackedContainer {
     // The containers around this block, on the next line.
     const text = state.source.text;
     const starts = state.source.lineStarts;
-    const next = createLine(text);
+    const next = createLine(text, line.indentLimit);
     next.index = line.index + 1;
     next.start = starts[next.index];
     next.end = next.index + 1 < starts.length ? starts[next.index + 1] - 1 : text.length;
@@ -619,7 +619,7 @@ function continuesNext(block: OpenBlock, next: Line, footnote: number): boolean 
   }
   switch (block.name) {
     case 'blockquote': {
-      if (next.indent >= 4 || next.text.charCodeAt(next.nonBlank) !== GREATER_THAN) {
+      if (next.indent >= next.indentLimit || next.text.charCodeAt(next.nonBlank) !== GREATER_THAN) {
         return false;
       }
       advanceLine(next, next.nonBlank + 1);
@@ -730,7 +730,7 @@ const containerDirective: BlockRule = {
   canInterruptParagraph: true,
   triggers: ':',
   start(state: BlockState, line: Line): OpenBlock | undefined {
-    if (line.indent >= 4) {
+    if (line.indent >= line.indentLimit) {
       return undefined;
     }
     const text = line.text;

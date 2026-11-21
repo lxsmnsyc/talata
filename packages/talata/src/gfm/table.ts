@@ -430,6 +430,16 @@ function headerHtml(state: BlockState, line: Line, end: number): OpenBlock | und
   return block;
 }
 
+/** Whether block HTML is on (an extension can turn it off). */
+function hasHtml(state: BlockState): boolean {
+  for (const rule of state.rules.blockByChar[LESS_THAN]) {
+    if (rule === html) {
+      return true;
+    }
+  }
+  return false;
+}
+
 const table: BlockRule = {
   name: 'table',
   // After list items (a container on the delimiter line wins) and before
@@ -471,7 +481,7 @@ const table: BlockRule = {
     if (header === undefined) {
       return undefined;
     }
-    if (count > 2 && text.charCodeAt(headerStart) === LESS_THAN) {
+    if (count > 2 && text.charCodeAt(headerStart) === LESS_THAN && hasHtml(state)) {
       const block = headerHtml(state, line, headerEnd);
       if (block !== undefined) {
         return block;
