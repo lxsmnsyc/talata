@@ -31,6 +31,9 @@ depends_on:
   - on: fix-mdx-reread-container
     kind: hard
     why: 0.4 ships with no known MDX tree mismatch
+  - on: fix-directive-nested-growth
+    kind: hard
+    why: 0.4 ships without the cubic directive path
   - on: ext-mdx-acorn
     kind: hard
     why: documents and ships the acorn option
