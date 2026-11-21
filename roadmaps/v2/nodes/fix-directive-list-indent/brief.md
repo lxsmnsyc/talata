@@ -1,7 +1,7 @@
 ---
 id: fix-directive-list-indent
 title: Nested container directive in a list item ends on the right line
-status: todo
+status: active
 priority: must
 type: fix
 outline: false

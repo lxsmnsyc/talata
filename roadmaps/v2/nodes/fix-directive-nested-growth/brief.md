@@ -1,7 +1,7 @@
 ---
 id: fix-directive-nested-growth
 title: Deep unclosed directive chains parse in linear time
-status: active
+status: done
 priority: must
 type: fix
 outline: false
@@ -15,6 +15,7 @@ exclusive: []
 fulfilled_by:
 gate: false
 added: 2026-11-22
+spent: 330000
 owns:
   - packages/talata/src/ext/directive/**
   - packages/talata/src/blocks/code-fenced.ts

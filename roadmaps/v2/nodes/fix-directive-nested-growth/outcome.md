@@ -90,3 +90,5 @@ Deep chains of container directives are no longer cubic in the depth. They are n
 ## Size
 
 - Estimated S, actual S.
+
+Landed as 056b425 on batch/v2.
