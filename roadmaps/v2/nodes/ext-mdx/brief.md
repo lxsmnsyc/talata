@@ -1,7 +1,7 @@
 ---
 id: ext-mdx
 title: MDX extension without a JS parser
-status: active
+status: done
 priority: must
 type: feature
 outline: false
@@ -15,6 +15,7 @@ exclusive: []
 fulfilled_by:
 gate: false
 added: 2026-10-28
+spent: 1050000
 owns:
   - packages/talata/src/ext/mdx/**
   - packages/talata/src/mdx.ts

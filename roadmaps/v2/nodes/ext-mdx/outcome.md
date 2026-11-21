@@ -61,3 +61,5 @@ How acorn plugs in (ext-mdx-acorn): give `Scanner` an optional acorn and options
 ## Size
 
 - Estimated L, actual XL. Most of the work was not in the brief's list: the error order across micromark's passes, and flow constructs that fail on a later line.
+
+Landed as 6562e7b on batch/v2.

@@ -1,7 +1,7 @@
 ---
 id: ext-mdx-acorn
 title: MDX with acorn, for mdxjs parity
-status: todo
+status: active
 priority: must
 type: feature
 outline: false

@@ -28,6 +28,9 @@ depends_on:
   - on: ext-mdx
     kind: hard
     why: documents and ships it
+  - on: fix-mdx-reread-container
+    kind: hard
+    why: 0.4 ships with no known MDX tree mismatch
   - on: ext-mdx-acorn
     kind: hard
     why: documents and ships the acorn option
