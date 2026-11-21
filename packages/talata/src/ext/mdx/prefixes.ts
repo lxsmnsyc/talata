@@ -7,32 +7,6 @@ const SPACE = 32;
 const TAB = 9;
 
 /**
- * Where the line at `at` starts after the containers up to depth `bound`
- * that take it, when a quote among them does not, or -1.
- */
-export function quoteMissing(state: BlockState, bound: number, at: number): number {
-  const text = state.source.text;
-  let pos = at;
-  for (let depth = 1; depth <= bound; depth++) {
-    if (state.getBlock(depth)?.name !== 'blockquote') {
-      continue;
-    }
-    let i = pos;
-    while (text.charCodeAt(i) === SPACE || text.charCodeAt(i) === TAB) {
-      i++;
-    }
-    if (text.charCodeAt(i) !== 62) {
-      return pos;
-    }
-    pos = i + 1;
-    if (text.charCodeAt(pos) === SPACE || text.charCodeAt(pos) === TAB) {
-      pos++;
-    }
-  }
-  return -1;
-}
-
-/**
  * Where a lazy line at `at` starts after the containers up to depth `bound`
  * that take it, or -1 when every container takes it and it is not blank
  * (the content ended: the end of a container directive). List items and
@@ -57,8 +31,12 @@ export function prefixEnd(state: BlockState, bound: number, at: number): number 
       }
       if (text.charCodeAt(i) !== 62) {
         // In the content of a directive, a line that is not blank is lazy
-        // from its start.
-        return directive && !isBlankText(text, at) ? at : pos;
+        // from its start, and so is one that ends right after a quote
+        // marker and its space.
+        if (directive && (!isBlankText(text, at) || endsAfterSpace(text, at, pos))) {
+          return at;
+        }
+        return pos;
       }
       pos = i + 1;
       if (text.charCodeAt(pos) === SPACE || text.charCodeAt(pos) === TAB) {
@@ -106,6 +84,18 @@ export function prefixEnd(state: BlockState, bound: number, at: number): number 
     }
   }
   return isBlankText(text, pos) ? pos : -1;
+}
+
+/** Whether the line ends at `pos`, right after a quote marker and one space (a tab is split). */
+function endsAfterSpace(text: string, at: number, pos: number): boolean {
+  const code = text.charCodeAt(pos);
+  const before = text.charCodeAt(pos - 1);
+  return (
+    pos - 2 >= at &&
+    (pos === text.length || code === 10 || code === 13) &&
+    before === SPACE &&
+    text.charCodeAt(pos - 2) === 62
+  );
 }
 
 /** Whether the line at `from` holds only whitespace and quote markers. */

@@ -121,3 +121,49 @@ None needed. Built and tested in `packages/talata/test/mdx-core.test.ts` against
 ## Decision
 
 Accepted 2026-11-21. Review added two more limit readers: list item content width and inline HTML line prefix (see `extension.md` v4).
+
+# Change request: extension v4 to v5
+
+- From node: fix-mdx-reread-container
+- Status: open
+
+## Problem
+
+With `mdx()` and `directive()`, a JSX flow construct or flow expression that fails on a later line (text after its last tag) is read again by micromark as flow. When those lines hold a container directive opener, the directive's content is a document of its own: block quotes, lists and every flow construct start in it, on the lines already read and on the lines after. `src/ext/mdx/reread.ts` emulates the flow re-read with leaf rules only, so it cannot open a container, and the tree missed the directive and its content (`[a]:\n{a\n:::x\n}x\n`, `roadmaps/v2/nodes/ext-mdx/outcome.md`, "Known gap"). Extensions cannot hand a line to the block parser: `BlockParser.processLine` is not on `BlockState`, and it always starts at the document.
+
+## Proposed change
+
+`core/blocks.ts`:
+
+```ts
+interface BlockState {
+  // Reads `line` again as a line on which the open blocks up to `depth` matched and took
+  // their prefixes: the blocks above `depth` are asked to continue, then rules start as on
+  // any line. For a rule that reads its own lines again after they went through the
+  // containers (a failed MDX flow construct). Call it from `addLine` of the tip, after
+  // closing the tip, for lines up to the current one, in order; `line` must not be the
+  // line the parser passed in.
+  readLineAt(line: Line, depth: number): void;
+}
+
+interface OpenParagraph {
+  // For a paragraph that is not the block parser's own (an extension's block that goes on
+  // as one): the indents of its lines, as `paragraphIndents` returns them, for the rules
+  // that take it (setext heading, table, definitions).
+  inlineIndents?(): number[] | undefined;
+}
+```
+
+`BlockParser.processLine(line, from = 0)` starts its continue loop at `from + 1` with `matched = from`; `readLineAt` calls it with `depth` and sets `BlockParser.line` (read by `willClose` and `endContent`) to `line` for the call. `paragraphIndents` (`blocks/paragraph.ts`) returns `paragraph.inlineIndents?.()` for a paragraph that is not an `OpenParagraphBlock`; it returned undefined, so a setext heading over a failed MDX construct lost the whitespace after the containers (`- {\n   }x\n  -`). No other change. The parser never calls `readLineAt` itself, and no core paragraph has `inlineIndents`, so output without MDX is unchanged (hash of the trees over the benchmark corpus and 100,000 fuzz documents, gfm on and off, no extensions and `[frontmatter, math, directive]`: equal on batch/v2 and on the branch).
+
+## Affected nodes
+
+- ext-mdx (code it changes): `OpenMdxFlow.handOver` in `src/ext/mdx/flow.ts` calls `readLineAt`; `OpenMdxFlow` has `inlineIndents`.
+- ext-mdx-acorn: its ESM construct goes through the same failure re-read; nothing to change.
+- No other extension uses it.
+
+## Workaround in place
+
+None: the hooks are in `packages/talata/src/core/blocks.ts` and `src/blocks/paragraph.ts` on the branch `fix/fix-mdx-reread-container`, used as written above.
+
+## Decision

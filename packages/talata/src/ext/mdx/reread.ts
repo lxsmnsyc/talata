@@ -1,7 +1,6 @@
-import type { BlockRule, BlockState } from '../../core/blocks';
+import type { BlockRule, BlockState, OpenParagraph } from '../../core/blocks';
 import { createLine, measureLine } from '../../core/line';
-import { skipLineEnding } from '../../core/source';
-import { quoteMissing } from './prefixes';
+import type { Source } from '../../core/source';
 import { FLOW, MORE, NOK, Scanner } from './scanner';
 import type { Item } from './scanner';
 
@@ -16,42 +15,21 @@ const TAB = 9;
 export const found: {
   /** For each span: the tags and expressions on it, or undefined. */
   constructs: (Item[] | undefined)[];
-  /** Index in the lines of the header row of a table, or -1. */
+  /** Index in the lines of the header row of a table, or -1, and of its last row. Nothing after it was read. */
   tableAt: number;
-  /** The marker of a fence left open at the last line, or -1, and its size. */
+  tableEnd: number;
+  /** The marker of a code or math fence left open at the last line, or -1. */
   openFence: number;
-  openFenceSize: number;
-} = { constructs: [], tableAt: -1, openFence: -1, openFenceSize: 0 };
+  /** Index in the lines of the opening line of a container directive, or -1. Nothing after it was read. */
+  directiveAt: number;
+  /**
+   * Index in the lines of the first line of tags and expressions still open
+   * at the end of the lines, or -1. Nothing after it was read.
+   */
+  openAt: number;
+} = { constructs: [], tableAt: -1, tableEnd: -1, openFence: -1, directiveAt: -1, openAt: -1 };
 
 const probe = new Scanner();
-
-/**
- * Feeds `probe` the source line after the line ending at `lineEnd`, or the
- * end of the text. A line that a quote around does not take is lazy, which
- * throws. Returns the end of that line.
- */
-function feedSourceLine(state: BlockState, bound: number, lineEnd: number): number {
-  const text = state.source.text;
-  const next = skipLineEnding(text, lineEnd);
-  const lazy = quoteMissing(state, bound, next);
-  if (lazy !== -1) {
-    probe.feed(lazy, lazy, false, '', lazy, true);
-  }
-  if (next === lineEnd || next === text.length) {
-    probe.feedEnd(next);
-    return next;
-  }
-  let stop = next;
-  while (stop < text.length && text.charCodeAt(stop) !== 10 && text.charCodeAt(stop) !== 13) {
-    stop++;
-  }
-  let first = next;
-  while (first < stop && (text.charCodeAt(first) === SPACE || text.charCodeAt(first) === TAB)) {
-    first++;
-  }
-  probe.feed(first, stop, stop === text.length, '', next, false);
-  return stop;
-}
 
 /** Content ranges of the cells of a table row, trimmed, as flat pairs. */
 export function tableCells(text: string, start: number, end: number): number[] {
@@ -81,6 +59,63 @@ export function tableCells(text: string, start: number, end: number): number[] {
     }
   }
   return cells;
+}
+
+/**
+ * Whether the last span ends on line `i`, so that line is no table header:
+ * a flow construct, or a setext underline after paragraph text. An
+ * underline with no text before it (none, or only definitions) is text.
+ */
+function endsSpan(
+  state: BlockState,
+  lines: number[],
+  spans: number[],
+  base: number,
+  i: number,
+): boolean {
+  const count = spans.length;
+  if (count === 0 || spans[count - 1] !== i) {
+    return false;
+  }
+  const text = state.source.text;
+  const code = text.charCodeAt(lines[i]);
+  if (
+    spans[count - 2] !== i ||
+    (code !== 61 && code !== 45) ||
+    !isRun(text, lines[i], lines[i + 1], code, 1, false)
+  ) {
+    return true;
+  }
+  // Text before it: lines after the span before, or from the first line,
+  // that definitions do not take.
+  const textStart = count >= 4 ? spans[count - 3] + 2 : base;
+  if (i <= textStart) {
+    return false;
+  }
+  const paragraph: OpenParagraph = {
+    name: 'paragraph',
+    isContainer: false,
+    acceptsLazy: false,
+    lines: lines.slice(textStart, i),
+    start: lines[textStart],
+    continue: noLine,
+    close: noNode,
+  };
+  for (const rule of state.rules.paragraphPrefixRules) {
+    if (paragraph.lines.length === 0) {
+      break;
+    }
+    rule.consume(state, paragraph, []);
+  }
+  return paragraph.lines.length > 0;
+}
+
+function noLine(): boolean {
+  return false;
+}
+
+function noNode(): undefined {
+  return undefined;
 }
 
 /** Whether line `i` of `lines` is a table delimiter row for the line before it. */
@@ -160,19 +195,16 @@ export function isRun(
 /**
  * The lines from `from` on that end a paragraph in flow: blank lines and
  * flow constructs that can interrupt it, as pairs of indexes in `lines` of
- * their first and last line.
+ * their first and last line. The lines read start at `base`.
  */
-export function interruptAt(
-  state: BlockState,
-  bound: number,
-  lines: number[],
-  from: number,
-): number[] {
+export function interruptAt(state: BlockState, lines: number[], from: number, base = 0): number[] {
   const text = state.source.text;
   const spans: number[] = [];
   found.constructs = [];
   found.tableAt = -1;
   found.openFence = -1;
+  found.directiveAt = -1;
+  found.openAt = -1;
   for (let i = from; i < lines.length; i += 2) {
     const start = lines[i];
     const end = lines[i + 1];
@@ -181,56 +213,55 @@ export function interruptAt(
       found.constructs.push(undefined);
       continue;
     }
-    if (state.options.gfm && i >= 2 && isTableStart(text, lines, i)) {
+    if (
+      state.options.gfm &&
+      i >= base + 2 &&
+      !endsSpan(state, lines, spans, base, i - 2) &&
+      isTableStart(text, lines, i)
+    ) {
       // A GFM table from the line before: the paragraph ends before that
-      // line, and the table takes the rest.
+      // line, and the table takes the rest. The block parser reads it
+      // (`OpenMdxFlow.handOver`); the spans stop before it.
       found.tableAt = i - 2;
       if (spans.length > 0 && spans[spans.length - 1] === i - 2) {
+        // An underline that is text: the header row.
         spans.length -= 2;
+        found.constructs.length--;
       }
       // Body rows up to a blank line or a flow construct, which may throw.
       let row = i + 2;
       while (row < lines.length && lines[row] !== lines[row + 1]) {
         const first = text.charCodeAt(lines[row]);
+        // A setext underline is a row: no paragraph is open in a table.
         const flow =
           first === 60 || first === 123
-            ? probeConstruct(state, bound, lines, row) !== -1
-            : startsFlow(state, lines, row);
+            ? probeConstruct(lines, row, text, state.source) !== -1 || found.openAt !== -1
+            : startsFlow(state, lines, row) &&
+              first !== 61 &&
+              (first !== 45 || isRun(text, lines[row], lines[row + 1], 45, 3, true));
         if (flow) {
           break;
         }
         row += 2;
       }
-      spans.push(i - 2, row - 2);
-      found.constructs.push(undefined);
-      i = row - 2;
-      continue;
+      found.tableEnd = row - 2;
+      return spans;
     }
     const code = text.charCodeAt(start);
     let last = startsFlow(state, lines, i) ? i : -1;
     let items: Item[] | undefined;
     if (code === 60 || code === 123) {
-      last = probeConstruct(state, bound, lines, i);
-      items = probe.items;
-    } else if (last !== -1 && code === 58 && text.startsWith(':::', start)) {
-      // A container directive to its closing fence: its content is a
-      // document of its own, read later than this text.
-      let size = 0;
-      while (text.charCodeAt(start + size) === 58) {
-        size++;
-      }
-      last = i + 2;
-      while (last < lines.length && !isFence(text, lines[last], lines[last + 1], 58, size)) {
-        last += 2;
-      }
-      if (last >= lines.length) {
-        // Still open: the lines after these go to it, up to its fence.
-        found.openFence = 58;
-        found.openFenceSize = size;
-        spans.push(i, lines.length - 2);
-        found.constructs.push(undefined);
+      last = probeConstruct(lines, i, text, state.source);
+      if (found.openAt !== -1) {
         return spans;
       }
+      items = probe.items;
+    } else if (last !== -1 && code === 58 && text.startsWith(':::', start)) {
+      // A container directive: its content is a document of its own, which
+      // the block parser reads (`OpenMdxFlow.handOver`). The spans stop
+      // before it.
+      found.directiveAt = i;
+      return spans;
     } else if (last !== -1 && (code === 96 || code === 126 || code === 36)) {
       // Code or math to its closing fence: those lines are not text.
       let size = 0;
@@ -243,7 +274,6 @@ export function interruptAt(
       }
       if (last >= lines.length) {
         found.openFence = code;
-        found.openFenceSize = size;
         spans.push(i, lines.length - 2);
         found.constructs.push(undefined);
         return spans;
@@ -333,24 +363,24 @@ function startsDirective(state: BlockState, start: number, end: number): boolean
 
 /**
  * The index of the last line of the tags and expressions that start line
- * `i`, read again over the next lines and then the source after them, or -1
- * when they end in text. A syntax error throws: the reference's error too.
+ * `i`, read again over the next lines, or -1 when they end in text. When
+ * they are still open at the end of the lines, `found.openAt` is `i`: the
+ * block reads the next lines into them as for any open construct. A syntax
+ * error throws: the reference's error too.
  */
-function probeConstruct(state: BlockState, bound: number, lines: number[], i: number): number {
-  const text = state.source.text;
+function probeConstruct(lines: number[], i: number, text: string, source: Source): number {
   const end = lines[i + 1];
-  probe.begin(state.source, FLOW, lines[i], end, end === text.length);
+  probe.begin(source, FLOW, lines[i], end, end === text.length);
   let result = probe.run();
   let last = i;
-  let lineEnd = end;
   while (result === MORE) {
     last += 2;
-    if (last < lines.length) {
-      lineEnd = lines[last + 1];
-      probe.feed(lines[last], lineEnd, lineEnd === text.length, '', lines[last], false);
-    } else {
-      lineEnd = feedSourceLine(state, bound, lineEnd);
+    if (last >= lines.length) {
+      found.openAt = i;
+      return -1;
     }
+    const lineEnd = lines[last + 1];
+    probe.feed(lines[last], lineEnd, lineEnd === text.length, '', lines[last], false);
     result = probe.run();
   }
   return result === NOK ? -1 : last;

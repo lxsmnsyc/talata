@@ -79,32 +79,6 @@ export function dropParagraph(source: Source, start: number, end: number): void 
   set.add(start + ':' + end);
 }
 
-// Nodes to put before the node that starts at an offset, per parse (see `nodesBefore`).
-const before = new WeakMap<Source, Map<number, RootContent[]>>();
-
-/**
- * Puts `nodes` before the node that starts at `start`, or forgets them
- * (`undefined`): for a block that another rule may take without closing.
- */
-export function nodesBefore(source: Source, start: number, nodes: RootContent[] | undefined): void {
-  let map = before.get(source);
-  if (nodes === undefined) {
-    map?.delete(start);
-    return;
-  }
-  markSource(source);
-  if (map === undefined) {
-    map = new Map();
-    before.set(source, map);
-  }
-  map.set(start, nodes);
-}
-
-/** The nodes to put before nodes by start offset, for the parse of `source`. */
-export function nodesBeforeOf(source: Source): Map<number, RootContent[]> | undefined {
-  return before.get(source);
-}
-
 // Nodes to drop, by identity (see `dropNode`).
 const droppedNodes = new WeakSet<object>();
 

@@ -93,7 +93,10 @@ function containers(tree: Root, text: string): Content[] {
       ) {
         start++;
       }
-      result.push({ start, end: node.position.end.offset ?? text.length });
+      // Content that runs to the end of the text holds an error there (the
+      // end of file in a construct inside it).
+      const end = node.position.end.offset ?? text.length;
+      result.push({ start, end: end === text.length ? end + 1 : end });
     }
     if (node.children !== undefined) {
       for (const child of node.children) {
@@ -112,22 +115,46 @@ export function throwWaiting(tree: Root, source: Source): void {
     return;
   }
   waiting.delete(source);
+  // Container contents nest. Sweep them in document order with the errors
+  // sorted by where they count: how many contents hold each error, and the
+  // start of the innermost.
   const contents = containers(tree, source.text);
+  contents.sort((a, b) => a.start - b.start || b.end - a.end);
+  const bases: number[] = [];
+  const order: number[] = [];
+  for (let i = 0; i < list.length; i++) {
+    const entry = list[i];
+    bases.push(entry.text ? entry.chunk : entry.at);
+    order.push(i);
+  }
+  order.sort((a, b) => bases[a] - bases[b]);
+  const arounds: number[] = Array.from({ length: list.length });
+  const chunks: number[] = Array.from({ length: list.length });
+  const open: Content[] = [];
+  let next = 0;
+  for (const i of order) {
+    const base = bases[i];
+    while (next < contents.length && contents[next].start <= base) {
+      const content = contents[next++];
+      while (open.length > 0 && open[open.length - 1].end <= content.start) {
+        open.pop();
+      }
+      open.push(content);
+    }
+    while (open.length > 0 && open[open.length - 1].end <= base) {
+      open.pop();
+    }
+    arounds[i] = open.length;
+    chunks[i] = open.length > 0 ? open[open.length - 1].start : -1;
+  }
   let best: number[] | undefined;
   let first: MdxError | undefined;
-  for (const entry of list) {
-    const base = entry.text ? entry.chunk : entry.at;
-    let around = 0;
-    let chunk = -1;
-    for (const content of contents) {
-      if (content.start <= base && base < content.end) {
-        around++;
-        chunk = Math.max(chunk, content.start);
-      }
-    }
+  for (let i = 0; i < list.length; i++) {
+    const entry = list[i];
+    const around = arounds[i];
     const key = entry.text
       ? [2 * around + 1 + entry.labels, entry.chunk, entry.at]
-      : [2 * around - 1, chunk, entry.at];
+      : [2 * around - 1, chunks[i], entry.at];
     if (best === undefined || before(key, best)) {
       best = key;
       first = entry.error;

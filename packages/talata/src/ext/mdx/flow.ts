@@ -1,7 +1,8 @@
 import type { Paragraph, RootContent } from 'mdast';
 import type { BlockRule, BlockState, OpenBlock, OpenParagraph } from '../../core/blocks';
 import { paragraphIndents } from '../../blocks/paragraph';
-import { matchedOnlyAtEnd } from '../../blocks/blockquote';
+import { isTracked, matchedOnlyAtEnd } from '../../blocks/blockquote';
+import type { TrackedContainer } from '../../blocks/blockquote';
 import { isEmptyLastLine } from '../../blocks/code-indented';
 import type { Line } from '../../core/line';
 import { advanceLine, createLine, isLastLine, measureLine } from '../../core/line';
@@ -10,10 +11,10 @@ import { MdxError, span } from './error';
 import endsInText from './lookahead';
 import { flowError } from './order';
 import { prefixEnd } from './prefixes';
-import { found, interruptAt, isFence, isRun, tableCells } from './reread';
+import { found, interruptAt, isRun, tableCells } from './reread';
 import { DONE, FLOW, MORE, NOK, Scanner } from './scanner';
 import type { Item } from './scanner';
-import { dropNode, dropParagraph, flowMarker, markSource, nodesBefore, nodesMarker } from './tags';
+import { dropNode, dropParagraph, flowMarker, markSource, nodesMarker } from './tags';
 
 // The flow construct: a line that holds only JSX tags and expressions
 // (`<a>`, `{b}`, `<c d="e" />  {f}`), as `jsxFlow` of
@@ -90,12 +91,22 @@ function failWith(state: BlockState, bound: number, error: unknown, at: number):
 
 const LEAVES = new Set(['codeFenced', 'mathFlow', 'directiveLeaf', 'headingAtx', 'thematicBreak']);
 
-/** A line for the rules of leaf blocks read again. */
-function scratchLine(state: BlockState, start: number, end: number): Line {
+/**
+ * A line for the rules of leaf blocks read again: line `i` of `block.lines`,
+ * from where its containers ended when the block has it in `raw`.
+ */
+function scratchLine(state: BlockState, block: OpenMdxFlow, i: number): Line {
   const line = createLine(state.source.text, state.rules.indentLimit);
+  const lines = block.lines;
+  const r = (i - (lines.length - block.raw.length / 2)) * 2;
   line.index = -3;
-  line.start = start;
-  line.end = end;
+  line.start = lines[i];
+  line.end = lines[i + 1];
+  if (r >= 0) {
+    line.start = block.raw[r + 1];
+    line.visualColumn = block.raw[r + 2];
+    line.partialTab = block.raw[r + 3];
+  }
   measureLine(line);
   return line;
 }
@@ -107,21 +118,21 @@ function scratchLine(state: BlockState, start: number, end: number): Line {
  */
 function leafBlock(
   state: BlockState,
-  lines: number[],
+  block: OpenMdxFlow,
   from: number,
   to: number,
 ): RootContent | undefined {
-  return openLeaf(state, lines, from, to)?.close(state, []);
+  return openLeaf(state, block, from, to)?.close(state, []);
 }
 
 /** The open leaf block on lines `from` to `to` of `lines`, as `leafBlock` reads it. */
 function openLeaf(
   state: BlockState,
-  lines: number[],
+  block: OpenMdxFlow,
   from: number,
   to: number,
 ): OpenBlock | undefined {
-  const code = state.source.text.charCodeAt(lines[from]);
+  const code = state.source.text.charCodeAt(block.lines[from]);
   if (code >= 128) {
     return undefined;
   }
@@ -129,12 +140,12 @@ function openLeaf(
     if (!LEAVES.has(rule.name)) {
       continue;
     }
-    const open = rule.start(state, scratchLine(state, lines[from], lines[from + 1]));
+    const open = rule.start(state, scratchLine(state, block, from));
     if (open === undefined) {
       continue;
     }
     for (let i = from + 2; i <= to; i += 2) {
-      const line = scratchLine(state, lines[i], lines[i + 1]);
+      const line = scratchLine(state, block, i);
       if (!open.continue(state, line)) {
         break;
       }
@@ -165,6 +176,9 @@ function closeNothing(): undefined {
   return undefined;
 }
 
+// The start of a line read again as text: no flow construct starts there.
+let textAt = -1;
+
 // One scanner for first lines; a construct that spans lines keeps it.
 let shared = new Scanner();
 
@@ -186,11 +200,14 @@ class OpenMdxFlow implements OpenBlock {
   heads: RootContent[] = [];
   /** Fenced code or math the failed lines left open: it takes the next lines. */
   inner: OpenBlock | undefined;
-  /** The marker of a container directive the failed lines left open, or -1; and its size. */
-  fence = -1;
-  fenceSize = 0;
   /** Flat [start, end) pairs of the lines, for the paragraph. */
   lines: number[];
+  /**
+   * Per line of this construct (the last `raw.length / 2` entries of `lines`):
+   * index, start after the containers, visual column, split-tab columns. A
+   * container directive in the failed lines reads them again (`handOver`).
+   */
+  raw: number[];
   indents: number[] | undefined;
   lastLine: number;
   /** Offset where a lazy line after `lastLine` starts, or -1. */
@@ -215,6 +232,7 @@ class OpenMdxFlow implements OpenBlock {
 
   constructor(line: Line) {
     this.lines = [line.nonBlank, line.end];
+    this.raw = [line.index, line.start, line.visualColumn, line.partialTab];
     this.start = line.nonBlank;
     this.lastLine = line.index;
     this.firstIndent =
@@ -229,13 +247,6 @@ class OpenMdxFlow implements OpenBlock {
     }
     if (this.inner !== undefined) {
       return this.inner.continue(state, line);
-    }
-    if (this.fence !== -1) {
-      // Inside a directive that the failed lines opened: up to its fence.
-      if (isFence(line.text, line.start, line.end, this.fence, this.fenceSize)) {
-        this.fence = -1;
-      }
-      return true;
     }
     if (this.ended) {
       return false;
@@ -275,6 +286,13 @@ class OpenMdxFlow implements OpenBlock {
     }
     this.scanner = undefined;
     pending = undefined;
+    if (this.waiting) {
+      // The construct read again ended on this line: `addLine` reads the
+      // lines again with it.
+      this.waiting = false;
+      this.resume = true;
+      return true;
+    }
     if (result === DONE) {
       this.items = scanner.items;
       this.end = scanner.pos;
@@ -297,10 +315,18 @@ class OpenMdxFlow implements OpenBlock {
       this.indents ??= [];
       this.indents.push(line.end, line.start, line.partialTab);
     }
+    if (this.name !== 'paragraph') {
+      this.raw.push(line.index, line.start, line.visualColumn, line.partialTab);
+    }
     this.lines.push(line.nonBlank, line.end);
     advanceLine(line, line.end);
     if (this.failed && this.ended) {
       this.lines.length = 0;
+    } else if (this.waiting) {
+      // Lines of a construct read again: it reads them through `continue`.
+    } else if (this.resume) {
+      this.resume = false;
+      this.rereadAll(state, line, this.base, this.rereadFrom);
     } else if (this.failed && this.name !== 'paragraph') {
       // The lines read again as flow, without containers. When one of them
       // ends the paragraph, its text fails on the open tag, and the lines
@@ -316,46 +342,256 @@ class OpenMdxFlow implements OpenBlock {
         this.join(state, interrupted);
       }
       this.interrupted = undefined;
-      let spans: number[];
-      try {
-        spans = interruptAt(state, this.bound, this.lines, from);
-      } catch (error) {
-        failWith(state, this.bound, error, line.start);
-        spans = [this.lines.length - 2, this.lines.length - 2];
+      this.rereadAll(state, line, 0, from);
+    }
+  }
+
+  /**
+   * Reads the lines again (`reread`). Each container directive or table in
+   * them hands the lines after it to a new block, which reads them again in
+   * turn.
+   */
+  rereadAll(state: BlockState, line: Line, first: number, from: number): void {
+    let next = this.reread(state, line, first, from);
+    while (next !== undefined) {
+      next = next.reread(state, line, next.base, next.base);
+    }
+  }
+
+  /**
+   * True while tags and expressions in the lines read again are still open
+   * at their end: `scanner` reads the next lines into them, as micromark
+   * still tries them there, and `resume` is set once they end.
+   */
+  waiting = false;
+  resume = false;
+  /** The `from` of `reread` while `waiting`. */
+  rereadFrom = 0;
+
+  /** Index in `lines` of the first line this block reads again; earlier ones belong to blocks before it. */
+  base = 0;
+
+  /**
+   * Reads the lines from `first` on again as flow, the lines before `from`
+   * as text (see `addLine`). `line` is the current line. Returns the block
+   * that reads the lines after a container directive, if any.
+   */
+  reread(state: BlockState, line: Line, first: number, from: number): OpenMdxFlow | undefined {
+    let spans: number[];
+    try {
+      spans = interruptAt(state, this.lines, from, first);
+    } catch (error) {
+      failWith(state, this.bound, error, line.start);
+      spans = [this.lines.length - 2, this.lines.length - 2];
+    }
+    if (found.openAt !== -1) {
+      this.waitFor(state, found.openAt, from);
+      return undefined;
+    }
+    const directiveAt = found.directiveAt;
+    const tableAt = found.tableAt;
+    const tableEnd = found.tableEnd;
+    if (spans.length > 0 || directiveAt !== -1 || tableAt !== -1) {
+      // Paragraphs before, between and after the lines that end them.
+      // The first fails on the open tag when its text has it as a tag.
+      // The one after the last goes on as this block.
+      const tail = spans.length > 0 ? this.rereadNodes(state, spans, first) : first;
+      if (directiveAt !== -1) {
+        return this.handOver(state, line, tail, directiveAt, -1);
       }
-      if (spans.length > 0) {
-        // Paragraphs before, between and after the lines that end them.
-        // The first fails on the open tag when its text has it as a tag.
-        // The one after the last goes on as this block.
-        const tail = this.rereadNodes(state, spans);
-        if (found.tableAt !== -1) {
-          // Each header cell is a text chunk of its own.
-          const cells = tableCells(
-            state.source.text,
-            this.lines[found.tableAt],
-            this.lines[found.tableAt + 1],
-          );
-          for (let i = 0; i < cells.length; i += 2) {
-            state.inline({ children: [] }, [cells[i], cells[i + 1]]);
-          }
-        }
-        this.lines = this.lines.slice(tail);
-        this.start = this.lines.length > 0 ? this.lines[0] : this.start;
-        this.fence = found.openFence;
-        this.fenceSize = found.openFenceSize;
+      if (tableAt !== -1) {
+        return this.handOver(state, line, tail, tableAt, tableEnd);
       }
-      if (this.lines.length === 0) {
-        this.ended = true;
-      } else {
-        this.name = 'paragraph';
-        if (this.heads.length > 0) {
-          // A setext underline or a table may take this block as their
-          // paragraph without closing it: the transform puts the nodes
-          // before then before the node that starts here.
-          nodesBefore(state.source, this.start, this.heads);
-        }
+      if (this.heads.length > 0 && tail < this.lines.length) {
+        this.goOnAsParagraph(state, tail);
+        return undefined;
+      }
+      this.lines = this.lines.slice(tail);
+      this.start = this.lines.length > 0 ? this.lines[0] : this.start;
+    } else if (first > 0) {
+      this.lines = this.lines.slice(first);
+      this.start = this.lines[0];
+    }
+    if (this.lines.length === 0) {
+      this.ended = true;
+    } else {
+      this.name = 'paragraph';
+    }
+    return undefined;
+  }
+
+  /**
+   * Tags and expressions that start on line `at` of the lines read again
+   * are still open at their end. They read the next lines as an open
+   * construct does (a lazy line or the end of the content throws); once
+   * they end, the lines are read again with those lines.
+   */
+  waitFor(state: BlockState, at: number, from: number): void {
+    const lines = this.lines;
+    const text = state.source.text;
+    const scanner = new Scanner();
+    scanner.begin(state.source, FLOW, lines[at], lines[at + 1], lines[at + 1] === text.length);
+    scanner.run();
+    for (let i = at + 2; i < lines.length; i += 2) {
+      scanner.feed(lines[i], lines[i + 1], lines[i + 1] === text.length, '', lines[i], false);
+      scanner.run();
+    }
+    this.scanner = scanner;
+    this.waiting = true;
+    this.rereadFrom = from;
+    // oxlint-disable-next-line typescript/no-this-alias -- the open construct of this parse
+    pending = this;
+    pendingState = state;
+  }
+
+  /**
+   * The lines from `tail` on go on as a paragraph after the nodes the lines
+   * before made: this block closes with those nodes, and a new block takes
+   * the lines, so the block parser sees both (a list item's blank lines,
+   * definitions at the paragraph's start, a setext underline or a table
+   * that takes it).
+   */
+  goOnAsParagraph(state: BlockState, tail: number): void {
+    const lines = this.lines;
+    const raw = this.raw;
+    const r = (tail - (lines.length - raw.length / 2)) * 2;
+    const line = createLine(state.source.text, state.rules.indentLimit);
+    line.index = raw[r];
+    line.start = raw[r + 1];
+    line.end = lines[tail + 1];
+    line.visualColumn = raw[r + 2];
+    line.partialTab = raw[r + 3];
+    measureLine(line);
+    const block = new OpenMdxFlow(line);
+    block.name = 'paragraph';
+    block.failed = true;
+    block.lines = lines.slice(tail);
+    block.indents = this.indents;
+    block.bound = this.bound;
+    block.lastLine = this.lastLine;
+    this.lines = [];
+    this.ended = true;
+    state.closeOpenBlocks(state.getDepth(this) - 1, { keepsLineEnding: false });
+    state.openContainer(block);
+  }
+
+  /**
+   * A container directive (`last` is -1) or a GFM table (rows `at` to
+   * `last`) starts on line `at` of the failed lines. The block parser reads
+   * it: this block closes with the nodes before (the lines from `tail`, a
+   * paragraph), and the lines from `at` go through the parser again inside
+   * the containers around. A directive's content is a document of its own
+   * and takes the lines up to its fence or the current one; a table's rows
+   * are flow, where containers do not start. The lines after are read again
+   * as flow by a new block, which this returns.
+   */
+  handOver(
+    state: BlockState,
+    current: Line,
+    tail: number,
+    at: number,
+    last: number,
+  ): OpenMdxFlow | undefined {
+    const lines = this.lines;
+    if (at > tail) {
+      for (const node of this.paragraphNodes(state, lines.slice(tail, at))) {
+        this.heads.push(node);
       }
     }
+    const raw = this.raw;
+    const own = lines.length - raw.length / 2;
+    const depth = state.getDepth(this) - 1;
+    this.lines = [];
+    this.ended = true;
+    state.closeOpenBlocks(depth, { keepsLineEnding: false });
+    const line = createLine(state.source.text, state.rules.indentLimit);
+    // A quote prefix around that matched the current line matched each of
+    // these lines too: the containers around say so while they are read.
+    const quoted: TrackedContainer[] = [];
+    for (let d = 1; d <= depth; d++) {
+      const around = state.getBlock(d);
+      if (around !== undefined && isTracked(around) && around.quoteLine === current.index) {
+        quoted.push(around);
+      }
+    }
+    let directive: OpenBlock | undefined;
+    let rest = lines.length;
+    let from = at;
+    const startsOff = state.containerStartsOff;
+    if (last !== -1 && at === own) {
+      // The header row is the first line of this construct, which is text
+      // and fails first: the table only makes its header cells text chunks,
+      // for the order of errors.
+      const cells = tableCells(state.source.text, lines[at], lines[at + 1]);
+      for (let i = 0; i < cells.length; i += 2) {
+        state.inline({ children: [] }, [cells[i], cells[i + 1]]);
+      }
+      rest = last + 2;
+      from = rest;
+    }
+    for (let i = from; i < rest; i += 2) {
+      const r = (i - own) * 2;
+      line.index = raw[r];
+      line.start = raw[r + 1];
+      line.end = lines[i + 1];
+      line.visualColumn = raw[r + 2];
+      line.partialTab = raw[r + 3];
+      line.endsContent = line.index === current.index && current.endsContent;
+      measureLine(line);
+      for (const around of quoted) {
+        around.quoteLine = line.index;
+      }
+      if (last !== -1) {
+        // Table rows are flow: no container starts on them. The header row
+        // was read as text already (its tags and expressions end in text).
+        state.containerStartsOff = true;
+        textAt = i === at ? lines[at] : -1;
+        state.readLineAt(line, depth);
+        textAt = -1;
+        state.containerStartsOff = startsOff;
+        if (i === last) {
+          rest = i + 2;
+          break;
+        }
+        continue;
+      }
+      state.readLineAt(line, depth);
+      if (i === at) {
+        directive = state.getBlock(depth + 1);
+        if (directive?.name !== 'containerDirective') {
+          rest = i + 2;
+          break;
+        }
+      } else if (state.getDepth(directive!) === -1) {
+        // Closed at its fence.
+        rest = i + 2;
+        break;
+      }
+    }
+    for (const around of quoted) {
+      around.quoteLine = current.index;
+    }
+    if (rest >= lines.length) {
+      return undefined;
+    }
+    // The lines after the fence or the table: a new block reads them again as flow.
+    const r = (rest - own) * 2;
+    line.index = raw[r];
+    line.start = raw[r + 1];
+    line.end = lines[rest + 1];
+    line.visualColumn = raw[r + 2];
+    line.partialTab = raw[r + 3];
+    measureLine(line);
+    const block = new OpenMdxFlow(line);
+    block.lines = lines;
+    block.raw = raw;
+    block.base = rest;
+    block.indents = this.indents;
+    block.failed = true;
+    block.bound = this.bound;
+    block.lastLine = this.lastLine;
+    state.openContainer(block);
+    return block;
   }
 
   /**
@@ -448,13 +684,14 @@ class OpenMdxFlow implements OpenBlock {
    * headings, and the leaf blocks their own rules read. Returns the index
    * in the lines where the paragraph this block goes on as starts.
    */
-  rereadNodes(state: BlockState, spans: number[]): number {
+  rereadNodes(state: BlockState, spans: number[], first: number): number {
     const text = state.source.text;
     const lines = this.lines;
     const heads = this.heads;
-    let segment = 0;
+    let segment = first;
     for (let k = 0; k < spans.length; k += 2) {
       const from = spans[k];
+      const opened = segment;
       let paragraph: RootContent | undefined;
       if (from > segment) {
         for (const node of this.paragraphNodes(state, lines.slice(segment, from))) {
@@ -478,6 +715,11 @@ class OpenMdxFlow implements OpenBlock {
         if (paragraph?.type === 'paragraph') {
           // A setext underline: the paragraph before is its heading.
           Object.assign(paragraph, { type: 'heading', depth: code === 61 ? 1 : 2 });
+          // It starts where the paragraph did, before any definitions.
+          paragraph.position!.start = point(
+            state.source,
+            opened === first ? this.start : lines[opened],
+          );
           paragraph.position!.end = point(state.source, lines[from + 1]);
           continue;
         }
@@ -487,15 +729,15 @@ class OpenMdxFlow implements OpenBlock {
           continue;
         }
       }
-      if (k + 2 === spans.length && found.openFence !== -1 && found.openFence !== 58) {
+      if (k + 2 === spans.length && found.openFence !== -1) {
         // Code or math left open: this block reads its next lines into it.
-        this.inner = openLeaf(state, lines, from, spans[k + 1]);
+        this.inner = openLeaf(state, this, from, spans[k + 1]);
         if (this.inner !== undefined) {
           found.openFence = -1;
           continue;
         }
       }
-      const node = leafBlock(state, lines, from, spans[k + 1]);
+      const node = leafBlock(state, this, from, spans[k + 1]);
       if (node !== undefined) {
         heads.push(node);
       }
@@ -538,7 +780,6 @@ class OpenMdxFlow implements OpenBlock {
     }
     if (this.failed) {
       const nodes = this.heads;
-      nodesBefore(state.source, this.start, undefined);
       const inner = this.inner?.close(state, []);
       if (inner !== undefined) {
         nodes.push(inner);
@@ -612,7 +853,7 @@ export const mdxFlow: BlockRule = {
   canInterruptParagraph: true,
   triggers: '<{',
   start(state: BlockState, line: Line): OpenBlock | undefined {
-    if (line.indent >= line.indentLimit) {
+    if (line.indent >= line.indentLimit || line.nonBlank === textAt) {
       return undefined;
     }
     if (

@@ -1,4 +1,4 @@
-import type { Root, RootContent } from 'mdast';
+import type { Root } from 'mdast';
 import type { Point, Position, Source } from '../../core/source';
 import { parseInline } from '../../core/inline';
 import { point } from '../../core/source';
@@ -14,7 +14,6 @@ import {
   droppedParagraphs,
   isDropped,
   markedTags,
-  nodesBeforeOf,
   reparsed,
 } from './tags';
 
@@ -42,6 +41,46 @@ interface Node {
   name?: string | null;
   attributes?: Tag['attributes'];
   value?: string;
+  spread?: boolean | null;
+}
+
+/** The next child of `frame` to visit, or undefined. */
+function takeChild(frame: Frame): Node | undefined {
+  let child: Node | undefined;
+  const queue = frame.queue;
+  if (queue !== undefined && frame.queueAt < queue.length) {
+    child = queue[frame.queueAt++];
+  } else if (frame.at < frame.input.length) {
+    child = frame.input[frame.at++];
+  }
+  if (child !== undefined) {
+    frame.index++;
+  }
+  return child;
+}
+
+/** Visits `nodes` next, before the rest (splicing them into `input` would be quadratic). */
+function putBack(frame: Frame, nodes: Node[]): void {
+  const queue = frame.queue;
+  if (queue !== undefined && frame.queueAt < queue.length) {
+    const rest = queue.slice(frame.queueAt);
+    frame.queue = [...nodes, ...rest];
+  } else {
+    frame.queue = nodes;
+  }
+  frame.queueAt = 0;
+}
+
+/** Whether a line lies between two of `nodes` that follow each other (a blank line). */
+function hasGap(nodes: Node[]): boolean {
+  for (let i = 1; i < nodes.length; i++) {
+    const before = nodes[i - 1].position;
+    const after = nodes[i].position;
+    if (before !== undefined && after !== undefined && after.start.line - before.end.line >= 2) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /** The nodes of an mdast tree, read loosely. */
@@ -63,11 +102,19 @@ interface Frame {
   tag: Tag | undefined;
   /** Node frames: the children to visit. */
   input: Node[];
+  /** Children visited so far, nodes put in included. */
   index: number;
+  /** Position in `input`. */
+  at: number;
+  /** Nodes put in to visit before the rest of `input`, from `queueAt`. */
+  queue: Node[] | undefined;
+  queueAt: number;
   /** A table row frame: the header row. */
   header: boolean;
   /** An image: its label is gone, the children built are dropped. */
   drop: boolean;
+  /** Children were dropped or put in by a failed flow construct. */
+  changed?: boolean;
 }
 
 function isAtx(text: string, offset: number): boolean {
@@ -238,14 +285,11 @@ class Builder {
 
   /** Paragraph nodes to drop (`dropParagraph`). */
   dropped: Set<string> | undefined;
-  /** Nodes to put before a node by its start (`nodesBefore`). */
-  before: Map<number, RootContent[]> | undefined;
 
   constructor(state: DocumentState, textTags: Tag[]) {
     this.state = state;
     this.source = state.source;
     this.dropped = droppedParagraphs(state.source);
-    this.before = nodesBeforeOf(state.source);
     // A copy: parsing a label again records its tags once more.
     this.textTags = [...textTags];
   }
@@ -434,6 +478,9 @@ class Builder {
       tag,
       input: [],
       index: 0,
+      at: 0,
+      queue: undefined,
+      queueAt: 0,
       header: false,
       drop: false,
     });
@@ -463,6 +510,9 @@ class Builder {
       tag: undefined,
       input: asNodes(tree.children),
       index: 0,
+      at: 0,
+      queue: undefined,
+      queueAt: 0,
       header: false,
       drop: false,
     };
@@ -470,15 +520,16 @@ class Builder {
     this.targets.push(root);
     while (sources.length > 0) {
       const frame = sources[sources.length - 1];
-      if (frame.index < frame.input.length) {
-        const child = frame.input[frame.index++];
+      const child = takeChild(frame);
+      if (child !== undefined) {
         if (child.type === TEXT_MARKER && child.tag !== undefined) {
           this.tag(child.tag, 'mdxJsxTextTag');
         } else if (child.type === FLOW_MARKER && child.items !== undefined) {
           this.flow(child.items);
         } else if (child.type === NODES_MARKER) {
           // Its nodes take its place.
-          frame.input.splice(frame.index, 0, ...(child.children ?? []));
+          frame.changed = true;
+          putBack(frame, child.children ?? []);
         } else if (
           child.children === undefined &&
           (this.textTags.length === 0 ||
@@ -487,15 +538,7 @@ class Builder {
           this.top.out.push(child);
         } else {
           if (isDropped(child)) {
-            continue;
-          }
-          const start = child.position?.start.offset;
-          const inserted = start === undefined ? undefined : this.before?.get(start);
-          if (inserted !== undefined) {
-            // The nodes of a failed construct whose paragraph was taken.
-            this.before!.delete(start!);
-            frame.index--;
-            frame.input.splice(frame.index, 0, ...asNodes(inserted));
+            frame.changed = true;
             continue;
           }
           if (
@@ -504,6 +547,7 @@ class Builder {
             child.position !== undefined &&
             this.dropped.has(child.position.start.offset! + ':' + child.position.end.offset!)
           ) {
+            frame.changed = true;
             continue;
           }
           const drop = child.children === undefined;
@@ -516,6 +560,9 @@ class Builder {
             tag: undefined,
             input: drop ? this.labelNodes(child, sources) : child.children!,
             index: 0,
+            at: 0,
+            queue: undefined,
+            queueAt: 0,
             header: child.type === 'tableRow' && frame.token === 'table' && frame.index === 1,
             drop,
           };
@@ -531,6 +578,12 @@ class Builder {
       this.targets.pop();
       if (!frame.drop) {
         frame.node.children = frame.out;
+      }
+      if (frame.changed === true && frame.node.type === 'listItem' && hasGap(frame.out)) {
+        // The nodes of a failed flow construct came in with a blank line
+        // between two of them: the item is spread (its list keeps its own
+        // answer).
+        frame.node.spread = true;
       }
       if (frame !== root) {
         this.top.out.push(frame.node);
