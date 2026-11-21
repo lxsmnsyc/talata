@@ -52,3 +52,5 @@
 ## Size
 
 - Estimated M, actual L. ESM order across directive passes and the re-read paths took most of it.
+
+Landed as 2d64f7f on batch/v2.

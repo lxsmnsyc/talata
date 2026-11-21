@@ -1,7 +1,7 @@
 ---
 id: ext-mdx-acorn
 title: MDX with acorn, for mdxjs parity
-status: active
+status: done
 priority: must
 type: feature
 outline: false
@@ -15,6 +15,7 @@ exclusive: []
 fulfilled_by:
 gate: false
 added: 2026-11-09
+spent: 900000
 owns:
   - packages/talata/src/ext/mdx/**
   - packages/talata/src/mdx.ts
