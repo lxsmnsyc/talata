@@ -43,9 +43,11 @@ const many: Case[] = [
   ['list, unclosed', (n) => '- :::a\n  :::b\n  c\n\n'.repeat(n), directive],
 ];
 
+// The fastest of 7 runs: with 3, one slow run on a shared CI machine pushed
+// the ratio past its bound while the growth matched main.
 function measure(parse: () => void): number {
   let fastest = Infinity;
-  for (let run = 0; run < 3; run++) {
+  for (let run = 0; run < 7; run++) {
     const start = performance.now();
     parse();
     fastest = Math.min(fastest, performance.now() - start);
