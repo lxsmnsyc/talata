@@ -1,31 +1,25 @@
-import type { Paragraph, RootContent } from 'mdast';
-import type { BlockRule, BlockState, OpenBlock, OpenParagraph } from '../../core/blocks';
-import { paragraphIndents } from '../../blocks/paragraph';
-import { isTracked, matchedOnlyAtEnd } from '../../blocks/blockquote';
-import type { TrackedContainer } from '../../blocks/blockquote';
+import type { RootContent } from 'mdast';
+import type { BlockRule, BlockState, FlowMark, OpenBlock } from '../../core/blocks';
+import { matchedOnlyAtEnd } from '../../blocks/blockquote';
 import { isEmptyLastLine } from '../../blocks/code-indented';
 import type { Line } from '../../core/line';
-import { advanceLine, createLine, isLastLine, measureLine } from '../../core/line';
+import { advanceLine, isLastLine } from '../../core/line';
 import { point } from '../../core/source';
-import { MdxError, span } from './error';
-import endsInText from './lookahead';
-import { flowError } from './order';
-import { jsOf } from './acorn';
-import { startsEsm } from './esm';
-import { prefixEnd } from './prefixes';
-import { SPAN_SIZE } from '../../core/spans';
-import type { Spans } from '../../core/spans';
-import { found, interruptAt, isRun } from './reread';
-import { DONE, FLOW, MORE, NOK, Scanner } from './scanner';
+import { bindJs } from './acorn';
+import type { Js } from './acorn';
+import { DONE, FLOW, MORE, NOK, Scanner, expressionNode } from './scanner';
 import type { Item } from './scanner';
-import { dropNode, dropParagraph, flowMarker, markSource, nodesMarker } from './tags';
+import { flowMarker, markSource } from './tags';
 
 // The flow construct: a line that holds only JSX tags and expressions
 // (`<a>`, `{b}`, `<c d="e" />  {f}`), as `jsxFlow` of
 // micromark-extension-mdx-jsx and the flow expression of
-// micromark-extension-mdx-expression read it. Like fenced code it is
-// concrete: once it starts, the lines it spans go to it, and a lazy line or
-// the end of the content inside it is an error.
+// micromark-extension-mdx-expression read it. Both are concrete: once one
+// starts, the lines it spans go to it. A construct that does not end on its
+// first line takes a flow mark. When text follows its last tag on a later
+// line, micromark undoes it and reads the lines again with the next
+// constructs: the construct rewinds its flow layer. A lazy line or the end
+// of the content inside it is an error, thrown where met.
 
 const SPACE = 32;
 
@@ -36,28 +30,18 @@ const SPACE = 32;
  * prefix.
  */
 function keptWhitespace(line: Line): string {
-  return keptAt(line.text, line.start, line.nonBlank, line.visualColumn, line.partialTab);
-}
-
-/** `keptWhitespace` from the parts of a line. */
-function keptAt(
-  text: string,
-  start: number,
-  nonBlank: number,
-  visualColumn: number,
-  partialTab: number,
-): string {
+  const text = line.text;
   let result = '';
   let skipped = 0;
-  for (let v = partialTab; v > 0; v--) {
+  for (let v = line.partialTab; v > 0; v--) {
     if (skipped < 2) {
       skipped++;
     } else {
       result += ' ';
     }
   }
-  let column = visualColumn + partialTab;
-  for (let i = start; i < nonBlank; i++) {
+  let column = line.visualColumn + line.partialTab;
+  for (let i = line.start; i < line.nonBlank; i++) {
     if (text.charCodeAt(i) === SPACE) {
       column++;
       if (skipped < 2) {
@@ -85,902 +69,119 @@ function keptAt(
   return result;
 }
 
-// The open flow construct whose last line ended inside a tag or expression,
-// and the parse it belongs to. `mdxFlowScope` records where a lazy line
-// after it starts.
-let pending: OpenMdxFlow | undefined;
-let pendingState: BlockState | undefined;
-
-/**
- * A syntax error in flow: thrown at once outside container directives,
- * else it waits (`order.ts`) and the lines read as a paragraph. Returns NOK.
- */
-function failWith(state: BlockState, bound: number, error: unknown, at: number): number {
-  if (!(error instanceof MdxError)) {
-    throw error;
-  }
-  flowError(state, bound, error, at);
-  return NOK;
-}
-
-const LEAVES = new Set(['codeFenced', 'mathFlow', 'directiveLeaf', 'headingAtx', 'thematicBreak']);
-
-/**
- * A line for the rules of leaf blocks read again: line `i` of `block.lines`,
- * from where its containers ended when the block has it in `raw`.
- */
-function scratchLine(state: BlockState, block: OpenMdxFlow, i: number): Line {
-  const line = createLine(state.source.text, state.rules.indentLimit);
-  const lines = block.lines;
-  const r = (i - (lines.length - block.raw.length / 2)) * 2;
-  line.index = -3;
-  line.start = lines[i];
-  line.end = lines[i + 1];
-  if (r >= 0) {
-    line.start = block.raw[r + 1];
-    line.visualColumn = block.raw[r + 2];
-    line.partialTab = block.raw[r + 3];
-  }
-  measureLine(line);
-  return line;
-}
-
-/**
- * The node of a leaf block (fenced code, math, a leaf directive, an ATX
- * heading, a thematic break) on lines `from` to `to` of `lines`, read again
- * by its own rule, or undefined.
- */
-function leafBlock(
-  state: BlockState,
-  block: OpenMdxFlow,
-  from: number,
-  to: number,
-): RootContent | undefined {
-  return openLeaf(state, block, from, to)?.close(state, []);
-}
-
-/** The open leaf block on lines `from` to `to` of `lines`, as `leafBlock` reads it. */
-function openLeaf(
-  state: BlockState,
-  block: OpenMdxFlow,
-  from: number,
-  to: number,
-): OpenBlock | undefined {
-  const code = state.source.text.charCodeAt(block.lines[from]);
-  if (code >= 128) {
-    return undefined;
-  }
-  for (const rule of state.rules.blockByChar[code]) {
-    if (!LEAVES.has(rule.name)) {
-      continue;
+/** Calls `onComment` and `onToken` again for flow that interrupted a paragraph and ended. */
+function runReplay(scanner: Scanner): void {
+  const replay = scanner.replay;
+  if (replay !== undefined) {
+    scanner.replay = undefined;
+    for (const report of replay) {
+      report();
     }
-    const open = rule.start(state, scratchLine(state, block, from));
-    if (open === undefined) {
-      continue;
-    }
-    for (let i = from + 2; i <= to; i += 2) {
-      const line = scratchLine(state, block, i);
-      if (!open.continue(state, line)) {
-        break;
-      }
-      open.addLine?.(state, line);
-    }
-    return open;
   }
-  return undefined;
 }
-
-/** Whether `text` from `start` to `end` is a run of `marker` and trailing whitespace. */
-function isUnderline(text: string, start: number, end: number, marker: number): boolean {
-  let i = start;
-  while (i < end && text.charCodeAt(i) === marker) {
-    i++;
-  }
-  while (i < end && (text.charCodeAt(i) === SPACE || text.charCodeAt(i) === 9)) {
-    i++;
-  }
-  return i === end;
-}
-
-function neverContinue(): boolean {
-  return false;
-}
-
-function closeNothing(): undefined {
-  return undefined;
-}
-
-// The start of a line read again as text: no flow construct starts there.
-let textAt = -1;
 
 // One scanner for first lines; a construct that spans lines keeps it.
 let shared = new Scanner();
 
 class OpenMdxFlow implements OpenBlock {
   name = 'mdxFlow';
-  /** Content start of the first line, read as `OpenParagraph.start` once the construct failed. */
-  start: number;
   isContainer = false;
   acceptsLazy = false;
-  keepsLazyContainers = false;
-  /** Set while the construct continues on the next line. */
-  scanner: Scanner | undefined;
+  /** The rule that started it, for `rewind`. */
+  rule: BlockRule;
+  /** Set while the construct is open at the end of its last line. */
+  scanner: Scanner | undefined = undefined;
+  /** The flow mark while `scanner` is set. */
+  mark: FlowMark | undefined = undefined;
   items: Item[] = [];
-  /** True when the construct turned out to be a paragraph (text after a tag on a later line). */
-  failed = false;
-  /** True when the paragraph of a failed construct ended inside it. */
-  ended = false;
-  /** Paragraphs the failed lines made before the one this block goes on as. */
-  heads: RootContent[] = [];
-  /** Fenced code or math the failed lines left open: it takes the next lines. */
-  inner: OpenBlock | undefined;
-  /** Flat [start, end) pairs of the lines, for the paragraph. */
-  lines: number[];
-  /**
-   * Per line of this construct (the last `raw.length / 2` entries of `lines`):
-   * index, start after the containers, visual column, split-tab columns. A
-   * container directive in the failed lines reads them again (`handOver`).
-   */
-  raw: number[];
-  indents: number[] | undefined;
+  /** Index of the last line it took. */
   lastLine: number;
-  /** Offset where a lazy line after `lastLine` starts, or -1. */
-  lazyAt = -1;
-  /**
-   * The paragraph it interrupted on a line it did not finish; the block
-   * parser closed it. micromark is still trying the construct, so when it
-   * fails the paragraph goes on.
-   */
-  interrupted: OpenParagraph | undefined;
-  /** Its paragraph node while a construct that interrupts it is still open (`join`). */
-  deferred: Paragraph | undefined;
-  /** The `indents` triple of the first line, for a paragraph it joins. */
-  firstIndent: number[];
-  /** Depth of the container it is in (for `flowError`). */
-  bound = 0;
+  /** Text after the last tag on the current line: `addLine` rewinds. */
+  failed = false;
+  /** The construct ended on a line after its first: it takes no more lines. */
+  done = false;
   /**
    * End of the construct with the whitespace after it. A list item around
    * ends there, so the marker node does too.
    */
   end = 0;
 
-  constructor(line: Line) {
-    this.lines = [line.nonBlank, line.end];
-    this.raw = [line.index, line.start, line.visualColumn, line.partialTab];
-    this.start = line.nonBlank;
+  constructor(rule: BlockRule, line: Line) {
+    this.rule = rule;
     this.lastLine = line.index;
-    this.firstIndent =
-      line.nonBlank !== line.start || line.partialTab !== 0
-        ? [line.end, line.start, line.partialTab]
-        : [];
   }
 
   continue(state: BlockState, line: Line): boolean {
-    if (this.name === 'paragraph') {
-      return !line.blank;
-    }
-    if (this.inner !== undefined) {
-      return this.inner.continue(state, line);
-    }
-    if (this.ended) {
-      return false;
-    }
     const scanner = this.scanner;
-    if (scanner === undefined) {
+    if (scanner === undefined || this.done) {
       return false;
     }
-    let result: number;
-    try {
-      if (isEmptyLastLine(line)) {
-        // micromark ends the content before an empty last line in a
-        // container, or reads it as lazy when a quote matched it only there.
-        const at = state.source.lineStarts[line.index];
-        if (matchedOnlyAtEnd(state, line)) {
-          scanner.feed(at, at, false, '', at, true);
-        }
-        scanner.feedEnd(at);
-        scanner.run();
+    if (isEmptyLastLine(line)) {
+      // micromark ends the content before an empty last line in a
+      // container, or reads it as lazy when a quote matched it only there.
+      const at = state.source.lineStarts[line.index];
+      if (matchedOnlyAtEnd(state, line)) {
+        scanner.feed(at, at, false, '', at, true);
       }
-      scanner.feed(
-        line.nonBlank,
-        line.end,
-        isLastLine(line),
-        keptWhitespace(line),
-        line.start,
-        false,
-      );
-      result = scanner.run();
-    } catch (error) {
-      result = failWith(state, this.bound, error, line.start);
-      // The error waits; nothing after it in this content shows.
-      this.ended = true;
+      scanner.feedEnd(at);
+      scanner.run();
     }
+    scanner.feed(
+      line.nonBlank,
+      line.end,
+      isLastLine(line),
+      keptWhitespace(line),
+      line.start,
+      false,
+    );
+    const result = scanner.run();
     if (result === MORE) {
       return true;
     }
     this.scanner = undefined;
-    pending = undefined;
-    if (this.waiting) {
-      // The construct read again ended on this line: `addLine` reads the
-      // lines again with it.
-      this.waiting = false;
-      this.resume = true;
-      return true;
-    }
     if (result === DONE) {
+      runReplay(scanner);
       this.items = scanner.items;
       this.end = scanner.pos;
-      this.finishInterrupted(state);
-      return true;
+      this.done = true;
+      state.commit(this.mark!);
+    } else {
+      // Text after the last tag: the reference reads the lines again.
+      this.failed = true;
     }
-    // Text after the last tag: the reference reads the lines as a paragraph.
-    // Blocks may interrupt it from the next line on (see `addLine`).
-    this.failed = true;
     return true;
   }
 
   addLine(state: BlockState, line: Line): void {
+    if (this.failed) {
+      state.rewind(this.mark!, this.rule);
+      return;
+    }
     this.lastLine = line.index;
-    if (this.inner !== undefined) {
-      this.inner.addLine?.(state, line);
-      return;
-    }
-    if (line.nonBlank !== line.start || line.partialTab !== 0) {
-      this.indents ??= [];
-      this.indents.push(line.end, line.start, line.partialTab);
-    }
-    if (this.name !== 'paragraph') {
-      this.raw.push(line.index, line.start, line.visualColumn, line.partialTab);
-    }
-    this.lines.push(line.nonBlank, line.end);
     advanceLine(line, line.end);
-    if (this.failed && this.ended) {
-      this.lines.length = 0;
-    } else if (this.waiting) {
-      // Lines of a construct read again: it reads them through `continue`.
-    } else if (this.resume) {
-      this.resume = false;
-      this.rereadAll(state, line, this.base, this.rereadFrom);
-    } else if (this.failed && this.name !== 'paragraph') {
-      // The lines read again as flow, without containers. When one of them
-      // ends the paragraph, its text fails on the open tag, and the lines
-      // after it do not show. Else the block is a paragraph from the next
-      // line on: lazy lines, setext underlines and interrupts as for any.
-      let from = 2;
-      const interrupted = this.interrupted;
-      if (interrupted?.lines.length === 0) {
-        // Definitions took every line: the paragraph starts where it did.
-        this.start = interrupted.start;
-      } else if (interrupted !== undefined) {
-        from = interrupted.lines.length + 2;
-        this.join(state, interrupted);
-      }
-      this.interrupted = undefined;
-      this.rereadAll(state, line, 0, from);
-    }
   }
 
-  /**
-   * Reads the lines again (`reread`). Each container directive or table in
-   * them hands the lines after it to a new block, which reads them again in
-   * turn.
-   */
-  rereadAll(state: BlockState, line: Line, first: number, from: number): void {
-    let next = this.reread(state, line, first, from);
-    while (next !== undefined) {
-      next = next.reread(state, line, next.base, next.base);
-    }
-  }
-
-  /**
-   * True while tags and expressions in the lines read again are still open
-   * at their end: `scanner` reads the next lines into them, as micromark
-   * still tries them there, and `resume` is set once they end.
-   */
-  waiting = false;
-  resume = false;
-  /** The `from` of `reread` while `waiting`. */
-  rereadFrom = 0;
-
-  /** Index in `lines` of the first line this block reads again; earlier ones belong to blocks before it. */
-  base = 0;
-  /** True when the line at `base` starts flow again (after a directive's fence or ESM). */
-  fresh = false;
-
-  /**
-   * Reads the lines from `first` on again as flow, the lines before `from`
-   * as text (see `addLine`). `line` is the current line. Returns the block
-   * that reads the lines after a container directive, if any.
-   */
-  reread(state: BlockState, line: Line, first: number, from: number): OpenMdxFlow | undefined {
-    const esm = this.esmStart(state, first, from);
-    const esmAt = esm === undefined ? -1 : esm.at;
-    // With ESM, the spans `esmStart` read, with `found` from the same call.
-    let spans = esm?.spans ?? [];
-    if (esm === undefined) {
-      try {
-        spans = interruptAt(state, this.lines, from, first, this.keptOf(state));
-      } catch (error) {
-        failWith(state, this.bound, error, line.start);
-        spans = [this.lines.length - 2, this.lines.length - 2];
-      }
-    }
-    if (esmAt !== -1) {
-      // The lines from the ESM on are its data: only the spans before it.
-      let keep = 0;
-      while (keep < spans.length && spans[keep + 1] < esmAt) {
-        keep += 2;
-      }
-      spans.length = keep;
-      found.openAt = -1;
-      found.directiveAt = -1;
-      found.tableAt = -1;
-    }
-    if (found.openAt !== -1) {
-      this.waitFor(state, line, found.openAt, from);
-      return undefined;
-    }
-    const directiveAt = found.directiveAt;
-    const tableAt = found.tableAt;
-    const tableEnd = found.tableEnd;
-    if (spans.length > 0 || directiveAt !== -1 || tableAt !== -1 || esmAt !== -1) {
-      // Paragraphs before, between and after the lines that end them.
-      // The first fails on the open tag when its text has it as a tag.
-      // The one after the last goes on as this block.
-      const tail = spans.length > 0 ? this.rereadNodes(state, spans, first) : first;
-      if (esmAt !== -1) {
-        return this.handOver(state, line, tail, esmAt, -2);
-      }
-      if (directiveAt !== -1) {
-        return this.handOver(state, line, tail, directiveAt, -1);
-      }
-      if (tableAt !== -1) {
-        return this.handOver(state, line, tail, tableAt, tableEnd);
-      }
-      if (this.heads.length > 0 && tail < this.lines.length) {
-        this.goOnAsParagraph(state, tail);
-        return undefined;
-      }
-      this.lines = this.lines.slice(tail);
-      this.start = this.lines.length > 0 ? this.lines[0] : this.start;
-    } else if (first > 0) {
-      this.lines = this.lines.slice(first);
-      this.start = this.lines[0];
-    }
-    if (this.lines.length === 0) {
-      this.ended = true;
-    } else {
-      this.name = 'paragraph';
-    }
-    return undefined;
-  }
-
-  /**
-   * The whitespace an expression keeps at the start of line `i` of the
-   * lines read again, from `raw`; none for lines before this block's own.
-   */
-  keptOf(state: BlockState): (index: number) => string {
-    const lines = this.lines;
-    const raw = this.raw;
-    const own = lines.length - raw.length / 2;
-    const text = state.source.text;
-    return (i) => {
-      if (i < own) {
-        return '';
-      }
-      const r = (i - own) * 2;
-      return keptAt(text, raw[r + 1], lines[i], raw[r + 2], raw[r + 3]);
-    };
-  }
-
-  /**
-   * The line of ESM in the lines read again and the spans before it, or
-   * undefined. ESM starts where flow
-   * starts again: after a blank line, a leaf block (a heading, a thematic
-   * break, a closed fence, a setext underline, a leaf directive) or tags and
-   * expressions, and at the first line after a directive's fence or other
-   * ESM (`fresh`), and on the header row of a table. Only when no
-   * directive, table or open construct comes before it, which hand the
-   * lines over.
-   */
-  esmStart(
-    state: BlockState,
-    first: number,
-    from: number,
-  ): { at: number; spans: number[] } | undefined {
-    const lines = this.lines;
-    if (jsOf(state.source) === undefined) {
-      return undefined;
-    }
-    const low = Math.max(first, from);
-    const kept = this.keptOf(state);
-    let spans: number[] | undefined;
-    try {
-      spans = interruptAt(state, lines, from, first, kept);
-    } catch {
-      // A construct in the lines throws when probed. When it is in ESM
-      // data, micromark never reads it as flow: start nothing after each
-      // line that can start ESM (from the line itself, or after the delimiter row
-      // for a table header there).
-    }
-    if (spans !== undefined) {
-      const at = this.esmIn(state, spans, first, low);
-      return at === -1 ? undefined : { at, spans };
-    }
-    for (let i = low; i < lines.length; i += 2) {
-      if (!startsEsm(state, lines, low, i)) {
-        continue;
-      }
-      for (const stop of [i, i + 4]) {
-        try {
-          spans = interruptAt(state, lines, from, first, kept, stop);
-        } catch {
-          return undefined;
-        }
-        if (this.esmIn(state, spans, first, low) === i) {
-          return { at: i, spans };
-        }
-      }
-    }
-    return undefined;
-  }
-
-  /**
-   * The first line from `low` on that starts ESM after one of `spans` (or
-   * at `first` when `fresh`), when no directive, table or open construct
-   * of the same `interruptAt` call comes before it; else -1.
-   */
-  esmIn(state: BlockState, spans: number[], first: number, low: number): number {
-    const lines = this.lines;
-    let at = -1;
-    if (this.fresh && first >= low && startsEsm(state, lines, first, first)) {
-      at = first;
-    }
-    for (let k = 0; k < spans.length && at === -1; k += 2) {
-      const next = spans[k + 1] + 2;
-      if (next >= low && next < lines.length && startsEsm(state, lines, low, next)) {
-        at = next;
-      }
-    }
-    // A table that interrupts a paragraph: once its check passes, micromark
-    // reads the header line again with no paragraph, and ESM, tried before
-    // tables, starts there (`createEsmHeader`).
-    const table = found.tableAt;
-    if (
-      table !== -1 &&
-      table >= low &&
-      (at === -1 || table < at) &&
-      startsEsm(state, lines, low, table)
-    ) {
-      at = table;
-    }
-    if (
-      at === -1 ||
-      (found.openAt !== -1 && found.openAt < at) ||
-      (found.directiveAt !== -1 && found.directiveAt < at) ||
-      (found.tableAt !== -1 && found.tableAt < at)
-    ) {
-      return -1;
-    }
-    return at;
-  }
-
-  /**
-   * Tags and expressions that start on line `at` of the lines read again
-   * are still open at their end. They read the next lines as an open
-   * construct does (a lazy line or the end of the content throws); once
-   * they end, the lines are read again with those lines.
-   */
-  waitFor(state: BlockState, current: Line, at: number, from: number): void {
-    const lines = this.lines;
-    const text = state.source.text;
-    const scanner = new Scanner();
-    // The last of the lines is the current one, which may end the content
-    // (`endContent`): the construct then meets the end of the content.
-    const lastAt = lines.length - 2;
-    const isLast = (i: number): boolean =>
-      i === lastAt ? isLastLine(current) : lines[i + 1] === text.length;
-    try {
-      scanner.begin(state.source, FLOW, lines[at], lines[at + 1], isLast(at));
-      scanner.run();
-      const kept = this.keptOf(state);
-      for (let i = at + 2; i < lines.length; i += 2) {
-        scanner.feed(lines[i], lines[i + 1], isLast(i), kept(i), lines[i], false);
-        scanner.run();
-      }
-    } catch (error) {
-      // The error waits (in a container directive); nothing after it shows.
-      failWith(state, this.bound, error, current.start);
-      this.ended = true;
-      this.lines.length = 0;
-      return;
-    }
-    this.scanner = scanner;
-    this.waiting = true;
-    this.rereadFrom = from;
-    // oxlint-disable-next-line typescript/no-this-alias -- the open construct of this parse
-    pending = this;
-    pendingState = state;
-  }
-
-  /**
-   * The lines from `tail` on go on as a paragraph after the nodes the lines
-   * before made: this block closes with those nodes, and a new block takes
-   * the lines, so the block parser sees both (a list item's blank lines,
-   * definitions at the paragraph's start, a setext underline or a table
-   * that takes it).
-   */
-  goOnAsParagraph(state: BlockState, tail: number): void {
-    const lines = this.lines;
-    const raw = this.raw;
-    const r = (tail - (lines.length - raw.length / 2)) * 2;
-    const line = createLine(state.source.text, state.rules.indentLimit);
-    line.index = raw[r];
-    line.start = raw[r + 1];
-    line.end = lines[tail + 1];
-    line.visualColumn = raw[r + 2];
-    line.partialTab = raw[r + 3];
-    measureLine(line);
-    const block = new OpenMdxFlow(line);
-    block.name = 'paragraph';
-    block.failed = true;
-    block.lines = lines.slice(tail);
-    block.indents = this.indents;
-    block.bound = this.bound;
-    block.lastLine = this.lastLine;
-    this.lines = [];
-    this.ended = true;
-    state.closeOpenBlocks(state.getDepth(this) - 1, { keepsLineEnding: false });
-    state.openContainer(block);
-  }
-
-  /**
-   * A container directive (`last` is -1), ESM (`last` is -2) or a GFM table
-   * (rows `at` to `last`) starts on line `at` of the failed lines. The block parser reads
-   * it: this block closes with the nodes before (the lines from `tail`, a
-   * paragraph), and the lines from `at` go through the parser again inside
-   * the containers around. A directive's content is a document of its own
-   * and takes the lines up to its fence or the current one; a table's rows
-   * are flow, where containers do not start. The lines after are read again
-   * as flow by a new block, which this returns.
-   */
-  handOver(
-    state: BlockState,
-    current: Line,
-    tail: number,
-    at: number,
-    last: number,
-  ): OpenMdxFlow | undefined {
-    const lines = this.lines;
-    if (at > tail) {
-      for (const node of this.paragraphNodes(state, lines.slice(tail, at))) {
-        this.heads.push(node);
-      }
-    }
-    const raw = this.raw;
-    const own = lines.length - raw.length / 2;
-    const depth = state.getDepth(this) - 1;
-    this.lines = [];
-    this.ended = true;
-    state.closeOpenBlocks(depth, { keepsLineEnding: false });
-    const line = createLine(state.source.text, state.rules.indentLimit);
-    // A quote prefix around that matched the current line matched each of
-    // these lines too: the containers around say so while they are read.
-    const quoted: TrackedContainer[] = [];
-    for (let d = 1; d <= depth; d++) {
-      const around = state.getBlock(d);
-      if (around !== undefined && isTracked(around) && around.quoteLine === current.index) {
-        quoted.push(around);
-      }
-    }
-    let directive: OpenBlock | undefined;
-    let esm: OpenBlock | undefined;
-    let rest = lines.length;
-    const from = at;
-    const startsOff = state.containerStartsOff;
-    // When the header row is this construct's own first line, it is text
-    // and fails first; the rows still go to the block parser, as the table
-    // body takes the lines after it and ESM may start on one.
-    for (let i = from; i < rest; i += 2) {
-      const r = (i - own) * 2;
-      line.index = raw[r];
-      line.start = raw[r + 1];
-      line.end = lines[i + 1];
-      line.visualColumn = raw[r + 2];
-      line.partialTab = raw[r + 3];
-      line.endsContent = line.index === current.index && current.endsContent;
-      measureLine(line);
-      for (const around of quoted) {
-        around.quoteLine = line.index;
-      }
-      if (last === -2) {
-        // ESM takes the lines up to a blank line where it parses.
-        state.readLineAt(line, depth);
-        if (i === at) {
-          esm = state.getBlock(depth + 1);
-          if (esm?.name !== 'mdxjsEsm') {
-            rest = i + 2;
-            break;
-          }
-        } else if (state.getDepth(esm!) === -1) {
-          rest = i + 2;
-          break;
-        }
-        continue;
-      }
-      if (last !== -1) {
-        // Table rows are flow: no container starts on them. The header row
-        // was read as text already (its tags and expressions end in text).
-        state.containerStartsOff = true;
-        textAt = i === at ? lines[at] : -1;
-        state.readLineAt(line, depth);
-        textAt = -1;
-        state.containerStartsOff = startsOff;
-        if (i === last) {
-          rest = i + 2;
-          break;
-        }
-        continue;
-      }
-      state.readLineAt(line, depth);
-      if (i === at) {
-        directive = state.getBlock(depth + 1);
-        if (directive?.name !== 'containerDirective') {
-          rest = i + 2;
-          break;
-        }
-      } else if (state.getDepth(directive!) === -1) {
-        // Closed at its fence.
-        rest = i + 2;
-        break;
-      }
-    }
-    for (const around of quoted) {
-      around.quoteLine = current.index;
-    }
-    if (rest >= lines.length) {
-      return undefined;
-    }
-    // The lines after the fence or the table: a new block reads them again as flow.
-    const r = (rest - own) * 2;
-    line.index = raw[r];
-    line.start = raw[r + 1];
-    line.end = lines[rest + 1];
-    line.visualColumn = raw[r + 2];
-    line.partialTab = raw[r + 3];
-    measureLine(line);
-    const block = new OpenMdxFlow(line);
-    block.lines = lines;
-    block.raw = raw;
-    block.base = rest;
-    // After a directive's fence, ESM or a table, flow starts again: ESM may too.
-    block.fresh = true;
-    block.indents = this.indents;
-    block.failed = true;
-    block.bound = this.bound;
-    block.lastLine = this.lastLine;
-    state.openContainer(block);
-    return block;
-  }
-
-  /**
-   * The paragraph it interrupted goes on with this block's lines. A failed
-   * construct before it left its node without text (`deferred`): this block
-   * takes its arrays and drops that node, in time linear in the new lines.
-   * A paragraph of the block parser has its node and its text queued: the
-   * transform drops the node, its text is parsed from no ranges, and this
-   * block copies its lines.
-   */
-  join(state: BlockState, interrupted: OpenParagraph): void {
-    if (interrupted instanceof OpenMdxFlow && interrupted.deferred !== undefined) {
-      dropNode(interrupted.deferred);
-      markSource(state.source);
-      interrupted.deferred = undefined;
-      const lines = interrupted.lines;
-      for (const offset of this.lines) {
-        lines.push(offset);
-      }
-      const indents = interrupted.indents ?? [];
-      for (const value of this.firstIndent) {
-        indents.push(value);
-      }
-      for (const value of this.indents ?? []) {
-        indents.push(value);
-      }
-      this.lines = lines;
-      this.indents = indents;
-    } else {
-      const lines = interrupted.lines;
-      dropParagraph(state.source, lines[0], lines[lines.length - 1]);
-      this.indents = [
-        ...(paragraphIndents(interrupted) ?? []),
-        ...this.firstIndent,
-        ...(this.indents ?? []),
-      ];
-      this.lines = [...lines, ...this.lines];
-      lines.length = 0;
-    }
-    this.start = interrupted.start;
-  }
-
-  /** The construct ended: the failed construct it interrupted gets its text now. */
-  finishInterrupted(state: BlockState): void {
-    const interrupted = this.interrupted;
-    this.interrupted = undefined;
-    if (interrupted instanceof OpenMdxFlow && interrupted.deferred !== undefined) {
-      state.inline(interrupted.deferred, interrupted.lines, interrupted.inlineIndents());
-      interrupted.deferred = undefined;
-    }
-  }
-
-  /** The `indents` to queue with the lines. */
-  inlineIndents(): number[] | undefined {
-    // An array, empty or not: lines without an entry have no whitespace
-    // after their containers, as for a paragraph of more than one line.
-    return this.lines.length > 2 ? (this.indents ?? []) : this.indents;
-  }
-
-  /**
-   * Nodes for `lines`, read as a paragraph: definitions at its start (the
-   * paragraph prefix rules), then the paragraph with its text queued.
-   */
-  paragraphNodes(state: BlockState, lines: number[]): RootContent[] {
-    const out: RootContent[] = [];
-    const open: OpenParagraph = {
-      name: 'paragraph',
-      isContainer: false,
-      acceptsLazy: false,
-      lines,
-      start: lines[0],
-      continue: neverContinue,
-      close: closeNothing,
-    };
-    for (const rule of state.rules.paragraphPrefixRules) {
-      if (open.lines.length === 0) {
-        break;
-      }
-      rule.consume(state, open, out);
-    }
-    if (open.lines.length > 0) {
-      out.push(this.paragraph(state, open.lines));
-    }
-    return out;
-  }
-
-  /**
-   * The nodes of the lines read again, up to the last span: paragraphs
-   * between the spans, and on the spans the tags and expressions, setext
-   * headings, and the leaf blocks their own rules read. Returns the index
-   * in the lines where the paragraph this block goes on as starts.
-   */
-  rereadNodes(state: BlockState, spans: number[], first: number): number {
-    const text = state.source.text;
-    const lines = this.lines;
-    const heads = this.heads;
-    let segment = first;
-    for (let k = 0; k < spans.length; k += 2) {
-      const from = spans[k];
-      const opened = segment;
-      let paragraph: RootContent | undefined;
-      if (from > segment) {
-        for (const node of this.paragraphNodes(state, lines.slice(segment, from))) {
-          heads.push(node);
-          paragraph = node;
-        }
-      }
-      segment = spans[k + 1] + 2;
-      const items = found.constructs[k / 2];
-      if (items !== undefined) {
-        markSource(state.source);
-        heads.push(flowMarker(state.source, items, items[items.length - 1].end));
-        continue;
-      }
-      const code = text.charCodeAt(lines[from]);
-      if (
-        from === spans[k + 1] &&
-        (code === 61 || code === 45) &&
-        isUnderline(text, lines[from], lines[from + 1], code)
-      ) {
-        if (paragraph?.type === 'paragraph') {
-          // A setext underline: the paragraph before is its heading.
-          Object.assign(paragraph, { type: 'heading', depth: code === 61 ? 1 : 2 });
-          // It starts where the paragraph did, before any definitions.
-          paragraph.position!.start = point(
-            state.source,
-            opened === first ? this.start : lines[opened],
-          );
-          paragraph.position!.end = point(state.source, lines[from + 1]);
-          continue;
-        }
-        if (code === 61 || !isRun(text, lines[from], lines[from + 1], code, 3, true)) {
-          // No paragraph before: the line is text of the next paragraph.
-          segment = from;
-          continue;
-        }
-      }
-      if (k + 2 === spans.length && found.openFence !== -1) {
-        // Code or math left open: this block reads its next lines into it.
-        this.inner = openLeaf(state, this, from, spans[k + 1]);
-        if (this.inner !== undefined) {
-          found.openFence = -1;
-          continue;
-        }
-      }
-      const node = leafBlock(state, this, from, spans[k + 1]);
-      if (node !== undefined) {
-        heads.push(node);
-      }
-    }
-    return segment;
-  }
-
-  /** A paragraph of `lines`, its text queued. */
-  paragraph(state: BlockState, lines: number[]): Paragraph {
-    const node: Paragraph = {
-      type: 'paragraph',
-      children: [],
-      position: span(state.source, lines[0], lines[lines.length - 1]),
-    };
-    // An array, empty or not: lines without an entry have no whitespace
-    // after their containers, as for a paragraph of more than one line.
-    state.inline(node, lines, lines.length > 2 ? (this.indents ?? []) : this.indents);
-    return node;
+  onLazyLine(state: BlockState, line: Line): void {
+    // A lazy line with nothing after the prefixes (no split tab either) and no
+    // line ending: micromark closes the flow at the end of the line before,
+    // so the error points at the line start.
+    const at =
+      line.start === line.end && line.partialTab === 0 && isLastLine(line)
+        ? state.source.lineStarts[line.index]
+        : line.start;
+    // Always throws: a construct in flow allows no lazy line.
+    this.scanner?.feed(at, at, false, '', at, true);
   }
 
   close(state: BlockState): RootContent | undefined {
     const scanner = this.scanner;
     if (scanner !== undefined) {
-      this.scanner = undefined;
-      pending = undefined;
-      try {
-        this.fail(state, scanner);
-      } catch (error) {
-        failWith(state, this.bound, error, this.lines[this.lines.length - 1]);
-        this.failed = true;
-      }
-    }
-    if (this.interrupted !== undefined) {
-      if (this.failed) {
-        this.join(state, this.interrupted);
-        this.interrupted = undefined;
-      } else {
-        this.finishInterrupted(state);
-      }
-    }
-    if (this.failed) {
-      const nodes = this.heads;
-      const inner = this.inner?.close(state, []);
-      if (inner !== undefined) {
-        nodes.push(inner);
-      }
-      if (this.lines.length > 0) {
-        if (pending?.interrupted === this) {
-          // A construct that does not end on its line interrupts it: until
-          // that one ends or fails, the paragraph has no text.
-          this.deferred = {
-            type: 'paragraph',
-            children: [],
-            position: span(state.source, this.lines[0], this.lines[this.lines.length - 1]),
-          };
-          nodes.push(this.deferred);
-        } else {
-          nodes.push(this.paragraph(state, this.lines));
-        }
-      }
-      if (nodes.length <= 1) {
-        return nodes[0];
-      }
-      markSource(state.source);
-      return nodesMarker(state.source, nodes);
+      this.fail(state, scanner);
     }
     const items = this.items;
     const first = items[0];
     if (items.length === 1 && first.kind === 'expression' && first.end === this.end) {
-      const node = {
-        type: 'mdxFlowExpression',
-        value: first.value,
-        position: span(state.source, first.start, first.end),
-      };
+      const node = expressionNode('mdxFlowExpression', state.source, first);
       // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- not in @types/mdast
       return node as unknown as RootContent;
     }
@@ -989,38 +190,21 @@ class OpenMdxFlow implements OpenBlock {
   }
 
   /**
-   * The construct is still open when the block closes: the line after it is
-   * lazy (an error in flow), or the content ends (the end of the document or
-   * a container that starts), which the scanner reads as the end of file.
+   * The construct is still open when its content ends: a container starts,
+   * or the document ends. After a final line ending that a container does
+   * not go on over, the empty line there is lazy.
    */
   fail(state: BlockState, scanner: Scanner): never {
     const source = state.source;
     const next = this.lastLine + 1;
     let at = next < source.lineStarts.length ? source.lineStarts[next] : source.text.length;
-    const spans = state.spans;
     if (!state.closeKeepsLineEnding) {
-      if (this.lazyAt === -1) {
-        let after: number;
-        const start = spans === undefined ? at : contentStart(spans, next);
-        if (start !== -1) {
-          // A line that a quote around does not take is lazy. In the
-          // content of a container directive it starts after the prefixes
-          // of the containers around the directive.
-          after = prefixEnd(state, this.bound, start);
-        } else if (spans!.finalLineEnding) {
-          // After the content's final line ending: the end of that
-          // document, which no container of it takes, is lazy there.
-          after = at;
-        } else {
-          // The content ends without a line ending: the end of file.
-          after = -1;
-          at = state.end;
-        }
-        if (after !== -1) {
-          scanner.feed(after, after, false, '', after, true);
-        }
+      const spans = state.spans;
+      if (spans === undefined || spans.finalLineEnding) {
+        scanner.feed(at, at, false, '', at, true);
       } else {
-        scanner.feed(this.lazyAt, this.lazyAt, false, '', this.lazyAt, true);
+        // The content ends without a line ending: the end of file.
+        at = state.end;
       }
     }
     scanner.feedEnd(at);
@@ -1030,79 +214,44 @@ class OpenMdxFlow implements OpenBlock {
   }
 }
 
-/** Where line `index` of `spans` starts after the prefixes around, or -1 after its last line. */
-function contentStart(spans: Spans, index: number): number {
-  const k = spans.from + index - spans.data[spans.from * SPAN_SIZE];
-  return k < spans.to ? spans.data[k * SPAN_SIZE + 1] : -1;
-}
-
-/** Tags and expressions on a line of their own. */
-export const mdxFlow: BlockRule = {
-  name: 'mdxFlow',
-  priority: 320,
-  canInterruptParagraph: true,
-  triggers: '<{',
-  start(state: BlockState, line: Line): OpenBlock | undefined {
-    if (line.indent >= line.indentLimit || line.nonBlank === textAt) {
-      return undefined;
-    }
-    if (
-      pendingState === state &&
-      pending?.lazyAt === line.start &&
-      pending.lastLine === line.index - 1
-    ) {
-      // A lazy line after an open construct: the construct fails first.
-      return undefined;
-    }
-    const scanner = shared;
-    let result: number;
-    try {
+/** The rule for tags and expressions on a line of their own, with the acorn of `js` if any. */
+export default function createMdxFlow(js: Js | undefined): BlockRule {
+  const rule: BlockRule = {
+    name: 'mdxFlow',
+    priority: 320,
+    canInterruptParagraph: true,
+    triggers: '<{',
+    start(state: BlockState, line: Line): OpenBlock | undefined {
+      if (line.indent >= line.indentLimit) {
+        return undefined;
+      }
+      if (js !== undefined) {
+        bindJs(state.source, js);
+      }
+      const scanner = shared;
       scanner.begin(state.source, FLOW, line.nonBlank, line.end, isLastLine(line));
-      result = scanner.run();
-    } catch (error) {
-      result = failWith(state, state.getDepth(state.container), error, line.nonBlank);
-    }
-    if (result === NOK) {
-      return undefined;
-    }
-    if (result === MORE && state.tip?.interruptible === true && endsInText(state, line, scanner)) {
-      // micromark is still trying the construct at the line ending: when it
-      // fails, the table it would interrupt goes on.
-      return undefined;
-    }
-    const block = new OpenMdxFlow(line);
-    // In a lazy paragraph it interrupts, it goes in the paragraph's container.
-    block.bound =
-      result === MORE && state.lazy && state.paragraph !== undefined
-        ? state.getDepth(state.paragraph) - 1
-        : state.getDepth(state.container);
-    if (result === MORE) {
-      block.interrupted = state.paragraph;
-    }
-    if (result === DONE) {
-      block.items = scanner.items;
-      block.end = scanner.pos;
-    } else {
-      block.scanner = scanner;
-      // micromark is still trying the construct at the line ending, so a
-      // lazy paragraph it interrupts stays open, and the containers too.
-      block.keepsLazyContainers = true;
-      shared = new Scanner();
-      pending = block;
-      pendingState = state;
-    }
-    advanceLine(line, line.end);
-    return block;
-  },
-};
-
-/**
- * For `mdxFlowScope`: when `line` did not reach the open flow construct of
- * the line before, records where it starts after the containers that
- * matched. A lazy line error points there.
- */
-export function noteLazyLine(state: BlockState, line: Line): void {
-  if (pending !== undefined && pendingState === state && pending.lastLine === line.index - 1) {
-    pending.lazyAt = line.start;
-  }
+      if (state.paragraph !== undefined) {
+        scanner.interrupts = true;
+        scanner.replay = [];
+      }
+      const result = scanner.run();
+      if (result === NOK) {
+        return undefined;
+      }
+      const block = new OpenMdxFlow(rule, line);
+      if (result === DONE) {
+        runReplay(scanner);
+        block.items = scanner.items;
+        block.end = scanner.pos;
+      } else {
+        // micromark is still trying the construct at the line ending.
+        block.scanner = scanner;
+        block.mark = state.mark();
+        shared = new Scanner();
+      }
+      advanceLine(line, line.end);
+      return block;
+    },
+  };
+  return rule;
 }

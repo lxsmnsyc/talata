@@ -1,7 +1,7 @@
 ---
 id: fix-mdx-directive-growth
 title: Failed MDX constructs over directives grow linearly
-status: active
+status: done
 priority: must
 type: fix
 outline: false

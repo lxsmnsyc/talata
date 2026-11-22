@@ -82,6 +82,11 @@ export function footnoteIndentAt(state: BlockState, lineStart: number): boolean 
   return indentLines.get(state) === lineStart;
 }
 
+/** The line start `footnoteIndentAt` holds for `state`, or -1. A flow replay saves and restores it. */
+export function footnoteIndentLine(state: BlockState): number {
+  return indentLines.get(state) ?? -1;
+}
+
 /**
  * Records that a footnote definition around a nested document consumed its
  * indent on the line that starts at `lineStart`, for `footnoteIndentAt` in

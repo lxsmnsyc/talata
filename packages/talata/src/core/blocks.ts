@@ -1,6 +1,9 @@
 import type { PhrasingContent, RootContent } from 'mdast';
+import { isTracked } from '../blocks/blockquote';
 import type { TrackedContainer } from '../blocks/blockquote';
+import { footnoteIndentLine, setFootnoteIndent } from '../gfm/footnote';
 import openParagraph from '../blocks/paragraph';
+import thematicBreak, { isThematicBreak } from '../blocks/thematic-break';
 import { CR, LF } from './chars';
 import { documentPass, textPass } from './chunks';
 import type { ChunkQueue } from './chunks';
@@ -61,7 +64,7 @@ export interface BlockState extends DocumentState {
   containerStartsOff: boolean;
   /**
    * Index in the open blocks of `block` (0 is the document), or -1 when it is
-   * not open. Use it with `closeOpenBlocks`.
+   * not open. The counterpart of `getBlock`.
    */
   getDepth(block: OpenBlock): number;
   /**
@@ -70,28 +73,6 @@ export interface BlockState extends DocumentState {
    * close or change what it returns.
    */
   getBlock(depth: number): OpenBlock | undefined;
-  /**
-   * A container calls it from its `continue` to say the current line is the
-   * last line of its content. The content is then a document of its own for
-   * the reference, and a last line has no line ending. For the rest of the
-   * line `isLastLine(line)` is true, and the rules that look for a last
-   * line (empty last line of fenced code, HTML and extension leaves, the
-   * block quote's end-only rule, `keepsLazyContainers`, `matchedEnd` of list
-   * items and footnote definitions) read it. On the next line, if `block` does
-   * not match it, the line is not lazy for the blocks that were inside
-   * (`unmatched` is false): the content ended before it.
-   */
-  endContent(block: OpenBlock): void;
-  /**
-   * Closes the open blocks above `depth`, innermost first, so the block at
-   * `depth` becomes the tip. A container calls it from its `continue` to end
-   * the blocks inside it early (a closing fence). While they close,
-   * `closeKeepsLineEnding` is `options.keepsLineEnding`: pass false when the
-   * container's content is a document of its own for the reference, so fenced
-   * code and HTML inside do not keep their last line ending. The block that
-   * calls it must still be open: pass `getDepth(this)` or less.
-   */
-  closeOpenBlocks(depth: number, options: { keepsLineEnding: boolean }): void;
   /**
    * Removes the open paragraph so a rule can convert it (setext headings).
    * Paragraph prefix rules run first, so definitions at its start become
@@ -124,16 +105,6 @@ export interface BlockState extends DocumentState {
    * prefixes, split-tab columns (`OpenParagraph` keeps them).
    */
   inline(node: { children: PhrasingContent[] }, ranges: number[], indents?: number[]): void;
-  /**
-   * Reads `line` again as a line on which the open blocks up to `depth` matched
-   * and took their prefixes: the blocks above `depth` are asked to continue,
-   * then rules start as on any line. For a rule that reads its own lines
-   * again after they went through the containers (a failed MDX flow
-   * construct). Call it from `addLine` of the tip, after closing the tip, for
-   * lines up to the current one, in order; `line` must not be the line the
-   * parser passed in.
-   */
-  readLineAt(line: Line, depth: number): void;
   /** 0 for the source, d for the content of a container directive inside d - 1 others. */
   readonly depth: number;
   /** End offset of this document's last line: the source length, or the end of the last span. Look-ahead stops here. */
@@ -216,21 +187,10 @@ export interface OpenBlock {
   name: string;
   isContainer: boolean;
   /**
-   * Containers: false when a start of this block does not make the blocks it
-   * closes keep their line ending (`closeKeepsLineEnding`). A directive is a
-   * flow construct for the reference, not a container of the document.
+   * Called on each open block that a starting container closes, innermost
+   * first and before any of them closes. It runs for container starts only.
    */
-  startsContainer?: false;
-  /**
-   * Containers: called on each open block that a starting container closes
-   * (see `startsContainer`), innermost first and before any of them closes,
-   * with `keepsLineEnding` true. The container may close the blocks inside
-   * itself with its own answer: `state.closeOpenBlocks(state.getDepth(this),
-   * { keepsLineEnding })`. A block that is closed by an earlier call is not
-   * called. It runs for container starts only; blocks that close on other
-   * lines do not call it.
-   */
-  willClose?(state: BlockState, line: Line, keepsLineEnding: boolean): void;
+  willClose?(state: BlockState, line: Line): void;
   /** Containers: a paragraph inside may continue on a line that does not match this container. */
   acceptsLazy: boolean;
   /**
@@ -285,13 +245,6 @@ export interface OpenParagraph extends OpenBlock {
    * The reference starts a setext heading here, before any definitions.
    */
   start: number;
-  /**
-   * For a paragraph that is not the block parser's own (an extension's block
-   * that goes on as one): the `indents` of its lines, as `paragraphIndents`
-   * returns them, for the rules that take it (setext heading, table,
-   * definitions).
-   */
-  inlineIndents?(): number[] | undefined;
 }
 
 /**
@@ -351,11 +304,14 @@ function createNestedRoot(): TrackedContainer {
   };
 }
 
-/** Numbers per recorded line: index, start, end, visual column, split-tab columns, matched, unmatched, flags. */
-const RECORD_SIZE = 8;
-/** Record flags: `line.last` and `line.endsContent`. */
+/**
+ * Numbers per recorded line: index, start, end, visual column, split-tab
+ * columns, matched, unmatched, flags, and where its facts start in
+ * `BlockParser.facts` and how many open blocks they cover.
+ */
+const RECORD_SIZE = 10;
+/** Record flags: `line.last`. */
 const LAST = 1;
-const ENDS_CONTENT = 2;
 
 /** A flow mark while it is open. */
 class OpenMark implements FlowMark {
@@ -400,9 +356,6 @@ export class BlockParser implements BlockState {
   containerStartsOff = false;
   /** The line `run` reuses. */
   line!: Line;
-  /** Line index and block of the last `endContent` call. */
-  contentEndsLine = -1;
-  contentEndsBlock: OpenBlock | undefined;
   /** Open blocks from the document to the tip. */
   stack: OpenBlock[] = [document];
   /** Closed child nodes of each open block, parallel to `stack`. */
@@ -417,6 +370,12 @@ export class BlockParser implements BlockState {
   flowMark: OpenMark | undefined = undefined;
   /** Lines recorded while a mark is open, `RECORD_SIZE` numbers each. */
   records: number[] = [];
+  /**
+   * Per recorded line, what the document layer left for the flow to read:
+   * the footnote indent line (`footnoteIndentAt`), then the `quoteLine` of
+   * each open block (-1 when it is not tracked). A replay puts them back.
+   */
+  facts: number[] = [];
   /** While a replay runs: the index of the next record it reads; -1 otherwise. */
   replayAt = -1;
   /** While a replay runs: the container of the rewound mark's flow, and the `unmatched` of the line. */
@@ -484,7 +443,6 @@ export class BlockParser implements BlockState {
       line.end = end;
       line.visualColumn = 0;
       line.partialTab = 0;
-      line.endsContent = false;
       line.last = end === text.length;
       measureLine(line);
       this.processLine(line);
@@ -505,7 +463,6 @@ export class BlockParser implements BlockState {
       line.end = data[at + 2];
       line.visualColumn = data[at + 3];
       line.partialTab = data[at + 4];
-      line.endsContent = false;
       line.last = k === to - 1 && !spans.finalLineEnding;
       measureLine(line);
       spans.onLine?.(this, line, k);
@@ -530,7 +487,6 @@ export class BlockParser implements BlockState {
     line.end = at;
     line.visualColumn = 0;
     line.partialTab = 0;
-    line.endsContent = false;
     line.last = true;
     measureLine(line);
     for (let i = 1; i < stack.length - 1; i++) {
@@ -543,15 +499,15 @@ export class BlockParser implements BlockState {
   }
 
   /** The document layer: the open containers continue on `line`, then the flow reads the rest. */
-  processLine(line: Line, from = 0): void {
+  processLine(line: Line): void {
     const stack = this.stack;
     const mark = this.flowMark;
     if (mark !== undefined) {
       this.processMarkedLine(line, mark);
       return;
     }
-    let matched = from;
-    for (let i = from + 1; i < stack.length; i++) {
+    let matched = 0;
+    for (let i = 1; i < stack.length; i++) {
       const block = stack[i];
       this.container = stack[i - 1];
       if (!block.continue(this, line)) {
@@ -600,8 +556,11 @@ export class BlockParser implements BlockState {
         line.partialTab,
         matched,
         0,
-        (line.last ? LAST : 0) | (line.endsContent ? ENDS_CONTENT : 0),
+        line.last ? LAST : 0,
+        this.facts.length,
+        top,
       );
+      this.recordFacts(top);
       this.container = stack[top - 1];
       if (leaf.continue(this, line)) {
         if (this.flowMark === mark) {
@@ -619,11 +578,7 @@ export class BlockParser implements BlockState {
     this.paragraph = undefined;
     this.lazy = false;
     this.tip = undefined;
-    this.unmatched = !(
-      this.contentEndsBlock !== undefined &&
-      this.contentEndsLine === line.index - 1 &&
-      this.getDepth(this.contentEndsBlock) > matched
-    );
+    this.unmatched = true;
     this.lineMatched = matched;
     if (!line.blank) {
       const start = line.start;
@@ -678,14 +633,6 @@ export class BlockParser implements BlockState {
       this.unmatched = this.replayUnmatched;
     } else {
       this.unmatched = this.containerIndex < (tip.isContainer ? top : top - 1);
-      // The line after `endContent`: its block not matching means the content ended before it.
-      if (
-        this.contentEndsBlock !== undefined &&
-        this.contentEndsLine === line.index - 1 &&
-        this.getDepth(this.contentEndsBlock) > matched
-      ) {
-        this.unmatched = false;
-      }
     }
     this.lineMatched = matched;
 
@@ -829,6 +776,17 @@ export class BlockParser implements BlockState {
     const start = line.start;
     const visualColumn = line.visualColumn;
     const partialTab = line.partialTab;
+    // micromark's list start refuses a thematic break line while that
+    // construct is on. Elsewhere the thematic break rule runs first; here
+    // only container rules run.
+    if (
+      (code === 42 || code === 45) &&
+      line.indent < line.indentLimit &&
+      isThematicBreak(line.text, line.nonBlank, line.end) &&
+      candidates.includes(thematicBreak)
+    ) {
+      return undefined;
+    }
     for (const rule of candidates) {
       if (rule.opensContainer !== true || this.containerStartsOff) {
         continue;
@@ -857,11 +815,13 @@ export class BlockParser implements BlockState {
    * containers that refuse it.
    */
   attach(block: OpenBlock): void {
-    this.closeKeepsLineEnding = block.isContainer && block.startsContainer !== false;
+    this.closeKeepsLineEnding = block.isContainer;
     const stack = this.stack;
-    // Blocks that close tell their container first, innermost first. A call may close the blocks above it, never the ones below.
+    // Blocks that a starting container closes hear it first, innermost first.
+    // No extension uses the hook now; it stays because without this call V8
+    // inlines `attach` differently and the readmes input parses 7% slower.
     for (let i = this.closeKeepsLineEnding ? stack.length - 1 : 0; i > this.containerIndex; i--) {
-      stack[i].willClose?.(this, this.line, true);
+      stack[i].willClose?.(this, this.line);
     }
     this.closeTo(this.containerIndex);
     while (stack.length > 1) {
@@ -881,13 +841,6 @@ export class BlockParser implements BlockState {
       this.containerIndex = stack.length - 2;
       this.container = stack[this.containerIndex];
     }
-  }
-
-  readLineAt(line: Line, depth: number): void {
-    const current = this.line;
-    this.line = line;
-    this.processLine(line, depth);
-    this.line = current;
   }
 
   openContainer(block: OpenBlock): void {
@@ -913,19 +866,6 @@ export class BlockParser implements BlockState {
 
   getBlock(depth: number): OpenBlock | undefined {
     return this.stack[depth];
-  }
-
-  endContent(block: OpenBlock): void {
-    this.line.endsContent = true;
-    this.contentEndsLine = this.line.index;
-    this.contentEndsBlock = block;
-  }
-
-  closeOpenBlocks(depth: number, options: { keepsLineEnding: boolean }): void {
-    const keeps = this.closeKeepsLineEnding;
-    this.closeKeepsLineEnding = options.keepsLineEnding;
-    this.closeTo(depth);
-    this.closeKeepsLineEnding = keeps;
   }
 
   /** Closes open blocks until `depth` is the tip. */
@@ -1074,8 +1014,38 @@ export class BlockParser implements BlockState {
       partialTab,
       this.lineMatched,
       this.unmatched ? 1 : 0,
-      (line.last ? LAST : 0) | (line.endsContent ? ENDS_CONTENT : 0),
+      line.last ? LAST : 0,
+      this.facts.length,
+      this.stack.length,
     );
+    this.recordFacts(this.stack.length);
+  }
+
+  /** Records the facts of the current line for the first `count` open blocks. */
+  recordFacts(count: number): void {
+    const facts = this.facts;
+    const stack = this.stack;
+    facts.push(footnoteIndentLine(this));
+    for (let i = 0; i < count; i++) {
+      const block = stack[i];
+      facts.push(isTracked(block) ? block.quoteLine : -1);
+    }
+  }
+
+  /** Puts back the facts of the record at `at`. */
+  restoreFacts(at: number): void {
+    const records = this.records;
+    const facts = this.facts;
+    const stack = this.stack;
+    let k = records[at + 8];
+    setFootnoteIndent(this, facts[k++]);
+    const count = Math.min(records[at + 9], stack.length);
+    for (let i = 0; i < count; i++, k++) {
+      const block = stack[i];
+      if (facts[k] !== -1 && isTracked(block)) {
+        block.quoteLine = facts[k];
+      }
+    }
   }
 
   commit(mark: FlowMark): void {
@@ -1107,6 +1077,7 @@ export class BlockParser implements BlockState {
     }
     if (this.replayAt < 0) {
       this.records.length = 0;
+      this.facts.length = 0;
     }
   }
 
@@ -1154,9 +1125,9 @@ export class BlockParser implements BlockState {
       line.partialTab = records[at + 4];
       const flags = records[at + 7];
       line.last = (flags & LAST) !== 0;
-      line.endsContent = (flags & ENDS_CONTENT) !== 0;
       measureLine(line);
       this.replayUnmatched = records[at + 6] === 1;
+      this.restoreFacts(at);
       const skip = this.skipRule;
       this.skipRule = undefined;
       const containerIndex = this.replayContainer;
@@ -1179,6 +1150,7 @@ export class BlockParser implements BlockState {
     this.line = current;
     if (this.flowMark === undefined) {
       records.length = 0;
+      this.facts.length = 0;
     }
   }
 }

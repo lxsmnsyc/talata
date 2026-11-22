@@ -17,20 +17,24 @@ export interface Options {
   acorn?: Acorn | null | undefined;
   /**
    * Options for acorn (default: `{ ecmaVersion: 2024, sourceType: 'module' }`).
-   * `locations` is always on.
+   * `locations` is always on. `onComment` and `onToken` get the comments and
+   * tokens of each program that parses, with places in the document, as
+   * the reference calls them: twice for flow that interrupts a paragraph,
+   * which micromark parses once to check the interrupt and once more.
    */
   acornOptions?: AcornOptions | null | undefined;
 }
 
 // One extension per acorn and equal options, so a parse in a loop with the
 // same values finds its registry in the cache. Options that hold functions
-// are not compared: each call makes a new extension.
+// or arrays are not compared: each call makes a new extension, so the
+// arrays of `onComment` and `onToken` get the comments and tokens.
 const withAcorn = new WeakMap<Acorn, Map<string, Extension>>();
 
 /**
  * A key for options made of plain values (strings, finite numbers,
- * booleans, null, undefined, arrays and plain objects), or undefined when
- * they hold anything else, such as a function. `undefined` is kept, so
+ * booleans, null, undefined and plain objects), or undefined when they hold
+ * anything else, such as a function or an array. `undefined` is kept, so
  * `{ ecmaVersion: undefined }` differs from `{}`.
  */
 function keyOf(value: unknown): string | undefined {
@@ -42,17 +46,6 @@ function keyOf(value: unknown): string | undefined {
   }
   if (typeof value === 'number') {
     return Number.isFinite(value) ? String(value) : undefined;
-  }
-  if (Array.isArray(value)) {
-    let key = '[';
-    for (const item of value) {
-      const part = keyOf(item);
-      if (part === undefined) {
-        return undefined;
-      }
-      key += part + ',';
-    }
-    return key + ']';
   }
   if (typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
     let key = '{';
@@ -73,10 +66,11 @@ function keyOf(value: unknown): string | undefined {
  * Without options it matches `micromark-extension-mdx` with `mdast-util-mdx`,
  * which read expressions without a JS parser (braces are counted). With
  * `acorn` it matches `micromark-extension-mdxjs`: acorn decides where an
- * expression ends, and `import` and `export` lines are ESM (`mdxjsEsm`
- * nodes, without `data.estree`). Turns off indented code, autolinks and
- * HTML, as `micromark-extension-mdx-md` does. Bad syntax throws an
- * `MdxError` with the reference's reason and place.
+ * expression ends, `import` and `export` lines are ESM (`mdxjsEsm` nodes),
+ * and expressions and ESM carry acorn's program in `data.estree`, with
+ * places in the document, so `@mdx-js/mdx` can compile the tree. Turns off
+ * indented code, autolinks and HTML, as `micromark-extension-mdx-md` does.
+ * Bad syntax throws an `MdxError` with the reference's reason and place.
  */
 export function mdx(options?: Options | null): Extension {
   const acorn = options?.acorn ?? undefined;

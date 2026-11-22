@@ -28,12 +28,6 @@ export interface Line {
   /** True when only spaces and tabs remain. */
   blank: boolean;
   /**
-   * True when a container's `continue` called `BlockState.endContent` on this
-   * line: for the blocks inside, it is the last line of the document and has
-   * no line ending. Reset for each line. Read it with `isLastLine`.
-   */
-  endsContent: boolean;
-  /**
    * No line ending follows this line in its document: the last line of the
    * source, the last span of a nested document without a final line ending,
    * or the empty line after a final line ending. Set by the line source.
@@ -58,20 +52,14 @@ export function createLine(text: string, indentLimit = 4): Line {
     indent: 0,
     nonBlank: 0,
     blank: true,
-    endsContent: false,
     last: false,
     indentLimit,
   };
 }
 
-/**
- * Whether no line ending follows `line`: the last line of its document
- * (`last`), of a container's content (`endContent`), or of the text. The
- * last test is for lines that extensions make with `createLine` and do not
- * set `last` on; a line that ends the text is the last of any document.
- */
+/** Whether no line ending follows `line` in its document (`last`). */
 export function isLastLine(line: Line): boolean {
-  return line.last || line.endsContent || line.end === line.text.length;
+  return line.last;
 }
 
 /** Recomputes `indent`, `nonBlank` and `blank` from `start`. */

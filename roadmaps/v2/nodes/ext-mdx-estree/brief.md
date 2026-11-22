@@ -1,7 +1,7 @@
 ---
 id: ext-mdx-estree
 title: MDX estree output
-status: todo
+status: done
 priority: must
 type: feature
 outline: false
@@ -9,6 +9,7 @@ milestone: m5-mdx
 target:
 from:
 size: M
+spent: 500000
 spike: false
 verify:
 exclusive: []

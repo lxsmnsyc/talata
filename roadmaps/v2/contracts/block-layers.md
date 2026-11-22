@@ -1,6 +1,6 @@
 ---
 name: block-layers
-version: 3
+version: 4
 status: frozen
 defined_by: mdx-layers-contract
 ---
@@ -317,3 +317,4 @@ Three nodes, each with its tree hashes against the node before it.
 
 - v2 (2026-11-23, from mdx-layers-core): empty text ranges take the highest start added before them; `isLastLine` keeps `line.end === line.text.length` until mdx-layers-flow; `mark` holds only the lazy paragraph or an interruptible leaf that matched the line. See `block-layers.change-request.md`.
 - v3 (2026-11-23, from mdx-layers-directive): the six points under "Proposed change" of the v2 to v3 request in `block-layers.change-request.md` are part of this contract and win where the text above differs: `Spans.onLine` and read-only `BlockState.spans`, a `TrackedContainer` nested root, the collector closes on its fence line, the collector end rules for empty last lines, `ChunkQueue.add` and `text` after `run` run at once in the caller's context, `consumeQuotePrefix` stops at the line end, and text directive labels fill image alts through a transform.
+- v4 (2026-11-23, from mdx-layers-flow): the points under "Proposed change" of the v3 to v4 request in `block-layers.change-request.md` are part of this contract (replay restores each line's tracked-container `quoteLine` and footnote indent line; a list item does not start on a thematic break while a marked leaf is open, only when `thematicBreak` is enabled and that rule did not already run on the line; ESM takes no mark; an empty lazy last line places its error at the source line start).

@@ -68,7 +68,7 @@ class OpenParagraphBlock implements OpenParagraph {
  * columns. Undefined for a paragraph of one line.
  */
 export function paragraphIndents(paragraph: OpenParagraph): number[] | undefined {
-  return paragraph instanceof OpenParagraphBlock ? paragraph.indents : paragraph.inlineIndents?.();
+  return paragraph instanceof OpenParagraphBlock ? paragraph.indents : undefined;
 }
 
 /** Opens a paragraph whose first line is the rest of `line`. */

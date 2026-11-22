@@ -98,8 +98,9 @@ const scale = Number(process.env.DIRECTIVE_GROWTH_N ?? 1);
 describe('one deep directive chain', () => {
   for (const [name, make, names] of deep) {
     test(name, { timeout: 300_000 }, () => {
-      // Cubic was 64; quadratic, as the reference, is 16.
-      expect(growth(name, make, names, 400 * scale)).toBeLessThan(24);
+      // Cubic was 64; quadratic, as the reference, is 16. CI runners reached
+      // 27 for quadratic code, so the bound sits between that and cubic.
+      expect(growth(name, make, names, 400 * scale)).toBeLessThan(36);
     });
   }
 });
@@ -107,7 +108,8 @@ describe('one deep directive chain', () => {
 describe('many directive chains', () => {
   for (const [name, make, names] of many) {
     test(name, { timeout: 300_000 }, () => {
-      expect(growth(name, make, names, 2000 * scale)).toBeLessThan(6);
+      // Linear is 4, quadratic 16. CI runners reached 7.8 for linear code.
+      expect(growth(name, make, names, 2000 * scale)).toBeLessThan(10);
     });
   }
 });

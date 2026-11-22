@@ -69,3 +69,34 @@ All six points are on `refactor/mdx-layers-directive`, in `src/core/spans.ts`, `
 ## Decision
 
 Accepted 2026-11-23 by the orchestrator after a fresh review of mdx-layers-directive, with the reviewer's amendments to points 1 and 4. `block-layers.md` v3 points here.
+
+# Change request: block-layers v3 to v4
+
+- From node: mdx-layers-flow
+- Status: accepted
+
+## Problem
+
+1. A replay reads the container state of the live line. `quoteLine` of tracked containers and the footnote indent line (`footnoteIndentAt`) are set by the containers' `continue` on each line, and a collector opened in a replay reads them per line (`parentQuoteLine(...) === line.index`). In a replay they hold the values of the current live line, so the content of a directive opened by a replayed line lost its quote gaps: `>[a]:\n{\n>:::x\n>1.\n>x\n>}x` with `[directive, mdx]` ended the inner list at 4:4, the reference at 5:1.
+2. While a marked leaf is open, only container rules run first on a line where a container did not match. The list item rule relied on the thematic break rule running before it: `> <d b="\n> {a\n> "/>x\n- - -` started a list item on `- - -` and gave an end-of-file error; the reference gives the lazy-line error at 4:1. micromark's list start refuses a thematic break itself.
+3. ESM never fails after its first line in micromark (`micromark-extension-mdxjs-esm` noks only on its first line; acorn errors throw), so it needs no mark. The contract says it takes one.
+4. A lazy line with nothing after the prefixes, no split tab and no line ending: micromark closes the flow at the end of the line before, so the lazy-line error points at the source line start, not after the prefixes (` 2) >{\r\t`: 2:1). With a split tab left, the place is after the tab.
+
+## Proposed change
+
+1. Recorded per line, in addition: the footnote indent line and the `quoteLine` of each open tracked block, the nested root included. The replay puts them back before each recorded line. After the replay the last record, the live line, has put back the live values.
+2. On the lines where only container rules run (a marked leaf is open and a container did not match), no container starts on a `*` or `-` thematic break line (`isThematicBreak` in `blocks/thematic-break.ts`), and only when the `thematicBreak` rule is enabled, as micromark's list start honours `disable.null`. Elsewhere the thematic break rule already ran on the line, so the list item rule does not check it again.
+3. ESM takes no mark. Only `mdxFlow` does.
+4. `onLazyLine` of the MDX flow construct places the error as in point 4 (a talata/mdx rule, noted for the record).
+
+## Affected nodes
+
+- ext-mdx-estree: none.
+
+## Workaround in place
+
+All four on `refactor/mdx-layers-flow`: `src/core/blocks.ts` (`recordFacts`, `restoreFacts`), `src/core/blocks.ts` (`tryStartContainer`), `src/gfm/footnote.ts` (`footnoteIndentLine`), `src/blocks/thematic-break.ts`, `src/ext/mdx/flow.ts`, `src/ext/mdx/esm.ts`.
+
+## Decision
+
+Accepted 2026-11-23 by the orchestrator after a fresh review of mdx-layers-flow, with point 2 amended as above. `block-layers.md` v4 points here.

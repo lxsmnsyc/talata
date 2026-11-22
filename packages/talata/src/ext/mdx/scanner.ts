@@ -18,7 +18,7 @@ import {
   isUnicodeWhitespace,
 } from './chars';
 import { jsOf, parseExpression } from './acorn';
-import type { Js } from './acorn';
+import type { Estree, Js } from './acorn';
 import decodeLiteral from './entities';
 import { MdxError, span } from './error';
 
@@ -110,8 +110,13 @@ const eofExpression =
 export interface Attribute {
   type: 'mdxJsxAttribute' | 'mdxJsxExpressionAttribute';
   name?: string;
-  value: string | null | { type: 'mdxJsxAttributeValueExpression'; value: string };
+  value:
+    | string
+    | null
+    | { type: 'mdxJsxAttributeValueExpression'; value: string; data?: { estree: Estree } };
   position: ReturnType<typeof span>;
+  /** With acorn: the program of an expression attribute. */
+  data?: { estree: Estree };
 }
 
 /** One scanned tag. Offsets are into the source text. */
@@ -139,9 +144,28 @@ export interface Expression {
   value: string;
   start: number;
   end: number;
+  /** With acorn: its program. */
+  estree: Estree | undefined;
 }
 
 export type Item = Tag | Expression;
+
+/** The `mdxFlowExpression` or `mdxTextExpression` node of `item`, with `data.estree` from acorn. */
+export function expressionNode(
+  type: 'mdxFlowExpression' | 'mdxTextExpression',
+  source: Source,
+  item: Expression,
+): { type: string; value: string; position: ReturnType<typeof span>; data?: { estree: Estree } } {
+  const node: ReturnType<typeof expressionNode> = {
+    type,
+    value: item.value,
+    position: span(source, item.start, item.end),
+  };
+  if (item.estree !== undefined) {
+    node.data = { estree: item.estree };
+  }
+  return node;
+}
 
 function hex(code: number): string {
   return 'U+' + code.toString(16).toUpperCase().padStart(4, '0');
@@ -211,9 +235,25 @@ export class Scanner {
   virtualStart = false;
   /** With acorn: the error of the last `}` that did not end the expression. */
   lastCrash: MdxError | undefined;
+  /** With acorn: the program of the expression that just ended. */
+  estree: Estree | undefined;
+  /**
+   * With acorn, flow that interrupts a paragraph: micromark's interrupt
+   * check reads the lines first, so a line ending ends after the next
+   * line's container prefixes (`lineStart` of `feed`).
+   */
+  interrupts = false;
+  /**
+   * With `interrupts`: what calls `onComment` and `onToken` again for each
+   * program. micromark parses such flow twice, its interrupt check first,
+   * so the flow rule runs these when the construct ends.
+   */
+  replay: (() => void)[] | undefined;
 
   /** Starts a scan at `pos`, on `<` or `{`. */
   begin(source: Source, mode: number, pos: number, end: number, last: boolean): void {
+    this.interrupts = false;
+    this.replay = undefined;
     this.source = source;
     this.text = source.text;
     this.mode = mode;
@@ -269,6 +309,7 @@ export class Scanner {
     this.value = '';
     this.chunkStart = this.pos;
     this.lastCrash = undefined;
+    this.estree = undefined;
     this.state = EXPRESSION_BEFORE;
     if (this.js !== undefined) {
       this.code = '';
@@ -294,20 +335,22 @@ export class Scanner {
     const length = this.code.length;
     const stops = this.stops.length;
     this.addChunk();
-    const error = parseExpression(
+    const result = parseExpression(
       this.js!,
       this.source,
       { value: this.code, stops: this.stops, start: this.expressionStart + 1 },
       this.expressionKind,
+      this.replay,
     );
     // The chunk goes on past the `}`: take it back out.
     this.code = this.code.slice(0, length);
     this.stops.length = stops;
-    if (error === undefined) {
-      return true;
+    if (result instanceof MdxError) {
+      this.lastCrash = result;
+      return false;
     }
-    this.lastCrash = error;
-    return false;
+    this.estree = result;
+    return true;
   }
 
   /**
@@ -339,6 +382,9 @@ export class Scanner {
       this.chunkStart = pos;
       this.state = EXPRESSION_BEFORE;
       if (this.js !== undefined) {
+        if (this.interrupts) {
+          this.stops.push(this.code.length, lineStart);
+        }
         // acorn reads the kept whitespace from the source: a tab split by
         // the line prefix keeps its columns in `kept` but not in the code.
         let real = 0;
@@ -354,6 +400,17 @@ export class Scanner {
       }
     } else {
       this.state = WHITESPACE;
+    }
+  }
+
+  /**
+   * With acorn, in an expression, after `feed`: a place at the start of the
+   * fed line maps to `offset`. micromark ends a line ending in text after
+   * the next line's container prefixes once a lookahead reached that line.
+   */
+  lineStartAt(offset: number): void {
+    if (this.js !== undefined && this.state === EXPRESSION_BEFORE) {
+      this.stops.push(this.code.length, offset);
     }
   }
 
@@ -407,16 +464,29 @@ export class Scanner {
         value: this.value,
         start: this.expressionStart,
         end: this.pos,
+        estree: this.estree,
       });
     }
     const tag = this.tag!;
     const position = span(this.source, this.expressionStart, this.pos);
+    const estree = this.estree;
     if (kind === EXPRESSION_ATTRIBUTE) {
-      tag.attributes.push({ type: 'mdxJsxExpressionAttribute', value: this.value, position });
+      const attribute: Attribute = {
+        type: 'mdxJsxExpressionAttribute',
+        value: this.value,
+        position,
+      };
+      if (estree !== undefined) {
+        attribute.data = { estree };
+      }
+      tag.attributes.push(attribute);
       this.noteAttribute(this.expressionStart, this.pos);
     } else {
       const attribute = this.attribute!;
       attribute.value = { type: 'mdxJsxAttributeValueExpression', value: this.value };
+      if (estree !== undefined) {
+        attribute.value.data = { estree };
+      }
       attribute.position.end = position.end;
       this.noteAttribute(attribute.position.start.offset!, this.pos);
     }

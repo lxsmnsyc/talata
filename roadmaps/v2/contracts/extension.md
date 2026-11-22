@@ -1,6 +1,6 @@
 ---
 name: extension
-version: 5
+version: 6
 status: frozen
 defined_by: ext-api
 ---
@@ -304,3 +304,4 @@ Checked against the reference trees (mdast-util-frontmatter 2.0.1, mdast-util-ma
 - v3 (2026-11-02): core hooks for directive content, from core-hooks-2 (PR #22). Adds `willClose`, `getBlock`, `endContent`, `Line.endsContent` and `isLastLine`. `matchedEnd` of list items and footnote definitions is an end offset. Tree output unchanged.
 - v4 (2026-11-21): rules can be turned off, from mdx-core. Adds `Extension.disable`, `Registry.indentLimit` and `Line.indentLimit`. Tree output unchanged without `disable`.
 - v5 (2026-11-22): `BlockState.readLineAt`, `OpenParagraph.inlineIndents` and `processLine(line, from)`, from fix-mdx-reread-container. Tree output unchanged without MDX.
+- v6 (2026-11-23, from mdx-layers-flow): the v5 re-read hooks and the v2/v3 hooks listed in `extension.change-request.md` "v5 to v6" are removed; `getBlock`, `getDepth` and `willClose?(state, line)` stay; the block layers of `block-layers.md` are part of this contract. Where the sections above describe a removed hook, the change request wins.

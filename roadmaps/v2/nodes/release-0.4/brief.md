@@ -1,7 +1,7 @@
 ---
 id: release-0.4
 title: Docs and the 0.4 release
-status: active
+status: done
 priority: must
 type: release
 outline: false
@@ -9,6 +9,7 @@ milestone: m5-mdx
 target:
 from:
 size: S
+spent: 110000
 spike: false
 verify:
 exclusive: [benchmark]

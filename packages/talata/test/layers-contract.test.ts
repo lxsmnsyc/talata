@@ -518,27 +518,34 @@ describe('image labels read again in the tree build', () => {
   }
 });
 
-// Cases that need the implementation, each with the node that turns it on.
-const pending: Case[] = [
+// Cases mdx-layers-flow fixed.
+const flowFixed: Case[] = [
   [
     '>:c[{{\n>}',
     names,
     false,
     { mdx: { acorn } },
-    'acorn error place in a text directive label across quote lines (mdx-layers-flow)',
+    'acorn error place in a text directive label across quote lines',
   ],
   [
     '* [X]  <><a-b></a-b></>\n{\n\t}t',
     ['mdx'],
     true,
     {},
-    'task list item with JSX text drops a space (mdx-layers-flow)',
+    'task list item with JSX text keeps its space',
+  ],
+  [
+    '[F]:x\n"\n<s\r>"',
+    ['frontmatter', 'math', 'directive', 'mdx'],
+    true,
+    { mdx: { acorn } },
+    '`--all --acorn` fuzz, seed 20261201, document 587638',
   ],
 ];
 
-describe('pending cases', () => {
-  for (const [input, list, gfm, options, reason] of pending) {
-    test.skip(`${JSON.stringify(input)} (${reason})`, () => {
+describe('cases fixed by mdx-layers-flow', () => {
+  for (const [input, list, gfm, options, reason] of flowFixed) {
+    test(`${JSON.stringify(input)} (${reason})`, () => {
       expect(parseTalata(input, gfm, list, options)).toEqual(
         parseReference(input, gfm, list, options),
       );
@@ -546,6 +553,21 @@ describe('pending cases', () => {
   }
 });
 
-test.todo(
-  "mdx-layers-flow: '{a\\n:::x\\n}x\\n'.repeat(n) with [directive, mdx] grows under 5x per 4x size",
-);
+test("'{a\\n:::x\\n}x\\n'.repeat(n) with [directive, mdx] grows under 8x per 4x size", () => {
+  // Only the first text chunk runs; the nested document is never parsed.
+  // More shapes and the acorn case are in `mdx-growth.test.ts`. Linear is
+  // 4, quadratic 16. At 1000 units a parse took under 1 ms, so CI timer noise
+  // pushed the ratio past 5; the sizes are larger and the bound 8.
+  const best = (count: number): number => {
+    const text = '{a\n:::x\n}x\n'.repeat(count);
+    let fastest = Infinity;
+    for (let run = 0; run < 7; run++) {
+      const start = performance.now();
+      parseTalata(text, false, names);
+      fastest = Math.min(fastest, performance.now() - start);
+    }
+    return fastest;
+  };
+  best(4000);
+  expect(best(64_000) / best(16_000)).toBeLessThan(8);
+});

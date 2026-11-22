@@ -11,7 +11,6 @@ import type { Item, Tag } from './scanner';
 
 export const TEXT_MARKER = 'talataMdxTextTag';
 export const FLOW_MARKER = 'talataMdxFlowTags';
-export const NODES_MARKER = 'talataMdxNodes';
 
 export interface TextMarker {
   type: typeof TEXT_MARKER;
@@ -24,24 +23,6 @@ export interface FlowMarker {
   type: typeof FLOW_MARKER;
   items: Item[];
   position: Position;
-}
-
-/**
- * Nodes that take the place of one block: the paragraphs a flow construct
- * that failed on a later line makes. Its children are visible to transforms.
- */
-export function nodesMarker(source: Source, nodes: RootContent[]): RootContent {
-  const marker = {
-    type: NODES_MARKER,
-    children: nodes,
-    position: span(
-      source,
-      nodes[0].position?.start.offset ?? 0,
-      nodes[nodes.length - 1].position?.end.offset ?? 0,
-    ),
-  };
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- replaced by build.ts
-  return marker as unknown as RootContent;
 }
 
 /**
@@ -59,42 +40,6 @@ export function markSource(source: Source): void {
   if (!marked.has(source)) {
     marked.set(source, []);
   }
-}
-
-// Paragraph nodes to drop, as `start:end` offsets, per parse (see `dropParagraph`).
-const dropped = new WeakMap<Source, Set<string>>();
-
-/**
- * Drops the paragraph node from `start` to `end`. A flow construct that
- * fails on a later line goes on as the paragraph it interrupted, whose node
- * the block parser made already; the transform removes that node.
- */
-export function dropParagraph(source: Source, start: number, end: number): void {
-  markSource(source);
-  let set = dropped.get(source);
-  if (set === undefined) {
-    set = new Set();
-    dropped.set(source, set);
-  }
-  set.add(start + ':' + end);
-}
-
-// Nodes to drop, by identity (see `dropNode`).
-const droppedNodes = new WeakSet<object>();
-
-/** Drops `node` from the tree: the transform leaves it out. */
-export function dropNode(node: object): void {
-  droppedNodes.add(node);
-}
-
-/** Whether `node` is to be dropped (`dropNode`). */
-export function isDropped(node: object): boolean {
-  return droppedNodes.has(node);
-}
-
-/** The paragraphs to drop for the parse of `source`, or undefined. */
-export function droppedParagraphs(source: Source): Set<string> | undefined {
-  return dropped.get(source);
 }
 
 /** Records a text tag of the parse of `source`. */

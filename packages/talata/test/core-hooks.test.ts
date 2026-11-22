@@ -2,7 +2,11 @@
 import type { Root, RootContent } from 'mdast';
 import { describe, expect, it } from 'vitest';
 import { isClosingFence, trimLineEndings } from '../src/blocks/code-fenced';
+import { fromMarkdown as reference } from 'mdast-util-from-markdown';
+import { mdxFromMarkdown } from 'mdast-util-mdx';
+import { mdx as micromarkMdx } from 'micromark-extension-mdx';
 import { fromMarkdown } from '../src/index';
+import { mdx as mdxExtension } from '../src/mdx';
 import type { Extension } from '../src/ext/api';
 import type { BlockRule, BlockState, OpenBlock } from '../src/core/blocks';
 import { parseInline } from '../src/core/inline';
@@ -19,10 +23,6 @@ import { pushNode } from '../src/inline/text';
 // outside this file.
 
 interface FenceOptions {
-  /** `closeKeepsLineEnding` while the closing line closes the blocks inside. */
-  keeps?: boolean;
-  /** `OpenBlock.startsContainer`. */
-  startsContainer?: false;
   /** Called with the depth of the fence as `continue` sees it. */
   onDepth?: (depth: number, other: number) => void;
 }
@@ -32,7 +32,6 @@ class OpenFence implements OpenBlock {
   name = 'testFence';
   isContainer = true;
   acceptsLazy = false;
-  startsContainer: false | undefined;
   closed = false;
   start: number;
   end: number;
@@ -40,7 +39,6 @@ class OpenFence implements OpenBlock {
 
   constructor(options: FenceOptions, start: number, end: number) {
     this.options = options;
-    this.startsContainer = options.startsContainer;
     this.start = start;
     this.end = end;
   }
@@ -55,7 +53,6 @@ class OpenFence implements OpenBlock {
       this.closed = true;
       this.end = line.end;
       advanceLine(line, line.end);
-      state.closeOpenBlocks(depth, { keepsLineEnding: this.options.keeps ?? false });
       return true;
     }
     this.end = line.end;
@@ -175,27 +172,7 @@ function endOf(node: unknown): { line: number; column: number } {
   return { line: position.end.line, column: position.end.column };
 }
 
-describe('closeOpenBlocks and getDepth', () => {
-  const input = ':::\n```\na\n:::\nb\n';
-
-  it('closes the blocks inside from continue', () => {
-    const tree = parse(input, fenceRule());
-    expect(tree.children.map(shape)).toEqual([
-      { type: 'fence', children: [{ type: 'code', value: 'a' }] },
-      { type: 'paragraph', children: [{ type: 'text', value: 'b' }] },
-    ]);
-  });
-
-  it('can make the closed blocks drop their line ending', () => {
-    const dropped = parse(input, fenceRule({ keeps: false }));
-    const kept = parse(input, fenceRule({ keeps: true }));
-    function code(tree: Root): RootContent {
-      return (tree.children[0] as unknown as { children: RootContent[] }).children[0];
-    }
-    expect(endOf(code(dropped))).toEqual({ line: 3, column: 2 });
-    expect(endOf(code(kept))).toEqual({ line: 4, column: 1 });
-  });
-
+describe('getDepth', () => {
   it('gives the stack depth of an open block, or -1', () => {
     const depths: number[][] = [];
     const rule = fenceRule({
@@ -210,28 +187,6 @@ describe('closeOpenBlocks and getDepth', () => {
       [1, -1],
       [2, -1],
       [3, -1],
-    ]);
-  });
-});
-
-describe('OpenBlock.startsContainer', () => {
-  // The quote does not match the last line, so it closes with the code inside
-  // as the fence starts.
-  const input = '> ```\n> a\n:::\n';
-  function code(tree: Root): RootContent {
-    return (tree.children[0] as unknown as { children: RootContent[] }).children[0];
-  }
-
-  it('keeps the line ending of the blocks a container closes by default', () => {
-    expect(endOf(code(parse(input, fenceRule())))).toEqual({ line: 3, column: 1 });
-  });
-
-  it('drops it for a container that says it starts none', () => {
-    const tree = parse(input, fenceRule({ startsContainer: false }));
-    expect(endOf(code(tree))).toEqual({ line: 2, column: 4 });
-    expect(tree.children.map(shape)).toEqual([
-      { type: 'blockquote', children: [{ type: 'code', value: 'a' }] },
-      { type: 'fence', children: [] },
     ]);
   });
 });
@@ -467,4 +422,45 @@ describe('helpers shared with extensions', () => {
     expect(getFailedStart(cache, leaf, 3)).toBeUndefined();
     expect(getFailedStart(cache, other, 2)).toBeUndefined();
   });
+});
+
+describe('list starts with the thematic break rule off', () => {
+  // micromark's list start checks for a thematic break only while that
+  // construct is on (`disable.null`). talata checks it only where the
+  // thematic break rule did not run first: while a marked leaf is open.
+  const off: Extension = { name: 'test:no-thematic-break', disable: { block: ['thematicBreak'] } };
+  const referenceOff = { disable: { null: ['thematicBreak'] } };
+
+  function run(read: () => unknown): unknown {
+    try {
+      return JSON.parse(JSON.stringify(read())) as unknown;
+    } catch (error) {
+      // talata puts the place in the message; the reference's VFileMessage keeps it apart.
+      const { message, place } = error as {
+        message: string;
+        place?: { line?: number; column?: number; start?: { line: number; column: number } };
+      };
+      const at = place?.start ?? place;
+      return / at \d+:\d+$/.test(message) || at?.line === undefined
+        ? message
+        : `${message} at ${at.line}:${at.column}`;
+    }
+  }
+
+  for (const input of ['- - -', '* * *', 'a\n- - -', '> <d b="\n> {a\n> "/>x\n- - -']) {
+    for (const withMdx of [false, true]) {
+      it(`${JSON.stringify(input)}${withMdx ? ', mdx' : ''}`, () => {
+        const talata = run(() =>
+          fromMarkdown(input, { extensions: withMdx ? [off, mdxExtension()] : [off] }),
+        );
+        const expected = run(() =>
+          reference(input, {
+            extensions: withMdx ? [referenceOff, micromarkMdx()] : [referenceOff],
+            mdastExtensions: withMdx ? [mdxFromMarkdown()] : [],
+          }),
+        );
+        expect(talata).toEqual(expected);
+      });
+    }
+  }
 });

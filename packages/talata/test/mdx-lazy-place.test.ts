@@ -6,7 +6,7 @@ import { acorn, parseReference, parseTalata } from './parsers';
 import type { ExtensionName, ExtensionOptions } from './parsers';
 
 // Where a lazy line starts when it ends an open MDX construct in a quote
-// inside a container directive: the error points there. With a quote
+// inside a container directive: the error points there. With a container
 // outside the directive and nothing left of the line in the directive's
 // content, the reference points at the start of the line. Tabs that a quote
 // or an indent split leave columns, which count as content. A few inputs
@@ -86,14 +86,19 @@ describe('lazy line places in directives', () => {
     });
   }
 
-  // Quotes outside the directive: first line, then later lines. List items
-  // and footnote definitions outside it are not covered: their lazy line
-  // places differ from the reference on main too (see the node outcome).
+  // Containers outside the directive: first line, then later lines. Quotes,
+  // list items and footnote definitions.
   const outers: [string, string][] = [
     ['>', '>'],
     ['> ', '> '],
     ['>\t', '>\t'],
     [' >', ' >'],
+    ['- ', '  '],
+    ['1. ', '   '],
+    ['-\t', '\t'],
+    [' * ', '   '],
+    ['[^a]: ', '    '],
+    ['[^a]:\t', '\t'],
   ];
   const indents = ['', ' ', '  ', '\t'];
   const inners = ['>', '> ', '>\t', ' >', '- '];
