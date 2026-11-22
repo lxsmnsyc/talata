@@ -1,6 +1,6 @@
 ---
 name: extension
-version: 3
+version: 5
 status: frozen
 defined_by: ext-api
 ---
@@ -223,6 +223,65 @@ Behavior on the line after `endContent`, when the block that called it does not 
 
 No other names change. `startsContainer`, `closeOpenBlocks`, `getDepth` and `containerStartsOff` of version 2 stay.
 
+## Core rules off (v4)
+
+Added by mdx-core, for ext-mdx. All paths are under `packages/talata/src/`. Tree output with no `disable` list does not change.
+
+```ts
+// ext/api.ts
+interface Extension {
+  // Rules to leave out by name, as micromark's `disable.null` does. Block and inline names
+  // overlap (`html`), so there are two lists. Applies to every registered rule, including rules
+  // of other extensions, in any order. Unknown names are ignored.
+  disable?: { block?: string[]; inline?: string[] };
+}
+
+// core/registry.ts
+interface RuleSet {
+  disableBlock?: string[];
+  disableInline?: string[];
+} // joined from all extensions by index.ts
+interface Registry {
+  indentLimit: number;
+} // 4, or Infinity when block codeIndented is off
+
+// core/line.ts
+interface Line {
+  indentLimit: number;
+} // copied from Registry.indentLimit
+function createLine(text: string, indentLimit = 4): Line;
+```
+
+- Core names: block `codeIndented` and `html`; inline `html` and `autolink`. micromark's `htmlFlow` is block `html`, `htmlText` is inline `html`.
+- Filtering happens once per cached registry in `createRegistry`, never per parse.
+- With `codeIndented` off, micromark lifts the 3-column whitespace limit of every flow construct. Rules compare `line.indent >= line.indentLimit` instead of a literal 4: block quote, ATX and setext heading, thematic break, fenced code (open and close), block HTML, list item start, sibling and content width, table, footnote definition start. Inline HTML drops up to `rules.indentLimit - 1` columns after each line ending in a tag. The 4-column indent that continues a footnote definition is not a limit and stays.
+- Extension rules that keep a literal 4 (math flow, directive leaf and container) keep the old limit. A rule that must match micromark with `codeIndented` off, such as the JSX flow rule of ext-mdx, uses `line.indentLimit`, and passes it to any `createLine` call.
+
+## Re-reading lines (v5)
+
+Added by fix-mdx-reread-container, for ext-mdx. Paths under `packages/talata/src/`. Output without MDX does not change; the parser never calls these itself.
+
+```ts
+// core/blocks.ts
+interface BlockState {
+  // Reads `line` again as a line on which the open blocks up to `depth` matched and took
+  // their prefixes: the blocks above `depth` are asked to continue, then rules start as on
+  // any line. Call it from `addLine` of the tip, after closing the tip, for lines up to the
+  // current one, in order; `line` must not be the line the parser passed in.
+  readLineAt(line: Line, depth: number): void;
+}
+
+interface OpenParagraph {
+  // For a paragraph that is not the block parser's own: the indents of its lines, as
+  // `paragraphIndents` returns them, for setext heading, table and definitions.
+  inlineIndents?(): number[] | undefined;
+}
+```
+
+- `BlockParser.processLine(line, from = 0)` starts its continue loop at `from + 1`. `readLineAt` calls it with `depth` and sets `BlockParser.line` for the call, so `willClose` and `endContent` see the re-read line.
+- `paragraphIndents` (`blocks/paragraph.ts`) returns `inlineIndents?.()` for a paragraph that is not the core's own.
+- A caller that sets container state by hand around `readLineAt` (ext-mdx `handOver` sets `quoteLine`) owns keeping it consistent.
+
 ## What each reference extension needs, and where it fits
 
 Checked against the reference trees (mdast-util-frontmatter 2.0.1, mdast-util-math 3.0.0, mdast-util-directive 3.1.1) and a throwaway container rule run against the reference for `:::` fences. The interfaces of parser-core v5 are enough for all three. No core change was needed for frontmatter and math. The directive container needed the v2 core hooks above.
@@ -243,3 +302,5 @@ Checked against the reference trees (mdast-util-frontmatter 2.0.1, mdast-util-ma
 - v1 (2026-10-28): frozen by ext-api.
 - v2 (2026-11-02): core hooks for container extensions, from core-hooks (PR #15). Adds `getDepth`, `closeOpenBlocks`, `containerStartsOff`, `opensContainer`, `startsContainer`, per-leaf inline state on `InlineState`, and shared helpers. Tree output unchanged.
 - v3 (2026-11-02): core hooks for directive content, from core-hooks-2 (PR #22). Adds `willClose`, `getBlock`, `endContent`, `Line.endsContent` and `isLastLine`. `matchedEnd` of list items and footnote definitions is an end offset. Tree output unchanged.
+- v4 (2026-11-21): rules can be turned off, from mdx-core. Adds `Extension.disable`, `Registry.indentLimit` and `Line.indentLimit`. Tree output unchanged without `disable`.
+- v5 (2026-11-22): `BlockState.readLineAt`, `OpenParagraph.inlineIndents` and `processLine(line, from)`, from fix-mdx-reread-container. Tree output unchanged without MDX.

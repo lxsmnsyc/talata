@@ -61,6 +61,10 @@ function registryFor(gfm: boolean, extensions: Extension[]): Registry {
     set.paragraphPrefixRules.push(...(extension.paragraphPrefixRules ?? []));
     set.inlineRules.push(...(extension.inlineRules ?? []));
     set.transforms.push(...(extension.transforms ?? []));
+    if (extension.disable !== undefined) {
+      set.disableBlock = [...(set.disableBlock ?? []), ...(extension.disable.block ?? [])];
+      set.disableInline = [...(set.disableInline ?? []), ...(extension.disable.inline ?? [])];
+    }
   }
   const registry = createRegistry(set, { gfm });
   if (cache.length === 8) {

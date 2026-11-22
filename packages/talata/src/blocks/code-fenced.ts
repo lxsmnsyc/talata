@@ -11,7 +11,7 @@ const BACKTICK = 96;
 
 /** Whether `line` is a closing fence: at least `size` markers, then only spaces and tabs. */
 export function isClosingFence(line: Line, marker: number, size: number): boolean {
-  if (line.indent >= 4) {
+  if (line.indent >= line.indentLimit) {
     return false;
   }
   const text = line.text;
@@ -144,7 +144,7 @@ const codeFenced: BlockRule = {
   canInterruptParagraph: true,
   triggers: '`~',
   start(_state: BlockState, line: Line): OpenBlock | undefined {
-    if (line.indent >= 4) {
+    if (line.indent >= line.indentLimit) {
       return undefined;
     }
     const text = line.text;

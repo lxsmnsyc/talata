@@ -12,11 +12,18 @@ import { mathFromMarkdown } from 'mdast-util-math';
 import { directive } from 'micromark-extension-directive';
 import { frontmatter } from 'micromark-extension-frontmatter';
 import { math } from 'micromark-extension-math';
+import { mdxFromMarkdown } from 'mdast-util-mdx';
+import { mdx } from 'micromark-extension-mdx';
+import { mdxjs } from 'micromark-extension-mdxjs';
+import { Parser } from 'acorn';
+import type { Options as AcornOptions } from 'acorn';
+import acornJsx from 'acorn-jsx';
 import { fromMarkdown } from '../src';
 import { directive as talataDirective } from '../src/directive';
 import type { Extension } from '../src/ext/api';
 import { frontmatter as talataFrontmatter } from '../src/frontmatter';
 import { math as talataMath } from '../src/math';
+import { MdxError, mdx as talataMdx } from '../src/mdx';
 
 // Talata's suites stay skipped until the matching part of the parser exists.
 // The roadmap node that lands a feature turns its flag on.
@@ -36,12 +43,24 @@ export const ready = {
   },
 };
 
-export type ExtensionName = 'frontmatter' | 'math' | 'directive';
+export type ExtensionName = 'frontmatter' | 'math' | 'directive' | 'mdx';
 
 /** Options a test may pass to an extension. Both sides get the same value. */
 export interface ExtensionOptions {
   frontmatter?: Parameters<typeof frontmatter>[0];
   math?: Parameters<typeof math>[0];
+  /** With `acorn`: `micromark-extension-mdxjs` on the reference side. */
+  mdx?: { acorn?: typeof acorn; acornOptions?: Partial<AcornOptions> };
+}
+
+/** acorn with JSX, as `micromark-extension-mdxjs` uses it. */
+export const acorn: typeof Parser = Parser.extend(acornJsx());
+
+// `pnpm fuzz --acorn` sets it: MDX runs with acorn on both sides by default.
+const fuzzAcorn = process.env.TALATA_FUZZ_ACORN === '1';
+
+function mdxOptions(options: ExtensionOptions): ExtensionOptions['mdx'] {
+  return options.mdx ?? (fuzzAcorn ? { acorn } : undefined);
 }
 
 type ReferenceOptions = NonNullable<Parameters<typeof reference>[1]>;
@@ -63,9 +82,25 @@ function referenceExtensions(
     } else if (name === 'math') {
       extensions.push(math(options.math));
       mdastExtensions.push(mathFromMarkdown());
-    } else {
+    } else if (name === 'directive') {
       extensions.push(directive());
       mdastExtensions.push(directiveFromMarkdown());
+    } else {
+      const settings = mdxOptions(options);
+      if (settings?.acorn === undefined) {
+        extensions.push(mdx());
+      } else {
+        // No `data.estree`: talata does not make it.
+        extensions.push(
+          mdxjs({
+            acorn: settings.acorn,
+            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the reference fills in `ecmaVersion`
+            acornOptions: settings.acornOptions as AcornOptions | undefined,
+            addResult: false,
+          }),
+        );
+      }
+      mdastExtensions.push(mdxFromMarkdown());
     }
   }
   return { extensions, mdastExtensions };
@@ -82,11 +117,45 @@ export function talataExtensions(
       result.push(talataFrontmatter(options.frontmatter));
     } else if (name === 'math') {
       result.push(talataMath(options.math));
-    } else {
+    } else if (name === 'directive') {
       result.push(talataDirective());
+    } else {
+      result.push(talataMdx(mdxOptions(options)));
     }
   }
   return result;
+}
+
+interface Place {
+  line: number;
+  column: number;
+}
+
+interface ReferenceMessage {
+  reason: string;
+  place?: Place | { start: Place; end: Place } | null;
+}
+
+function isReferenceMessage(error: unknown): error is ReferenceMessage {
+  return error instanceof Error && 'reason' in error && !(error instanceof MdxError);
+}
+
+function stringifyPlace(place: Place | { start: Place; end: Place }): string {
+  if ('start' in place) {
+    return `${place.start.line}:${place.start.column}-${place.end.line}:${place.end.column}`;
+  }
+  return `${place.line}:${place.column}`;
+}
+
+/**
+ * With MDX, a syntax error becomes a root with no children and the error
+ * message in `data.mdxError`, on both sides: the reason, then ` at ` and the
+ * place when there is one. A case where both throw then compares as a tree,
+ * and matches only when the messages match.
+ */
+export function errorRoot(message: string): Root {
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- `data` holds a field of its own
+  return { type: 'root', children: [], data: { mdxError: message } } as Root;
 }
 
 /**
@@ -102,10 +171,22 @@ export function parseReference(
   if (!useGfm && names.length === 0) {
     return reference(value);
   }
-  return reference(value, {
-    extensions: [...(useGfm ? [gfm()] : []), ...added.extensions],
-    mdastExtensions: [...(useGfm ? [gfmFromMarkdown()] : []), ...added.mdastExtensions],
-  });
+  try {
+    return reference(value, {
+      extensions: [...(useGfm ? [gfm()] : []), ...added.extensions],
+      mdastExtensions: [...(useGfm ? [gfmFromMarkdown()] : []), ...added.mdastExtensions],
+    });
+  } catch (error) {
+    if (!names.includes('mdx') || !isReferenceMessage(error)) {
+      throw error;
+    }
+    const place = error.place;
+    return errorRoot(
+      place === undefined || place === null
+        ? error.reason
+        : `${error.reason} at ${stringifyPlace(place)}`,
+    );
+  }
 }
 
 export function parseTalata(
@@ -114,7 +195,14 @@ export function parseTalata(
   names: readonly ExtensionName[] = [],
   options: ExtensionOptions = {},
 ): Root {
-  return fromMarkdown(value, { gfm: useGfm, extensions: talataExtensions(names, options) });
+  try {
+    return fromMarkdown(value, { gfm: useGfm, extensions: talataExtensions(names, options) });
+  } catch (error) {
+    if (error instanceof MdxError) {
+      return errorRoot(error.message);
+    }
+    throw error;
+  }
 }
 
 export function toHtmlString(tree: Root): string {

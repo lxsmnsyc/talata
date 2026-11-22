@@ -9,6 +9,10 @@ export interface RuleSet {
   paragraphPrefixRules: ParagraphPrefixRule[];
   inlineRules: InlineRule[];
   transforms: Transform[];
+  /** Names of block rules to leave out (extension `disable.block`). */
+  disableBlock?: string[];
+  /** Names of inline rules to leave out (extension `disable.inline`). */
+  disableInline?: string[];
 }
 
 /** Rules ready for one parse: GFM rules filtered by options, sorted by priority, indexed by trigger. */
@@ -23,17 +27,23 @@ export interface Registry {
   /** Inline rules with a `resolve` step, by priority. */
   inlineResolvers: InlineRule[];
   transforms: Transform[];
+  /** 4, or Infinity when `codeIndented` is off: see `Line.indentLimit`. */
+  indentLimit: number;
 }
 
 interface Ranked {
+  name: string;
   priority: number;
   gfm?: boolean;
 }
 
 /** Keeps the rules enabled by `options` and sorts them by priority, keeping registration order on ties. */
-function select<T extends Ranked>(rules: T[], options: ParseOptions): T[] {
+function select<T extends Ranked>(rules: T[], options: ParseOptions, disabled?: string[]): T[] {
   const result: T[] = [];
   for (const rule of rules) {
+    if (disabled?.includes(rule.name) === true) {
+      continue;
+    }
     if (rule.gfm === true && !options.gfm) {
       continue;
     }
@@ -56,7 +66,7 @@ function hasTrigger(triggers: string, code: number): boolean {
 }
 
 export function createRegistry(set: RuleSet, options: ParseOptions): Registry {
-  const blockRules = select(set.blockRules, options);
+  const blockRules = select(set.blockRules, options, set.disableBlock);
   const blockOther: BlockRule[] = [];
   for (const rule of blockRules) {
     if (rule.triggers === undefined) {
@@ -74,7 +84,7 @@ export function createRegistry(set: RuleSet, options: ParseOptions): Registry {
     blockByChar.push(list.length === blockOther.length ? blockOther : list);
   }
 
-  const inlineRules = select(set.inlineRules, options);
+  const inlineRules = select(set.inlineRules, options, set.disableInline);
   const inlineByChar: (InlineRule[] | undefined)[] = [];
   const inlineResolvers: InlineRule[] = [];
   for (let code = 0; code < 128; code++) {
@@ -107,5 +117,6 @@ export function createRegistry(set: RuleSet, options: ParseOptions): Registry {
     inlineByChar,
     inlineResolvers,
     transforms,
+    indentLimit: set.disableBlock?.includes('codeIndented') === true ? Infinity : 4,
   };
 }

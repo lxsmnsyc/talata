@@ -3,12 +3,14 @@
 // Usage, from packages/talata:
 //   pnpm fuzz --count 100000 [--seed N] [--start I] [--no-gfm] [--all]
 //             [--max-failures K] [--shrink-ms MS] [--no-save] [--no-corpus]
-//             [--timeout-ms MS]
+//             [--timeout-ms MS] [--acorn]
 //
 // --seed       run seed (default: random, printed). Document I of seed S is the
 //              same every time, so `--seed S --start I --count 1` replays it.
 // --all        compare every feature, not only the ones talata supports now.
 // --no-save    do not write minimized failures to test/fuzz/fixtures.
+// --acorn      MDX with acorn on both sides (`mdx({ acorn })` and
+//              micromark-extension-mdxjs).
 // --timeout-ms time limit per document (default 5000). Each document runs in a
 //              worker thread; a reference parse past the limit is skipped as
 //              "reference timed out", a talata parse past it is a failure.
@@ -66,6 +68,7 @@ const known = new Set([
   '--no-save',
   '--no-corpus',
   '--timeout-ms',
+  '--acorn',
 ]);
 for (let i = 0; i < args.length; i++) {
   const arg = args[i];
@@ -73,6 +76,11 @@ for (let i = 0; i < args.length; i++) {
     console.error(`unknown option ${arg}`);
     process.exit(2);
   }
+}
+
+// Read by test/parsers.ts, here and in the workers.
+if (args.includes('--acorn')) {
+  process.env.TALATA_FUZZ_ACORN = '1';
 }
 
 // The sources guard their test counters with this flag, which the bundler
@@ -124,6 +132,7 @@ const all = args.includes('--all');
 const corpus = !args.includes('--no-corpus');
 const flags =
   `${gfm ? '' : ' --no-gfm'}${all ? ' --all' : ''}${corpus ? '' : ' --no-corpus'}` +
+  (args.includes('--acorn') ? ' --acorn' : '') +
   (timeout === 5000 ? '' : ` --timeout-ms ${timeout}`);
 
 for (const failure of report.reported) {
@@ -131,7 +140,8 @@ for (const failure of report.reported) {
   console.log(`  input: ${JSON.stringify(failure.minimized)}`);
   console.log(`  ${failure.message.split('\n').join('\n  ')}`);
   console.log(`  replay: --seed ${seed} --start ${failure.index} --count 1${flags}`);
-  if (!args.includes('--no-save')) {
+  // The fixtures replay without acorn: failures with it go in test/mdx-acorn.test.ts.
+  if (!args.includes('--no-save') && !args.includes('--acorn')) {
     const dir = new URL('./fixtures/', base);
     mkdirSync(dir, { recursive: true });
     const name = `${hashText(failure.minimized)}${gfm ? '' : '-nogfm'}${all ? '-all' : ''}.json`;

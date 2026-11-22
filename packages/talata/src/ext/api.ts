@@ -16,6 +16,12 @@ export interface Extension {
   paragraphPrefixRules?: ParagraphPrefixRule[];
   inlineRules?: InlineRule[];
   transforms?: Transform[];
+  /**
+   * Core rules to turn off by name, as micromark's `disable.null` does
+   * (contract v4). Block and inline names overlap (`html`), so there are two
+   * lists. Applies to every rule registered, including other extensions'.
+   */
+  disable?: { block?: string[]; inline?: string[] };
 }
 
 // Lives for the whole process: one entry per distinct option set, which stays small.

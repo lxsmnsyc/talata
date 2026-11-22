@@ -172,7 +172,7 @@ const listItem: BlockRule = {
   canInterruptParagraph: true,
   triggers: '*+-0123456789',
   start(state: BlockState, line: Line): OpenBlock | undefined {
-    if (line.indent >= 4) {
+    if (line.indent >= line.indentLimit) {
       return undefined;
     }
     const text = line.text;
@@ -207,7 +207,7 @@ const listItem: BlockRule = {
       if (indent === 0) {
         return undefined;
       }
-      consumeColumns(line, indent <= 4 ? indent : 1);
+      consumeColumns(line, indent <= line.indentLimit ? indent : 1);
       size = line.visualColumn - base;
     }
     let list: OpenList;

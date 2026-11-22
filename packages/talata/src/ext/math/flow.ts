@@ -101,7 +101,7 @@ const mathFlow: BlockRule = {
   canInterruptParagraph: true,
   triggers: '$',
   start(_state: BlockState, line: Line): OpenBlock | undefined {
-    if (line.indent >= 4) {
+    if (line.indent >= line.indentLimit) {
       return undefined;
     }
     const text = line.text;

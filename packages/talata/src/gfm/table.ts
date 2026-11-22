@@ -412,6 +412,7 @@ let headerLine: Line | undefined;
 function headerHtml(state: BlockState, line: Line, end: number): OpenBlock | undefined {
   const text = line.text;
   headerLine ??= createLine(text);
+  headerLine.indentLimit = line.indentLimit;
   const header = headerLine;
   header.text = text;
   header.index = line.index - 1;
@@ -429,6 +430,16 @@ function headerHtml(state: BlockState, line: Line, end: number): OpenBlock | und
   return block;
 }
 
+/** Whether block HTML is on (an extension can turn it off). */
+function hasHtml(state: BlockState): boolean {
+  for (const rule of state.rules.blockByChar[LESS_THAN]) {
+    if (rule === html) {
+      return true;
+    }
+  }
+  return false;
+}
+
 const table: BlockRule = {
   name: 'table',
   // After list items (a container on the delimiter line wins) and before
@@ -439,7 +450,7 @@ const table: BlockRule = {
   gfm: true,
   start(state: BlockState, line: Line): OpenBlock | undefined {
     const paragraph = state.paragraph;
-    if (paragraph === undefined || state.lazy || line.indent >= 4) {
+    if (paragraph === undefined || state.lazy || line.indent >= line.indentLimit) {
       return undefined;
     }
     const lines = paragraph.lines;
@@ -463,14 +474,14 @@ const table: BlockRule = {
     headerPrefix(state, lines);
     // A continuation line with 4 or more columns of indentation does not try
     // an interrupt in micromark, so it cannot be a header.
-    if (count > 2 && indentColumns(text, prefixStart, headerStart, prefixTab) >= 4) {
+    if (count > 2 && indentColumns(text, prefixStart, headerStart, prefixTab) >= line.indentLimit) {
       return undefined;
     }
     const header = state.splitParagraph(1);
     if (header === undefined) {
       return undefined;
     }
-    if (count > 2 && text.charCodeAt(headerStart) === LESS_THAN) {
+    if (count > 2 && text.charCodeAt(headerStart) === LESS_THAN && hasHtml(state)) {
       const block = headerHtml(state, line, headerEnd);
       if (block !== undefined) {
         return block;

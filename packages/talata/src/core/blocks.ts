@@ -119,6 +119,16 @@ export interface BlockState extends DocumentState {
    * prefixes, split-tab columns (`OpenParagraph` keeps them).
    */
   inline(node: { children: PhrasingContent[] }, ranges: number[], indents?: number[]): void;
+  /**
+   * Reads `line` again as a line on which the open blocks up to `depth` matched
+   * and took their prefixes: the blocks above `depth` are asked to continue,
+   * then rules start as on any line. For a rule that reads its own lines
+   * again after they went through the containers (a failed MDX flow
+   * construct). Call it from `addLine` of the tip, after closing the tip, for
+   * lines up to the current one, in order; `line` must not be the line the
+   * parser passed in.
+   */
+  readLineAt(line: Line, depth: number): void;
 }
 
 export interface BlockRule {
@@ -218,6 +228,13 @@ export interface OpenParagraph extends OpenBlock {
    * The reference starts a setext heading here, before any definitions.
    */
   start: number;
+  /**
+   * For a paragraph that is not the block parser's own (an extension's block
+   * that goes on as one): the `indents` of its lines, as `paragraphIndents`
+   * returns them, for the rules that take it (setext heading, table,
+   * definitions).
+   */
+  inlineIndents?(): number[] | undefined;
 }
 
 /**
@@ -297,7 +314,7 @@ export class BlockParser implements BlockState {
     if (starts[count - 1] === text.length) {
       count--;
     }
-    const line = createLine(text);
+    const line = createLine(text, this.rules.indentLimit);
     this.line = line;
     for (let i = 0; i < count; i++) {
       let end = text.length;
@@ -349,10 +366,10 @@ export class BlockParser implements BlockState {
     return true;
   }
 
-  processLine(line: Line): void {
+  processLine(line: Line, from = 0): void {
     const stack = this.stack;
-    let matched = 0;
-    for (let i = 1; i < stack.length; i++) {
+    let matched = from;
+    for (let i = from + 1; i < stack.length; i++) {
       const block = stack[i];
       this.container = stack[i - 1];
       if (!block.continue(this, line)) {
@@ -503,6 +520,13 @@ export class BlockParser implements BlockState {
       this.containerIndex = stack.length - 2;
       this.container = stack[this.containerIndex];
     }
+  }
+
+  readLineAt(line: Line, depth: number): void {
+    const current = this.line;
+    this.line = line;
+    this.processLine(line, depth);
+    this.line = current;
   }
 
   openContainer(block: OpenBlock): void {

@@ -7,6 +7,7 @@ export default defineConfig({
     'src/frontmatter.ts',
     'src/math.ts',
     'src/directive.ts',
+    'src/mdx.ts',
   ],
   platform: 'neutral',
   target: 'es2020',

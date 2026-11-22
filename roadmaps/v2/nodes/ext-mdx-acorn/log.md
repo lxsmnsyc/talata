@@ -1,0 +1,14 @@
+# Log: ext-mdx-acorn
+
+- Nothing of the node existed on batch/v2. Branch feat/ext-mdx-acorn reset to batch/v2 (0940869).
+- Dev deps: acorn ^8.19.0, acorn-jsx ^5.3.2, micromark-extension-mdxjs ^3.0.0.
+- Design: `acorn.ts` (structural types, `parseExpression`, `parseEsm`, place mapping from stops as `micromark-util-events-to-acorn`), scanner asks acorn at each `}` when `js` is bound, `esm.ts` the ESM leaf. Rules of `mdx({ acorn })` are wrapped to bind the acorn to the source, so `reread.ts` and `lookahead.ts` scanners get it without edits.
+- Reference checks: ESM in a container directive is parsed after all top-level flow (`:::x\nimport a from "b"\n:::\n\nimport a from "c"` fails at 2:8). `reparse` in the transform parses again with the names in the reference's order when they differ.
+- Reference inputs of mdxjs, mdxjs-esm and mdx-expression tests (121): all equal on the first run.
+- Fuzz 200k seed 2 found: (1) ESM on a GFM table header row that interrupts a paragraph (`a\nimport |o\n-|-`), fixed with `mdxjsEsmHeader` before the table rule; (2) re-read constructs open past the failed lines: the next line was always lazy or content, but a list item or footnote definition starting there ends the content (`> <d b="\n> {a\n> "/>x\n- y`). Also wrong without acorn on batch/v2. Fixed in `prefixes.ts` (`quoteMissing` now knows list items and footnote definitions, `contentEndAt`) and `Scanner.feed`; `reread.ts` untouched.
+- Fuzz 200k seed 3: ESM after a blank line inside a failed multi-line tag (`<a b="\n\nexport ">c`): `esmInFailedLines`, one call in `flow.ts` `addLine`.
+- Targeted generator (`test/mdx-acorn-targeted.test.ts`): closing fence of a container directive in a re-read (EOF, or lazy when a quote is open inside); a quote start ends the content too; split tabs make an empty acorn chunk whose stop is the place (`virtualStart`); an error on the last line of an unclosed directive at the end of the text was counted outside it (`order.ts`).
+- Bug of my own found by the tests: `Scanner.lastCrash` kept from an acorn parse leaked into a later `mdx()` parse. Reset in every `startExpression`.
+- Left (blocker for the lead): a re-read construct that runs past the failed lines does not take those lines (`<a b="\n{a">x\n>}x`, also without acorn). Needs `reread.ts` and the re-read part of `flow.ts`. About 1 in 5,000 targeted documents; not seen in the `--all` fuzz.
+- Review fixes: ESM after a directive opener in failed lines skipped; cache key keeps `undefined`; table body base bug (`quietFlowErrors`, deeper blocks only after seed 20261123 showed the first version too broad).
+- Rebased onto fix-mdx-reread-container: dropped my `quoteMissing`/`contentEndAt` and the order.ts end-of-text fix (theirs covers both); ESM in lines read again now goes through `handOver` (`last` -2) and `readLineAt`; targeted runs then found ESM after ESM, ESM after a fence and missing kept whitespace in re-read expressions (`keptOf`), all fixed.

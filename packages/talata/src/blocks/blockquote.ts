@@ -106,7 +106,7 @@ export function matchedOnlyAtEnd(state: BlockState, line: Line): boolean {
 }
 
 function consumeQuotePrefix(line: Line): boolean {
-  if (line.indent >= 4 || line.text.charCodeAt(line.nonBlank) !== GREATER_THAN) {
+  if (line.indent >= line.indentLimit || line.text.charCodeAt(line.nonBlank) !== GREATER_THAN) {
     return false;
   }
   advanceLine(line, line.nonBlank + 1);
