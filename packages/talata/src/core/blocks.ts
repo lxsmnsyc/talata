@@ -1,9 +1,13 @@
 import type { PhrasingContent, RootContent } from 'mdast';
 import openParagraph from '../blocks/paragraph';
 import { CR, LF } from './chars';
+import { documentPass, textPass } from './chunks';
+import type { ChunkQueue } from './chunks';
 import { createLine, isLastLine, measureLine } from './line';
 import type { Line } from './line';
 import type { Registry } from './registry';
+import { SPAN_SIZE } from './spans';
+import type { Spans } from './spans';
 import type { DocumentState, ParseOptions } from './state';
 import type { Source } from './source';
 
@@ -129,6 +133,49 @@ export interface BlockState extends DocumentState {
    * parser passed in.
    */
   readLineAt(line: Line, depth: number): void;
+  /** 0 for the source, d for the content of a container directive inside d - 1 others. */
+  readonly depth: number;
+  /** End offset of this document's last line: the source length, or the end of the last span. Look-ahead stops here. */
+  readonly end: number;
+  /**
+   * From `BlockRule.start`, when the leaf it returns may still fail on a
+   * later line (an MDX flow tag or expression that does not end on its line,
+   * ESM). The paragraph or interruptible leaf at the tip, the one `attach`
+   * would close, comes off the stack without closing ("held"). The core
+   * records this line, from where `tryStart` began, and every later line of
+   * this document's flow, until `commit` or `rewind`. The leaf must be
+   * concrete (no `interruptible`), and `start` must return it. At most one
+   * mark is open per document.
+   */
+  mark(): FlowMark;
+  /**
+   * From `continue` of the marked leaf, on the line where it succeeds. The
+   * held leaf closes now (prefix rules, then its inline chunk), so its node
+   * comes before the marked leaf's. Recording stops.
+   */
+  commit(mark: FlowMark): void;
+  /**
+   * From `addLine` of the marked leaf, on the line where it fails (its
+   * `continue` returned true for that line). The marked leaf leaves the
+   * stack without `close`, the held leaf is the tip again, and the recorded
+   * lines are read again, this one included. On the first recorded line the
+   * candidates up to and including `rule` are skipped. `processLine` returns
+   * after `addLine` returns.
+   */
+  rewind(mark: FlowMark, rule: BlockRule): void;
+  /**
+   * From `close` of a container directive: queues `spans` as the document at
+   * depth `this.depth + 1`, at `documentPass(this.depth + 1)`, ordered by the
+   * first span's start. Its nodes go into `node.children` when it runs.
+   * Nothing is queued for empty content.
+   */
+  document(node: { children: RootContent[] }, spans: Spans): void;
+}
+
+/** Opaque to rules. */
+export interface FlowMark {
+  /** Index of its first line among the recorded lines. */
+  readonly line: number;
 }
 
 export interface BlockRule {
@@ -218,6 +265,13 @@ export interface OpenBlock {
    * nothing.
    */
   close(state: BlockState, children: RootContent[]): RootContent | undefined;
+  /**
+   * Marked leaves: the line is lazy for this leaf (a container around it did
+   * not match and no container started). Called before any leaf rule runs on
+   * the line and before the leaf closes. `line.start` is after the prefixes
+   * that matched. An MDX construct throws its lazy-line error here.
+   */
+  onLazyLine?(state: BlockState, line: Line): void;
 }
 
 export interface OpenParagraph extends OpenBlock {
@@ -268,12 +322,45 @@ const document: OpenBlock = {
   },
 };
 
+/** Numbers per recorded line: index, start, end, visual column, split-tab columns, matched, unmatched, flags. */
+const RECORD_SIZE = 8;
+/** Record flags: `line.last` and `line.endsContent`. */
+const LAST = 1;
+const ENDS_CONTENT = 2;
+
+/** A flow mark while it is open. */
+class OpenMark implements FlowMark {
+  line = 0;
+  /** The marked leaf, once its rule's `start` returned it. */
+  block: OpenBlock | undefined = undefined;
+  /** The leaf that came off the stack without closing, and its children. */
+  held: OpenBlock | undefined;
+  heldChildren: RootContent[];
+  /** Index in the stack of the container of the marked leaf's flow. */
+  containerIndex: number;
+
+  constructor(held: OpenBlock | undefined, heldChildren: RootContent[], containerIndex: number) {
+    this.held = held;
+    this.heldChildren = heldChildren;
+    this.containerIndex = containerIndex;
+  }
+}
+
+/**
+ * The block parser of one document: the source, or the content of a
+ * container directive. Its document layer (`processLine`) decides the
+ * containers of each line once; the flow layer (`flowLine`) reads the leaves
+ * of the innermost matched container and can go back to a mark.
+ */
 export class BlockParser implements BlockState {
   source: Source;
   options: ParseOptions;
   definitions: Set<string>;
   footnotes: Set<string>;
   rules: Registry;
+  queue: ChunkQueue;
+  depth: number;
+  end: number;
   container: OpenBlock = document;
   paragraph: OpenParagraph | undefined = undefined;
   lazy = false;
@@ -293,20 +380,56 @@ export class BlockParser implements BlockState {
   children: RootContent[][] = [[]];
   /** Index in `stack` of `container`. */
   containerIndex = 0;
-  inlineNodes: { children: PhrasingContent[] }[] = [];
-  inlineRanges: number[][] = [];
-  inlineIndents: (number[] | undefined)[] = [];
+  /** The lines of a nested document, or undefined for the source. */
+  spans: Spans | undefined;
+  /** The pass of this document's text chunks. */
+  textPass: number;
+  /** The open flow mark, if any. */
+  flowMark: OpenMark | undefined = undefined;
+  /** Lines recorded while a mark is open, `RECORD_SIZE` numbers each. */
+  records: number[] = [];
+  /** While a replay runs: the index of the next record it reads; -1 otherwise. */
+  replayAt = -1;
+  /** While a replay runs: the container of the rewound mark's flow, and the `unmatched` of the line. */
+  replayContainer = 0;
+  replayUnmatched = false;
+  /** The rule a rewind skips through on the first replayed line. */
+  skipRule: BlockRule | undefined = undefined;
+  /** The deepest open block that matched the current line, or the last container that started on it. */
+  lineMatched = 0;
 
-  constructor(state: DocumentState) {
+  constructor(state: DocumentState, spans?: Spans, depth = 0) {
     this.source = state.source;
     this.options = state.options;
     this.definitions = state.definitions;
     this.footnotes = state.footnotes;
     this.rules = state.rules;
+    this.queue = state.queue;
+    this.spans = spans;
+    this.depth = depth;
+    this.textPass = textPass(depth, 0);
+    this.end =
+      spans === undefined || spans.to <= spans.from
+        ? state.source.text.length
+        : spans.data[(spans.to - 1) * SPAN_SIZE + 2];
   }
 
   /** Parses all lines and returns the document's children. */
   run(): RootContent[] {
+    const line = createLine(this.source.text, this.rules.indentLimit);
+    this.line = line;
+    if (this.spans === undefined) {
+      this.readSource(line);
+    } else {
+      this.readSpans(line, this.spans);
+    }
+    this.closeTo(0);
+    this.closeKeepsLineEnding = false;
+    return this.children[0];
+  }
+
+  /** The line source of the source text. */
+  readSource(line: Line): void {
     const text = this.source.text;
     const starts = this.source.lineStarts;
     let count = starts.length;
@@ -314,8 +437,6 @@ export class BlockParser implements BlockState {
     if (starts[count - 1] === text.length) {
       count--;
     }
-    const line = createLine(text, this.rules.indentLimit);
-    this.line = line;
     for (let i = 0; i < count; i++) {
       let end = text.length;
       if (i + 1 < starts.length) {
@@ -330,32 +451,52 @@ export class BlockParser implements BlockState {
       line.visualColumn = 0;
       line.partialTab = 0;
       line.endsContent = false;
+      line.last = end === text.length;
       measureLine(line);
       this.processLine(line);
     }
     if (count < starts.length) {
-      this.closeKeepsLineEnding = this.continuesOverEnd(line);
+      this.closeKeepsLineEnding = this.continuesOverEnd(line, starts.length - 1);
     }
-    this.closeTo(0);
-    this.closeKeepsLineEnding = false;
-    return this.children[0];
+  }
+
+  /** The line source of a nested document. */
+  readSpans(line: Line, spans: Spans): void {
+    const data = spans.data;
+    const to = spans.to;
+    for (let k = spans.from; k < to; k++) {
+      const at = k * SPAN_SIZE;
+      line.index = data[at];
+      line.start = data[at + 1];
+      line.end = data[at + 2];
+      line.visualColumn = data[at + 3];
+      line.partialTab = data[at + 4];
+      line.endsContent = false;
+      line.last = k === to - 1 && !spans.finalLineEnding;
+      measureLine(line);
+      this.processLine(line);
+    }
+    if (spans.finalLineEnding && to > spans.from) {
+      this.closeKeepsLineEnding = this.continuesOverEnd(line, data[(to - 1) * SPAN_SIZE] + 1);
+    }
   }
 
   /**
    * After a final line ending: whether every open block above the tip
-   * continues on the empty line after it. Asked for every tip, so a container
-   * or a paragraph at the tip sees the answer in `closeKeepsLineEnding` as a
-   * leaf does.
+   * continues on the empty line `index` after it, read from the line start.
+   * Asked for every tip, so a container or a paragraph at the tip sees the
+   * answer in `closeKeepsLineEnding` as a leaf does.
    */
-  continuesOverEnd(line: Line): boolean {
+  continuesOverEnd(line: Line, index: number): boolean {
     const stack = this.stack;
-    const end = this.source.text.length;
-    line.index = this.source.lineStarts.length - 1;
-    line.start = end;
-    line.end = end;
+    const at = this.source.lineStarts[index];
+    line.index = index;
+    line.start = at;
+    line.end = at;
     line.visualColumn = 0;
     line.partialTab = 0;
     line.endsContent = false;
+    line.last = true;
     measureLine(line);
     for (let i = 1; i < stack.length - 1; i++) {
       this.container = stack[i - 1];
@@ -366,8 +507,14 @@ export class BlockParser implements BlockState {
     return true;
   }
 
+  /** The document layer: the open containers continue on `line`, then the flow reads the rest. */
   processLine(line: Line, from = 0): void {
     const stack = this.stack;
+    const mark = this.flowMark;
+    if (mark !== undefined) {
+      this.processMarkedLine(line, mark);
+      return;
+    }
     let matched = from;
     for (let i = from + 1; i < stack.length; i++) {
       const block = stack[i];
@@ -377,9 +524,95 @@ export class BlockParser implements BlockState {
       }
       matched = i;
       if (!block.isContainer) {
+        // A matched leaf other than a paragraph takes the line as content,
+        // unless it is interruptible and a block starts.
+        if (!isParagraph(block) && block.interruptible !== true) {
+          block.addLine?.(this, line);
+          return;
+        }
         break;
       }
     }
+    this.flowLine(line, matched, undefined);
+  }
+
+  /**
+   * `processLine` while the tip is a marked leaf. When every container
+   * matched, the line is recorded and goes to the leaf. Otherwise only
+   * container rules run first: a container that starts closes the leaf, and
+   * with none the line is lazy for the leaf (`onLazyLine`), which closes.
+   */
+  processMarkedLine(line: Line, mark: OpenMark): void {
+    const stack = this.stack;
+    const top = stack.length - 1;
+    const leaf = stack[top];
+    let matched = 0;
+    for (let i = 1; i < top; i++) {
+      this.container = stack[i - 1];
+      if (!stack[i].continue(this, line)) {
+        break;
+      }
+      matched = i;
+    }
+    if (matched === top - 1) {
+      const records = this.records;
+      const at = records.length;
+      records.push(
+        line.index,
+        line.start,
+        line.end,
+        line.visualColumn,
+        line.partialTab,
+        matched,
+        0,
+        (line.last ? LAST : 0) | (line.endsContent ? ENDS_CONTENT : 0),
+      );
+      this.container = stack[top - 1];
+      if (leaf.continue(this, line)) {
+        if (this.flowMark === mark) {
+          records[at + 5] = top;
+        }
+        leaf.addLine?.(this, line);
+        return;
+      }
+      // The leaf ended without `commit` or `rewind`: it closes as committed.
+      this.flowLine(line, matched, undefined);
+      return;
+    }
+    this.containerIndex = matched;
+    this.container = stack[matched];
+    this.paragraph = undefined;
+    this.lazy = false;
+    this.tip = undefined;
+    this.unmatched = !(
+      this.contentEndsBlock !== undefined &&
+      this.contentEndsLine === line.index - 1 &&
+      this.getDepth(this.contentEndsBlock) > matched
+    );
+    this.lineMatched = matched;
+    if (!line.blank) {
+      const start = line.start;
+      const partialTab = line.partialTab;
+      const block = this.tryStartContainer(line);
+      if (block !== undefined) {
+        this.attachStarted(line, block, start, partialTab, false);
+        return;
+      }
+    }
+    leaf.onLazyLine?.(this, line);
+    this.closeTo(top - 1);
+    this.flowLine(line, matched, undefined);
+  }
+
+  /**
+   * The flow layer: the part of `processLine` after the containers, with
+   * `matched` the deepest open block that continued. In a replay containers
+   * do not start, `containerIndex` is the rewound mark's and `unmatched` the
+   * recorded value; `skip` is the rewound rule on the first replayed line.
+   */
+  flowLine(line: Line, matched: number, skip: BlockRule | undefined): void {
+    const replaying = this.replayAt >= 0;
+    const stack = this.stack;
     const deepest = stack[matched];
     // A matched leaf other than a paragraph takes the line as content, unless
     // it is interruptible and a block starts.
@@ -392,7 +625,11 @@ export class BlockParser implements BlockState {
     const top = stack.length - 1;
     const tip = stack[top];
     const paragraph = !leaf && isParagraph(tip) ? tip : undefined;
-    this.containerIndex = deepest.isContainer ? matched : matched - 1;
+    if (replaying) {
+      this.containerIndex = this.replayContainer;
+    } else {
+      this.containerIndex = deepest.isContainer ? matched : matched - 1;
+    }
     this.container = stack[this.containerIndex];
     this.paragraph = paragraph;
     this.lazy = paragraph !== undefined && matched !== top;
@@ -402,53 +639,99 @@ export class BlockParser implements BlockState {
       this.lazy = false;
     }
     this.tip = !tip.isContainer && matched >= top - 1 ? tip : undefined;
-    this.unmatched = this.containerIndex < (tip.isContainer ? top : top - 1);
-    // The line after `endContent`: its block not matching means the content ended before it.
-    if (
-      this.contentEndsBlock !== undefined &&
-      this.contentEndsLine === line.index - 1 &&
-      this.getDepth(this.contentEndsBlock) > matched
-    ) {
-      this.unmatched = false;
+    if (replaying) {
+      this.unmatched = this.replayUnmatched;
+    } else {
+      this.unmatched = this.containerIndex < (tip.isContainer ? top : top - 1);
+      // The line after `endContent`: its block not matching means the content ended before it.
+      if (
+        this.contentEndsBlock !== undefined &&
+        this.contentEndsLine === line.index - 1 &&
+        this.getDepth(this.contentEndsBlock) > matched
+      ) {
+        this.unmatched = false;
+      }
     }
+    this.lineMatched = matched;
 
-    let started = false;
-    while (!line.blank) {
+    if (!line.blank) {
       const start = line.start;
       const partialTab = line.partialTab;
-      const block = this.tryStart(line);
-      if (block === undefined) {
-        break;
+      const block = this.tryStart(
+        line,
+        skip === undefined ? 0 : this.candidatesAfter(line, skip),
+        replaying,
+      );
+      if (block !== undefined) {
+        this.attachStarted(line, block, start, partialTab, replaying);
+        return;
       }
-      started = true;
-      if (this.lazy && block.keepsLazyContainers === true && !isLastLine(line)) {
+    }
+
+    if (leaf) {
+      deepest.addLine?.(this, line);
+      return;
+    }
+    if (paragraph !== undefined && this.lazy && !line.blank) {
+      paragraph.addLine!(this, line);
+      return;
+    }
+    // A replay closes no container, even on a lazy first line.
+    this.closeTo(replaying && matched < this.containerIndex ? this.containerIndex : matched);
+    const last = stack[stack.length - 1];
+    if (isParagraph(last)) {
+      last.addLine!(this, line);
+    } else if (!line.blank) {
+      this.attach(openParagraph(this, line));
+    }
+  }
+
+  /**
+   * Adds `block`, which started on `line` at `start` and `partialTab`, then
+   * runs the rules again on the rest of the line after a container. A line
+   * left without a leaf goes to a paragraph.
+   */
+  attachStarted(
+    line: Line,
+    block: OpenBlock,
+    start: number,
+    partialTab: number,
+    noContainers: boolean,
+  ): void {
+    const stack = this.stack;
+    let current = block;
+    let from = start;
+    let tab = partialTab;
+    for (;;) {
+      if (
+        this.lazy &&
+        current.keepsLazyContainers === true &&
+        !isLastLine(line) &&
+        this.flowMark?.block !== current
+      ) {
         // Close only the paragraph; the block takes its place.
         this.containerIndex = stack.length - 2;
       }
-      this.attach(block);
+      this.attach(current);
       this.paragraph = undefined;
       this.lazy = false;
       this.tip = undefined;
       this.unmatched = false;
-      if (!block.isContainer) {
+      if (!current.isContainer) {
         return;
       }
-      if (line.start === start && line.partialTab === partialTab) {
+      this.lineMatched = stack.length - 1;
+      if ((line.start === from && line.partialTab === tab) || line.blank) {
         // The container consumed nothing; running rules again would loop.
         break;
       }
-    }
-
-    if (!started && leaf) {
-      deepest.addLine?.(this, line);
-      return;
-    }
-    if (!started && paragraph !== undefined && this.lazy && !line.blank) {
-      paragraph.addLine!(this, line);
-      return;
-    }
-    if (!started) {
-      this.closeTo(matched);
+      from = line.start;
+      tab = line.partialTab;
+      const next = this.tryStart(line, 0, noContainers);
+      if (next === undefined) {
+        break;
+      }
+      current = next;
     }
     const last = stack[stack.length - 1];
     if (isParagraph(last)) {
@@ -458,24 +741,36 @@ export class BlockParser implements BlockState {
     }
   }
 
-  /** Runs the candidate rules for the rest of `line`. Restores the line after each failure. */
-  tryStart(line: Line): OpenBlock | undefined {
+  /**
+   * Runs the candidate rules for the rest of `line` from candidate `from`,
+   * without the rules that open containers when `noContainers`. Restores the
+   * line after each failure.
+   */
+  tryStart(line: Line, from: number, noContainers: boolean): OpenBlock | undefined {
     const code = line.text.charCodeAt(line.nonBlank);
     const rules = this.rules;
     const candidates = code < 128 ? rules.blockByChar[code] : rules.blockOther;
     const start = line.start;
     const visualColumn = line.visualColumn;
     const partialTab = line.partialTab;
-    for (const rule of candidates) {
+    for (let k = from; k < candidates.length; k++) {
+      const rule = candidates[k];
       if (this.paragraph !== undefined && !rule.canInterruptParagraph) {
         continue;
       }
-      if (this.containerStartsOff && rule.opensContainer === true) {
+      if (rule.opensContainer === true && (this.containerStartsOff || noContainers)) {
         continue;
       }
       const block = rule.start(this, line);
       if (block !== undefined) {
+        const mark = this.flowMark;
+        if (mark !== undefined && mark.block === undefined) {
+          this.markStarted(mark, line, block, start, visualColumn, partialTab);
+        }
         return block;
+      }
+      if (this.flowMark !== undefined && this.flowMark.block === undefined) {
+        throw new Error(`Block rule ${rule.name} called mark() and returned no block`);
       }
       if (
         line.start !== start ||
@@ -489,6 +784,37 @@ export class BlockParser implements BlockState {
       }
     }
     return undefined;
+  }
+
+  /** `tryStart` with only the rules that open containers. */
+  tryStartContainer(line: Line): OpenBlock | undefined {
+    const code = line.text.charCodeAt(line.nonBlank);
+    const rules = this.rules;
+    const candidates = code < 128 ? rules.blockByChar[code] : rules.blockOther;
+    const start = line.start;
+    const visualColumn = line.visualColumn;
+    const partialTab = line.partialTab;
+    for (const rule of candidates) {
+      if (rule.opensContainer !== true || this.containerStartsOff) {
+        continue;
+      }
+      const block = rule.start(this, line);
+      if (block !== undefined) {
+        return block;
+      }
+      line.start = start;
+      line.visualColumn = visualColumn;
+      line.partialTab = partialTab;
+      measureLine(line);
+    }
+    return undefined;
+  }
+
+  /** Index of the candidate after `rule` among the candidates for `line`. */
+  candidatesAfter(line: Line, rule: BlockRule): number {
+    const code = line.text.charCodeAt(line.nonBlank);
+    const candidates = code < 128 ? this.rules.blockByChar[code] : this.rules.blockOther;
+    return candidates.indexOf(rule) + 1;
   }
 
   /**
@@ -582,6 +908,12 @@ export class BlockParser implements BlockState {
       this.containerIndex = this.stack.length - 1;
       this.container = this.stack[this.containerIndex];
     }
+    const mark = this.flowMark;
+    if (mark?.block === block) {
+      // A marked leaf that closes without `commit` or `rewind` (a container
+      // started, a lazy line, the end of the document) closes as committed.
+      this.endMark(mark, parent);
+    }
     if (isParagraph(block)) {
       this.runPrefixRules(block, parent);
       if (block.lines.length === 0) {
@@ -643,8 +975,185 @@ export class BlockParser implements BlockState {
   }
 
   inline(node: { children: PhrasingContent[] }, ranges: number[], indents?: number[]): void {
-    this.inlineNodes.push(node);
-    this.inlineRanges.push(ranges);
-    this.inlineIndents.push(indents);
+    this.queue.text(this.textPass, node, ranges, indents);
   }
+
+  document(node: { children: RootContent[] }, spans: Spans): void {
+    if (spans.to <= spans.from) {
+      return;
+    }
+    const depth = this.depth + 1;
+    this.queue.add(documentPass(depth), spans.data[spans.from * SPAN_SIZE + 1], () => {
+      for (const child of parseDocument(this, spans, depth)) {
+        node.children.push(child);
+      }
+    });
+  }
+
+  mark(): FlowMark {
+    if (this.flowMark !== undefined) {
+      throw new Error('A flow mark is already open in this document');
+    }
+    const stack = this.stack;
+    const tip = stack[stack.length - 1];
+    let held: OpenBlock | undefined;
+    let heldChildren = NO_CHILDREN;
+    // The paragraph `attach` would close, lazy or not, or an interruptible
+    // leaf that matched the line, stays open off the stack while the marked
+    // leaf is tried. micromark keeps the containers of a lazy line open only
+    // for a lazy paragraph: a table there closes with them.
+    if (this.paragraph === tip || (this.tip === tip && tip.interruptible === true)) {
+      held = tip;
+      stack.pop();
+      heldChildren = this.children.pop()!;
+      this.containerIndex = stack.length - 1;
+      this.container = stack[this.containerIndex];
+    }
+    const mark = new OpenMark(held, heldChildren, this.containerIndex);
+    this.flowMark = mark;
+    return mark;
+  }
+
+  /** The rule that took `mark` returned `block`: records the line from where `tryStart` began. */
+  markStarted(
+    mark: OpenMark,
+    line: Line,
+    block: OpenBlock,
+    start: number,
+    visualColumn: number,
+    partialTab: number,
+  ): void {
+    mark.block = block;
+    if (this.replayAt >= 0) {
+      // A replayed line is recorded already.
+      mark.line = this.replayAt - 1;
+      return;
+    }
+    const records = this.records;
+    mark.line = records.length / RECORD_SIZE;
+    records.push(
+      line.index,
+      start,
+      line.end,
+      visualColumn,
+      partialTab,
+      this.lineMatched,
+      this.unmatched ? 1 : 0,
+      (line.last ? LAST : 0) | (line.endsContent ? ENDS_CONTENT : 0),
+    );
+  }
+
+  commit(mark: FlowMark): void {
+    if (mark !== this.flowMark) {
+      throw new Error('The flow mark is not open');
+    }
+    // The marked leaf is the tip; its container's children are below it.
+    this.endMark(this.flowMark, this.children[this.children.length - 2]);
+  }
+
+  /** Ends the open mark: the held leaf closes into `parent`, before the marked leaf. */
+  endMark(mark: OpenMark, parent: RootContent[]): void {
+    this.flowMark = undefined;
+    const held = mark.held;
+    if (held !== undefined) {
+      mark.held = undefined;
+      let node: RootContent | undefined;
+      if (isParagraph(held)) {
+        this.runPrefixRules(held, parent);
+        if (held.lines.length > 0) {
+          node = held.close(this, mark.heldChildren);
+        }
+      } else {
+        node = held.close(this, mark.heldChildren);
+      }
+      if (node !== undefined) {
+        parent.push(node);
+      }
+    }
+    if (this.replayAt < 0) {
+      this.records.length = 0;
+    }
+  }
+
+  rewind(mark: FlowMark, rule: BlockRule): void {
+    const open = this.flowMark;
+    if (open === undefined || open !== mark) {
+      throw new Error('The flow mark is not open');
+    }
+    this.flowMark = undefined;
+    // The marked leaf leaves without `close`; the held leaf is the tip again.
+    this.stack.pop();
+    this.children.pop();
+    if (open.held !== undefined) {
+      this.stack.push(open.held);
+      this.children.push(open.heldChildren);
+    }
+    this.replayContainer = open.containerIndex;
+    this.skipRule = rule;
+    if (this.replayAt >= 0) {
+      // A rewind inside a replay: the running replay goes on from the mark.
+      this.replayAt = open.line;
+      return;
+    }
+    this.replay(open.line);
+  }
+
+  /**
+   * Reads the recorded lines from `from` to the last again, through the flow
+   * only: the container decisions of those lines stand.
+   */
+  replay(from: number): void {
+    const current = this.line;
+    const line = createLine(this.source.text, this.rules.indentLimit);
+    this.line = line;
+    const records = this.records;
+    const stack = this.stack;
+    this.replayAt = from;
+    while (this.replayAt * RECORD_SIZE < records.length) {
+      const at = this.replayAt * RECORD_SIZE;
+      this.replayAt++;
+      line.index = records[at];
+      line.start = records[at + 1];
+      line.end = records[at + 2];
+      line.visualColumn = records[at + 3];
+      line.partialTab = records[at + 4];
+      const flags = records[at + 7];
+      line.last = (flags & LAST) !== 0;
+      line.endsContent = (flags & ENDS_CONTENT) !== 0;
+      measureLine(line);
+      this.replayUnmatched = records[at + 6] === 1;
+      const skip = this.skipRule;
+      this.skipRule = undefined;
+      const containerIndex = this.replayContainer;
+      let matched = records[at + 5];
+      if (matched > containerIndex) {
+        matched = containerIndex;
+      }
+      const top = stack.length - 1;
+      if (matched === containerIndex && top > containerIndex) {
+        // Every container matched: the flow's open leaf may continue.
+        this.container = stack[containerIndex];
+        if (stack[top].continue(this, line)) {
+          matched = top;
+        }
+      }
+      this.flowLine(line, matched, skip);
+    }
+    this.replayAt = -1;
+    this.skipRule = undefined;
+    this.line = current;
+    if (this.flowMark === undefined) {
+      records.length = 0;
+    }
+  }
+}
+
+/**
+ * Parses `spans` as a document at `depth` with its own document and flow
+ * layers. Definitions and footnotes go into the shared sets; text and nested
+ * documents go to `state.queue`. Returns the children. Run by the chunk that
+ * `BlockState.document` queued.
+ */
+export function parseDocument(state: DocumentState, spans: Spans, depth: number): RootContent[] {
+  return new BlockParser(state, spans, depth).run();
 }

@@ -1,13 +1,19 @@
 import type { PhrasingContent, Root } from 'mdast';
 import { describe, expect, test } from 'vitest';
+import { blockRules, paragraphPrefixRules } from '../src/blocks';
+import { createChunkQueue } from '../src/core/chunks';
+import { createRegistry } from '../src/core/registry';
+import { createSource } from '../src/core/source';
+import { createDocumentState } from '../src/core/state';
+import { transforms } from '../src/core/transform';
+import { inlineRules } from '../src/inline';
 import { acorn, parseReference, parseTalata } from './parsers';
 import type { ExtensionName, ExtensionOptions } from './parsers';
 
 // Contract tests for `roadmaps/v2/contracts/block-layers.md` (design D).
 //
-// - The chunk queue is tested on a stub written from the contract. When
-//   mdx-layers-core adds `src/core/chunks.ts`, it runs `describeQueue` on the
-//   real `createChunkQueue` as well (the todo below).
+// - The chunk queue suite `describeQueue` runs on a stub written from the
+//   contract and on the real `createChunkQueue` of `src/core/chunks.ts`.
 // - The order-rule examples check the rule against the reference, then
 //   talata against the reference. Inputs that main gets wrong are skipped
 //   with the node that fixes them; that node turns them on.
@@ -202,9 +208,15 @@ describeQueue('stub', () =>
   ]),
 );
 
-test.todo(
-  'mdx-layers-core: run describeQueue on createChunkQueue from src/core/chunks.ts, with parseInline',
-);
+describeQueue('core', () => {
+  const options = { gfm: false };
+  const rules = createRegistry(
+    { blockRules, paragraphPrefixRules, inlineRules, transforms },
+    options,
+  );
+  // Text chunks run `parseInline` on this source.
+  return createChunkQueue(createDocumentState(createSource('abc def ghi'), options, rules));
+});
 
 describe('passes', () => {
   test('as order.ts numbers them', () => {

@@ -34,6 +34,12 @@ export interface Line {
    */
   endsContent: boolean;
   /**
+   * No line ending follows this line in its document: the last line of the
+   * source, the last span of a nested document without a final line ending,
+   * or the empty line after a final line ending. Set by the line source.
+   */
+  last: boolean;
+  /**
    * Columns of indentation from which a line cannot start a construct (the
    * line is indented code): 4, or Infinity when an extension turned off
    * `codeIndented`. Rules compare `indent >= indentLimit`.
@@ -53,13 +59,19 @@ export function createLine(text: string, indentLimit = 4): Line {
     nonBlank: 0,
     blank: true,
     endsContent: false,
+    last: false,
     indentLimit,
   };
 }
 
-/** Whether `line` is the last line of the text or of a container's content (`endContent`): no line ending follows. */
+/**
+ * Whether no line ending follows `line`: the last line of its document
+ * (`last`), of a container's content (`endContent`), or of the text. The
+ * last test is for lines that extensions make with `createLine` and do not
+ * set `last` on; a line that ends the text is the last of any document.
+ */
 export function isLastLine(line: Line): boolean {
-  return line.end === line.text.length || line.endsContent;
+  return line.last || line.endsContent || line.end === line.text.length;
 }
 
 /** Recomputes `indent`, `nonBlank` and `blank` from `start`. */

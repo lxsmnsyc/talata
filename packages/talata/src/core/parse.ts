@@ -1,26 +1,20 @@
 import type { Root } from 'mdast';
 import { BlockParser } from './blocks';
-import { parseInline } from './inline';
 import type { Registry } from './registry';
 import { createSource, point } from './source';
 import { createDocumentState } from './state';
 import type { ParseOptions } from './state';
 
 /**
- * Parses `value` in three phases: blocks (which fill `definitions` and
- * `footnotes`), inline content of every leaf, then transforms.
+ * Parses `value` in three phases: blocks of the source (which fill
+ * `definitions` and `footnotes` and queue text), the chunk queue (inline
+ * content, labels and nested documents, pass by pass), then transforms.
  */
 export default function parse(value: string, options: ParseOptions, rules: Registry): Root {
   const source = createSource(value);
   const state = createDocumentState(source, options, rules);
-  const blocks = new BlockParser(state);
-  const children = blocks.run();
-  const nodes = blocks.inlineNodes;
-  const ranges = blocks.inlineRanges;
-  const indents = blocks.inlineIndents;
-  for (let i = 0; i < nodes.length; i++) {
-    nodes[i].children = parseInline(state, ranges[i], indents[i]);
-  }
+  const children = new BlockParser(state).run();
+  state.queue.run();
   const tree: Root = {
     type: 'root',
     children,

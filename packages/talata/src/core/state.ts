@@ -1,3 +1,5 @@
+import { createChunkQueue } from './chunks';
+import type { ChunkQueue } from './chunks';
 import { CR, LF, SPACE, TAB } from './chars';
 import type { Registry } from './registry';
 import type { Source } from './source';
@@ -16,6 +18,8 @@ export interface DocumentState {
   footnotes: Set<string>;
   /** The rules in effect for this parse, sorted and filtered by `options`. */
   rules: Registry;
+  /** The later passes: text, labels and nested documents. One per parse, shared by nested documents. */
+  queue: ChunkQueue;
 }
 
 export function createDocumentState(
@@ -23,7 +27,16 @@ export function createDocumentState(
   options: ParseOptions,
   rules: Registry,
 ): DocumentState {
-  return { source, options, definitions: new Set(), footnotes: new Set(), rules };
+  const state: DocumentState = {
+    source,
+    options,
+    definitions: new Set(),
+    footnotes: new Set(),
+    rules,
+    queue: undefined!,
+  };
+  state.queue = createChunkQueue(state);
+  return state;
 }
 
 /**
