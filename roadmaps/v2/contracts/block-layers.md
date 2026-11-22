@@ -1,6 +1,6 @@
 ---
 name: block-layers
-version: 1
+version: 2
 status: frozen
 defined_by: mdx-layers-contract
 ---
@@ -36,9 +36,10 @@ interface Line {
    * No line ending follows this line in its document: the last line of the
    * source, the last span of a nested document without a final line ending,
    * or the empty line after a final line ending. Set by the line source.
-   * `isLastLine(line)` returns `line.last || line.endsContent` until
-   * `endsContent` (v3) goes, then `line.last`. `line.end === text.length`
-   * no longer decides it: it is false for spans.
+   * `isLastLine(line)` returns `line.last || line.endsContent ||
+   * line.end === line.text.length` while talata/mdx builds lines with
+   * `createLine` (which never sets `last`). mdx-layers-flow drops the
+   * `createLine` users, then `endsContent` (v3), leaving `line.last`.
    */
   last: boolean;
 }
@@ -73,8 +74,8 @@ export interface ChunkQueue {
   /**
    * Inline parse of `ranges` into `node.children`, ordered by `ranges[0]`.
    * `BlockState.inline` calls it with `textPass(state.depth, 0)`. Empty
-   * `ranges` (v5 scope hooks of talata/directive) take the start of the
-   * chunk added before them in that pass, or -1. The sort is stable.
+   * `ranges` (v5 scope hooks of talata/directive) take the highest start
+   * added before them in that pass, or -1. The sort is stable.
    * `node.children` is assigned for empty ranges too (the hooks run in
    * its setter).
    */
@@ -108,8 +109,8 @@ interface BlockState {
   /**
    * From `BlockRule.start`, when the leaf it returns may still fail on a
    * later line (an MDX flow tag or expression that does not end on its line,
-   * ESM). The paragraph or interruptible leaf at the tip, the one `attach`
-   * would close, comes off the stack without closing ("held"). The core
+   * ESM). The lazy paragraph, or an interruptible leaf at the tip that
+   * matched the line, comes off the stack without closing ("held"). The core
    * records this line, from where `tryStart` began, and every later line of
    * this flow layer with the facts listed under Flow layer, until
    * `commit` or `rewind`. The leaf must be concrete (no `interruptible`).
@@ -221,7 +222,7 @@ The pass of each chunk, in `order.ts` numbering (one below the spike's trace):
 - The rule is `order.ts`'s: sort by pass, then chunk start. Within a chunk the first error met wins, so the place component of `order.ts` is not needed.
 - Since chunks run in this order and nothing catches, the first `MdxError` thrown is the reference's. Flow errors in the source throw during the block parse. Flow errors in directive content throw in their document chunk, and text errors in their text chunk.
 - Definitions and footnote definitions are added when their paragraph closes, in the document that holds them, so text sees exactly the labels micromark had defined before it. `scopes.ts` is no longer needed.
-- Leaves of one document close in document order, and only one leaf is open at a time (the held leaf closes in `commit`, before the marked one). So `text` chunks from one document arrive sorted by start. A pass needs sorting only when chunks from different producers meet (labels and nested text in the same pass). Sort it once when it starts, and only if an added start was lower than the last.
+- Leaves of one document close in document order, and only one leaf is open at a time (the held leaf closes in `commit`, before the marked one). So `text` chunks from one document arrive sorted by start, except a label queued from `start` before the paragraph it interrupts closes; the sort fixes that. A pass needs sorting only when chunks from different producers meet (labels and nested text in the same pass). Sort it once when it starts, and only if an added start was lower than the last.
 
 Examples, each checked against the reference in `test/layers-contract.test.ts` (`[directive, mdx]`):
 
@@ -311,3 +312,7 @@ Three nodes, each with its tree hashes against the node before it.
 - Hook removal: mdx-layers-flow removes the old hooks from `src/core/blocks.ts`, `src/core/line.ts` and `src/blocks/paragraph.ts`.
 - Released `talata/directive` 0.3 output may change where main differs from the reference. Each change is listed in the outcome and gets a patch changeset.
 - Performance gate: measure main against main with perf-pass `bench.py` to get the noise; the branch passes when its gap is within that noise and never over 3%.
+
+## Changes
+
+- v2 (2026-11-23, from mdx-layers-core): empty text ranges take the highest start added before them; `isLastLine` keeps `line.end === line.text.length` until mdx-layers-flow; `mark` holds only the lazy paragraph or an interruptible leaf that matched the line. See `block-layers.change-request.md`.

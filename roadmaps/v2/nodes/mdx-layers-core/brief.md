@@ -1,7 +1,7 @@
 ---
 id: mdx-layers-core
 title: Split the block parser into document and flow layers
-status: active
+status: done
 priority: must
 type: refactor
 outline: false
@@ -9,6 +9,7 @@ milestone: m5-mdx
 target:
 from:
 size: L
+spent: 490000
 spike: false
 verify:
 exclusive: []

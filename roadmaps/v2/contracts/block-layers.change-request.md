@@ -1,7 +1,7 @@
 # Change request: block-layers v1 to v2
 
 - From node: mdx-layers-core
-- Status: open
+- Status: accepted
 
 ## Problem
 
@@ -29,3 +29,5 @@ Three points of the contract do not hold with the code as it is.
 The three changes are in `src/core/chunks.ts`, `src/core/line.ts` and `src/core/blocks.ts` (`mark`) on `refactor/mdx-layers-core`. Tree comparison against main, 1,000,000 documents per extension set with gfm off and on: no difference.
 
 ## Decision
+
+Accepted 2026-11-23 by the orchestrator after a fresh review of mdx-layers-core. All three points are in `block-layers.md` v2.
