@@ -424,7 +424,7 @@ export function reparse(tree: Root, state: DocumentState): boolean {
     return false;
   }
   // The reference's order: by depth, then in document order.
-  const sorted = records.toSorted((a, b) => a.depth - b.depth || a.start - b.start);
+  const sorted = records.slice().sort((a, b) => a.depth - b.depth || a.start - b.start);
   const names = new Map<number, string[]>();
   let defined: string[] = [];
   let stable = true;

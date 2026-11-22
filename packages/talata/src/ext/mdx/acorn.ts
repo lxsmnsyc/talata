@@ -77,11 +77,41 @@ export function jsOf(source: Source): Js | undefined {
   return source === boundSource ? boundJs : undefined;
 }
 
+/** Whether `code` is in the `\s` class of regular expressions. */
+function isSpace(code: number): boolean {
+  return (
+    (code >= 9 && code <= 13) ||
+    code === 32 ||
+    code === 0xa0 ||
+    code === 0x1680 ||
+    (code >= 0x2000 && code <= 0x200a) ||
+    code === 0x2028 ||
+    code === 0x2029 ||
+    code === 0x202f ||
+    code === 0x205f ||
+    code === 0x3000 ||
+    code === 0xfeff
+  );
+}
+
 /**
  * Whether `value` holds only whitespace and comments, as the reference's
  * `empty`. A line comment needs a line ending after it.
  */
 function isEmpty(value: string): boolean {
+  // Nothing before the first non-whitespace character can be a comment that
+  // takes it, unless it starts one: then the regular expressions decide.
+  // Called at each `}`, so a long expression must not be read whole.
+  let first = 0;
+  while (first < value.length && isSpace(value.charCodeAt(first))) {
+    first++;
+  }
+  if (first === value.length) {
+    return true;
+  }
+  if (value.charCodeAt(first) !== 47) {
+    return false;
+  }
   return /^\s*$/.test(
     value.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\r\n]*(\r\n|\n|\r)/g, ''),
   );
