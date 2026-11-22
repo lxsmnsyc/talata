@@ -2,11 +2,12 @@
 
 talata returns the same mdast tree as `mdast-util-from-markdown`, positions included. Moving a project over means changing how the parser is called. Everything that reads the tree keeps working.
 
-This guide covers three starting points:
+This guide covers four starting points:
 
 - [`mdast-util-from-markdown`](#from-mdast-util-from-markdown), with or without GFM.
 - [Frontmatter and math](#frontmatter-and-math) extensions.
 - [Directives](#directives).
+- [MDX](#mdx).
 - [`unified` with `remark-parse`](#from-unified-and-remark-parse).
 
 Then it lists [what does not carry over](#what-does-not-carry-over) and shows how to [check your output](#check-your-output).
@@ -173,6 +174,74 @@ Notes:
 - `directive()` combines with `frontmatter()` and `math()` in the same `extensions` list, and works without `gfm: true`.
 - With `remark-stringify`, keep `remark-directive` in the pipeline for its serializer, the same way as [the other extensions](#with-remark-stringify).
 
+## MDX
+
+`talata/mdx` replaces `micromark-extension-mdx` (or `micromark-extension-mdxjs`) with `mdast-util-mdx`, and `remark-mdx` in unified. It parses JSX elements, expressions in braces and, with acorn, `import` and `export` lines into `mdxJsxFlowElement`, `mdxJsxTextElement`, `mdxFlowExpression`, `mdxTextExpression` and `mdxjsEsm` nodes.
+
+`mdx()` is the same as `micromark-extension-mdx`: it counts braces and does not parse ESM. `mdx({ acorn })` is the same as `micromark-extension-mdxjs`. You pass acorn in, so install `acorn` and `acorn-jsx` yourself.
+
+Before:
+
+```js
+import { fromMarkdown } from 'mdast-util-from-markdown';
+import { mdxFromMarkdown } from 'mdast-util-mdx';
+import { mdxjs } from 'micromark-extension-mdxjs';
+
+const tree = fromMarkdown(value, {
+  extensions: [mdxjs()],
+  mdastExtensions: [mdxFromMarkdown()],
+});
+```
+
+After:
+
+```js
+import * as acorn from 'acorn';
+import acornJsx from 'acorn-jsx';
+import { fromMarkdown } from 'talata';
+import { mdx } from 'talata/mdx';
+
+const tree = fromMarkdown(value, {
+  extensions: [mdx({ acorn: acorn.Parser.extend(acornJsx()) })],
+});
+```
+
+With unified, before:
+
+```js
+import remarkMdx from 'remark-mdx';
+import remarkParse from 'remark-parse';
+import { unified } from 'unified';
+
+const processor = unified().use(remarkParse).use(remarkMdx);
+const tree = await processor.run(processor.parse(value));
+```
+
+After:
+
+```js
+import * as acorn from 'acorn';
+import acornJsx from 'acorn-jsx';
+import { unified } from 'unified';
+import { mdx } from 'talata/mdx';
+import { talata } from 'talata/unified';
+
+const extension = mdx({ acorn: acorn.Parser.extend(acornJsx()) });
+const processor = unified().use(talata, { extensions: [extension] });
+const tree = await processor.run(processor.parse(value));
+```
+
+Notes:
+
+- `mdxFromMarkdown` has no counterpart. The extension builds its own nodes.
+- `acornOptions` goes to acorn, with the same default as the reference.
+- Without `acorn`, `mdx()` does not parse `import` and `export`, and `{"}"}` ends at the first `}`, as in `micromark-extension-mdx`.
+- **No `data.estree`.** The reference attaches the parsed program to expressions, attributes and ESM nodes. talata does not. If a plugin reads `data.estree`, for example the compile step of `@mdx-js/mdx` or a `recma` plugin, keep the reference for that parse.
+- Bad syntax throws an `MdxError`, a subclass of `Error`, with the reference's `reason` and `place`. The `source` and `ruleId` fields are not set.
+- `mdx()` turns off indented code, autolinks and HTML, as the reference does.
+- `mdx()` combines with the other extensions in the same `extensions` list.
+- With `remark-stringify`, keep `remark-mdx` in the pipeline for its serializer, the same way as [the other extensions](#with-remark-stringify).
+
 ## From unified and `remark-parse`
 
 `talata/unified` is a unified plugin that replaces `remark-parse`. It also replaces `remark-gfm`, `remark-frontmatter` and `remark-math` as parsers. Keep the rest of the pipeline as it is.
@@ -312,7 +381,7 @@ const markdown = String(
 
 ## What does not carry over
 
-- **micromark syntax extensions.** talata does not run micromark. Plugins that add syntax through it do not work, for example `remark-mdx` and `remark-wiki-link`. With the unified plugin, their syntax is parsed as plain Markdown. Plugins that only transform the tree are not affected.
+- **micromark syntax extensions.** talata does not run micromark. Plugins that add syntax through it do not work, for example `remark-wiki-link`. With the unified plugin, their syntax is parsed as plain Markdown. Plugins that only transform the tree are not affected.
 - **`mdastExtensions`.** There is no such option. The `extensions` option takes talata extensions only, and a micromark extension passed there does not work.
 - **The `encoding` argument.** `mdast-util-from-markdown` accepts `fromMarkdown(value, encoding, options)`. talata has `fromMarkdown(value, options)`. A string in the second place is ignored without an error, so the options after it are lost.
 - **`Buffer` input.** Pass a string. Call `buffer.toString('utf8')` first.
@@ -320,7 +389,7 @@ const markdown = String(
 - **GFM settings.** `gfm` is a boolean. The `singleTilde` option of `micromark-extension-gfm` and the `firstLineBlank` option of `mdast-util-gfm` have no counterpart.
 - **HTML output.** talata returns mdast and does not render HTML. Use `remark-rehype` in a unified pipeline, or `mdast-util-to-hast` with `hast-util-to-html` on the tree. The README shows both.
 - **Third-party extensions.** The extension interface is internal. Only the extensions in the package work.
-- **MDX.** Not supported.
+- **`data.estree`.** `talata/mdx` does not attach the parsed JavaScript program to MDX nodes. See [MDX](#mdx).
 
 ### Known differences
 

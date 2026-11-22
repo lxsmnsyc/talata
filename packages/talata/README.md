@@ -80,17 +80,18 @@ This path is 6.5 to 7.5 times faster than `micromark` HTML output on the benchma
 
 ## Extensions
 
-Frontmatter, math and directives ship in the same package, each behind its own subpath. Pass them in `extensions`. Code for an extension reaches your bundle only when you import its subpath.
+Frontmatter, math, directives and MDX ship in the same package, each behind its own subpath. Pass them in `extensions`. Code for an extension reaches your bundle only when you import its subpath.
 
 ```js
 import { fromMarkdown } from 'talata';
 import { frontmatter } from 'talata/frontmatter';
 import { math } from 'talata/math';
 import { directive } from 'talata/directive';
+import { mdx } from 'talata/mdx';
 
 const tree = fromMarkdown(value, {
   gfm: true,
-  extensions: [frontmatter(), math(), directive()],
+  extensions: [frontmatter(), math(), directive(), mdx()],
 });
 ```
 
@@ -99,8 +100,9 @@ const tree = fromMarkdown(value, {
 | `talata/frontmatter` | `frontmatter(options?)` | `micromark-extension-frontmatter` + `mdast-util-frontmatter` | The same as the reference: `'yaml'`, `'toml'`, or matter objects with `type`, `marker` or `fence`, and `anywhere`. Default `'yaml'`. |
 | `talata/math`        | `math(options?)`        | `micromark-extension-math` + `mdast-util-math`               | `{ singleDollarTextMath }`, default `true`.                                                                                          |
 | `talata/directive`   | `directive()`           | `micromark-extension-directive` + `mdast-util-directive`     | None, as in the reference.                                                                                                           |
+| `talata/mdx`         | `mdx(options?)`         | `micromark-extension-mdx` or `-mdxjs` + `mdast-util-mdx`     | `{ acorn, acornOptions }`, as `micromark-extension-mdxjs`. Without `acorn`, braces are counted.                                      |
 
-The unified plugin takes the same option: `.use(talata, { gfm: true, extensions: [frontmatter(), math(), directive()] })`. To serialize with `remark-stringify`, keep `remark-frontmatter`, `remark-math` and `remark-directive` in the pipeline for their serializer rules, as with `remark-gfm`.
+The unified plugin takes the same option: `.use(talata, { gfm: true, extensions: [frontmatter(), math(), directive(), mdx()] })`. To serialize with `remark-stringify`, keep `remark-frontmatter`, `remark-math`, `remark-directive` and `remark-mdx` in the pipeline for their serializer rules, as with `remark-gfm`.
 
 One known difference, only with `anywhere: true`: take a matter that interrupts a lazy paragraph in a block quote or list (`> a\n---\nb\n---`). talata keeps it outside the quote, and the reference puts it inside.
 
@@ -123,23 +125,66 @@ Remove `remark-parse` and `remark-directive` from the pipeline. Plugins that rea
 
 talata decides some line ends inside a container directive by looking one line ahead, where the reference lets micromark do it. The fuzzer found no difference in 1,000,000 documents. It found several such cases while the extension was built, so report any difference you see.
 
+### MDX
+
+`mdx()` replaces `remark-mdx`. It parses JSX elements in flow and text, expressions in braces, and attribute and spread expressions. It builds `mdxJsxFlowElement`, `mdxJsxTextElement`, `mdxFlowExpression` and `mdxTextExpression` nodes, with positions, as `micromark-extension-mdx` 2.1.0 with `mdast-util-mdx` 3.0.0. As in the reference, indented code, autolinks and HTML are off.
+
+```js
+import { fromMarkdown } from 'talata';
+import { mdx } from 'talata/mdx';
+
+const tree = fromMarkdown('# Hi\n\n<Note kind="info">{props.text}</Note>\n', {
+  extensions: [mdx()],
+});
+```
+
+Without a JS parser, `mdx()` counts braces to find the end of an expression and does not parse `import` and `export`. To get what `remark-mdx` gives, pass acorn. talata does not depend on it: you install `acorn` and `acorn-jsx` and pass the parser in.
+
+```js
+import * as acorn from 'acorn';
+import acornJsx from 'acorn-jsx';
+import { mdx } from 'talata/mdx';
+
+const extension = mdx({ acorn: acorn.Parser.extend(acornJsx()) });
+```
+
+With acorn, acorn decides where an expression ends, so `{"}"}` is one expression, and `import` and `export` lines become `mdxjsEsm` nodes. `acornOptions` is passed to acorn, with the same default as `micromark-extension-mdxjs` (`{ ecmaVersion: 2024, sourceType: 'module' }`). The tree matches `micromark-extension-mdxjs` 3.0.0 with `mdast-util-mdx`.
+
+With unified:
+
+```js
+import { unified } from 'unified';
+import { talata } from 'talata/unified';
+import { mdx } from 'talata/mdx';
+
+const processor = unified().use(talata, { gfm: true, extensions: [mdx({ acorn })] });
+```
+
+Remove `remark-parse` and `remark-mdx` from the pipeline. Plugins that read MDX nodes keep working because the tree is the same. Steps and a before and after example: [migration guide](../../docs/migration.md#mdx).
+
+Differences from the reference:
+
+- **No `data.estree`.** The reference with acorn attaches the parsed program to each expression, attribute and ESM node. talata checks the code with acorn and does not keep the result. Plugins that read `data.estree`, such as `recma` plugins or `@mdx-js/mdx` compile steps, need the reference parse step.
+- **Errors.** Bad syntax throws an `MdxError`, a subclass of `Error`, with the reference's `reason` and `place` (a point or a position, or `undefined` for a tag left open at the end). `message` is the reason followed by the place. The `source` and `ruleId` fields of the reference are not set. Code that acorn rejects throws the same way.
+- **One known gap.** When a failed JSX or expression construct holds a container directive opener that is never closed there (`[a]:\n{a\n:::x\n}x\n`), the tree misses that directive. The fuzzer found no other difference in 1,000,000 documents.
+
 ## What is not supported
 
-- **micromark syntax extensions.** talata does not run micromark, so plugins that add syntax through it do not work. Examples are `remark-mdx` and `remark-wiki-link`. With the unified plugin, their syntax is parsed as plain Markdown. Tree plugins are not affected. For frontmatter, math and directives, use talata's own extensions above. MDX is planned.
+- **micromark syntax extensions.** talata does not run micromark, so plugins that add syntax through it do not work. An example is `remark-wiki-link`. With the unified plugin, its syntax is parsed as plain Markdown. Tree plugins are not affected. For frontmatter, math, directives and MDX, use talata's own extensions above.
 - **The rest of the `mdast-util-from-markdown` signature.** There is no `encoding` argument, no `Buffer` input, and the `extensions` option takes talata extensions, not micromark ones. There is no `mdastExtensions` option: each talata extension builds its own nodes. Pass a string.
 
 ## Speed
 
-`pnpm --filter benchmark interleaved`: each round runs every parser once in random order, and the table shows the median of 15 rounds. Apple M2, Node 26.12.1, load average under 6.
+`pnpm --filter benchmark interleaved`: each round runs every parser once in random order, and the table shows the median of 15 rounds. Apple M2, Node 26.12.1, load average under 4.
 
-| Parser                           | Output | READMEs (174 files, 1.5 MB) | node `fs.md` (311 KB) | node `CHANGELOG_V22` (867 KB) |
+| Parser                           | Output | READMEs (192 files, 1.6 MB) | node `fs.md` (311 KB) | node `CHANGELOG_V22` (867 KB) |
 | -------------------------------- | ------ | --------------------------- | --------------------- | ----------------------------- |
-| `mdast-util-from-markdown` + GFM | mdast  | 782.1 ms                    | 189.1 ms              | 533.4 ms                      |
-| **talata**, `gfm: true`          | mdast  | **45.0 ms**                 | **10.3 ms**           | **25.2 ms**                   |
-| talata speedup                   |        | **17.4x**                   | **18.3x**             | **21.2x**                     |
-| `micromark` + GFM                | HTML   | 762.6 ms                    | 178.4 ms              | 503.6 ms                      |
-| markdown-it                      | HTML   | 108.2 ms                    | 35.6 ms               | 96.4 ms                       |
-| marked                           | HTML   | 68.4 ms                     | 17.5 ms               | 63.5 ms                       |
+| `mdast-util-from-markdown` + GFM | mdast  | 829.0 ms                    | 192.8 ms              | 535.3 ms                      |
+| **talata**, `gfm: true`          | mdast  | **48.4 ms**                 | **10.5 ms**           | **25.3 ms**                   |
+| talata speedup                   |        | **17.1x**                   | **18.3x**             | **21.2x**                     |
+| `micromark` + GFM                | HTML   | 796.0 ms                    | 178.8 ms              | 507.0 ms                      |
+| markdown-it                      | HTML   | 122.3 ms                    | 35.4 ms               | 96.2 ms                       |
+| marked                           | HTML   | 76.7 ms                     | 17.8 ms               | 64.3 ms                       |
 
 markdown-it and marked build HTML, not mdast, so they are there for scale only.
 
@@ -151,12 +196,12 @@ Parse time grows linearly with input size, including on inputs that are quadrati
 
 | Build   | talata                | `mdast-util-from-markdown` + GFM |
 | ------- | --------------------- | -------------------------------- |
-| Node    | 94.0 KB, 33.2 KB gzip | 118.2 KB, 35.9 KB gzip           |
-| Browser | 94.0 KB, 33.2 KB gzip | 82.5 KB, 23.8 KB gzip            |
+| Node    | 94.8 KB, 33.4 KB gzip | 118.2 KB, 35.9 KB gzip           |
+| Browser | 94.8 KB, 33.4 KB gzip | 82.5 KB, 23.8 KB gzip            |
 
 talata ships one build for every runtime, with a table of the 2,125 named character references (about 9.5 KB gzip). In browser bundles, the reference decodes those names through the DOM and ships no table, so it is smaller there.
 
-Each extension adds to a bundle only when imported: `talata/frontmatter` is 1.3 KB gzip, `talata/math` is 12.8 KB and `talata/directive` is 19.4 KB. All three include the shared core code they reuse, so most of that is already in a bundle that imports `talata`.
+Each extension adds to a bundle only when imported: `talata/frontmatter` is 1.3 KB gzip, `talata/math` is 12.8 KB, `talata/directive` is 19.8 KB and `talata/mdx` is 29.8 KB. All four include the shared core code they reuse, so most of that is already in a bundle that imports `talata`.
 
 ## How it is tested
 
