@@ -1,7 +1,7 @@
 ---
 id: mdx-layers-directive
 title: Container directives collect raw lines and parse in the chunk queue
-status: todo
+status: done
 priority: must
 type: refactor
 outline: false
@@ -9,6 +9,7 @@ milestone: m5-mdx
 target:
 from:
 size: L
+spent: 620000
 spike: false
 verify:
 exclusive: []

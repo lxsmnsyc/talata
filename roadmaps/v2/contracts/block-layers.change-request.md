@@ -35,7 +35,7 @@ Accepted 2026-11-23 by the orchestrator after a fresh review of mdx-layers-core.
 # Change request: block-layers v2 to v3
 
 - From node: mdx-layers-directive
-- Status: proposed
+- Status: accepted
 
 ## Problem
 
@@ -65,3 +65,7 @@ A nested document parsed from its spans alone does not give the reference's tree
 ## Workaround in place
 
 All six points are on `refactor/mdx-layers-directive`, in `src/core/spans.ts`, `src/core/blocks.ts`, `src/core/chunks.ts`, `src/blocks/blockquote.ts`, `src/gfm/footnote.ts`, `src/ext/mdx/flow.ts` and `src/ext/directive/`.
+
+## Decision
+
+Accepted 2026-11-23 by the orchestrator after a fresh review of mdx-layers-directive, with the reviewer's amendments to points 1 and 4. `block-layers.md` v3 points here.

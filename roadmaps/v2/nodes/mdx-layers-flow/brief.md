@@ -49,6 +49,7 @@ Port `talata/mdx` to the layers: a failed JSX flow tag or flow expression rewind
 - [ ] Every case listed in `nodes/fix-mdx-known-cases/brief.md` and the two regressions in `nodes/fix-mdx-directive-growth/outcome.md` match the reference.
 - [ ] `'{a\n:::x\n}x\n'.repeat(n)` with `[directive, mdx]`, with heads `a. `, `*a* `, `&amp; `, `[a] `, and in quotes and lists, grows under 5x per 4x size (with acorn: no faster than the reference).
 - [ ] 1,000,000-document `--all` and `--all --acorn` fuzz and every targeted generator (re-read, acorn, lazy-place) run 1,000,000 documents with no difference.
+- [ ] `[F]:x\n"\n<s\r>"` with `--all --acorn` matches the reference (fuzz seed 20261201, document 587638; main fails it too).
 - [ ] Output without MDX equals main. Fast check and full check pass.
 
 ## Sizing
