@@ -123,7 +123,7 @@ const tree = processor.parse(
 
 Remove `remark-parse` and `remark-directive` from the pipeline. Plugins that read directive nodes, such as the ones that turn them into hast, keep working because the tree is the same. Steps and a before and after example: [migration guide](../../docs/migration.md#directives).
 
-talata decides some line ends inside a container directive by looking one line ahead, where the reference lets micromark do it. The fuzzer found no difference in 1,000,000 documents with directives on. It found several such cases while the extension was built, so report any difference you see.
+The content of a container directive is parsed as a document of its own, after the text around it, as `micromark-extension-directive` does. Quote prefixes and footnote indents of the containers around the directive take part the same way.
 
 ### MDX
 
