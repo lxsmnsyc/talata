@@ -114,6 +114,7 @@ interface Content {
 /** Content ranges of the container directives in `tree`. */
 function containers(tree: Root, text: string): Content[] {
   const result: Content[] = [];
+  const blank = blankEnd(text);
   const stack: { type: string; children?: unknown[]; position?: Root['position'] }[] = [tree];
   while (stack.length > 0) {
     const node = stack.pop()!;
@@ -127,9 +128,10 @@ function containers(tree: Root, text: string): Content[] {
         start++;
       }
       // Content that runs to the end of the text holds an error there (the
-      // end of file in a construct inside it).
+      // end of file in a construct inside it), also when only blank lines
+      // and quote markers follow its end.
       const end = node.position.end.offset ?? text.length;
-      result.push({ start, end: end === text.length ? end + 1 : end });
+      result.push({ start, end: end >= blank ? text.length + 1 : end });
     }
     if (node.children !== undefined) {
       for (const child of node.children) {
@@ -194,6 +196,19 @@ export function throwWaiting(tree: Root, source: Source): void {
     }
   }
   throw first!;
+}
+
+/** Where the whitespace, line endings and quote markers at the end of `text` start. */
+function blankEnd(text: string): number {
+  let i = text.length;
+  while (i > 0) {
+    const code = text.charCodeAt(i - 1);
+    if (code !== 10 && code !== 13 && code !== 32 && code !== 9 && code !== 62) {
+      break;
+    }
+    i--;
+  }
+  return i;
 }
 
 function before(a: number[], b: number[]): boolean {

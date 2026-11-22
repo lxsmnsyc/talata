@@ -56,7 +56,7 @@ function keyOf(value: unknown): string | undefined {
   }
   if (typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
     let key = '{';
-    for (const name of Object.keys(value).toSorted()) {
+    for (const name of Object.keys(value).sort()) {
       const part = keyOf(Reflect.get(value, name));
       if (part === undefined) {
         return undefined;
