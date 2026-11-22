@@ -10,9 +10,13 @@ import type { MdxError } from './error';
 // around: flow is pass 2d - 1, text (paragraphs, headings, cells, leaf and
 // container labels) pass 2d + 1, and each text directive around a label one
 // more. So `:::a\n<1\n:::\n<2` fails at `<2` (top-level flow), `a :b[<1] <2`
-// at `<2`, and `:::x\nb <1\n:::\n:a[<2]` at `<2`. Flow errors outside
-// container directives come first and throw at once; the others wait here,
-// and the transform throws the first before it builds the tree.
+// at `<2`, and `:::x\nb <1\n:::\n:a[<2]` at `<2`. The chunk queue
+// (`core/chunks.ts`) runs the content of container directives and text in
+// that order, so every error throws where it is met. One exception: the
+// tree build (`build.ts`) parses image labels again without the `!`, and
+// what it meets there is not an error of the reference. Once `throwWaiting`
+// ran for a parse, text errors are dropped. Nothing else waits here:
+// `throwWaiting` stays until mdx-layers-flow removes this file.
 
 interface Waiting {
   /** Flow: false. Text: true. */
@@ -39,15 +43,6 @@ export function containerDepth(state: BlockState, bound: number): number {
     }
   }
   return depth;
-}
-
-function add(source: Source, entry: Waiting): void {
-  let list = waiting.get(source);
-  if (list === undefined) {
-    list = [];
-    waiting.set(source, list);
-  }
-  list.push(entry);
 }
 
 // Lines whose flow errors the reference never meets (see `quietFlowErrors`).
@@ -80,29 +75,31 @@ function isQuiet(source: Source, at: number, bound: number): boolean {
   return false;
 }
 
-/**
- * A flow error at `at` in a block whose container is at depth `bound`:
- * thrown now outside container directives, else kept.
- */
+/** A flow error at `at` in a block whose container is at depth `bound`: thrown now, unless quiet. */
 export function flowError(state: BlockState, bound: number, error: MdxError, at: number): void {
   if (isQuiet(state.source, at, bound)) {
     return;
   }
-  if (containerDepth(state, bound) === 0) {
-    throw error;
-  }
-  add(state.source, { text: false, chunk: -1, labels: 0, at, error });
+  throw error;
 }
 
-/** A text error in the leaf or label that starts at `chunk`, inside `labels` text directive labels. */
+// Parses whose tree build started (`throwWaiting` ran).
+const built = new WeakSet<Source>();
+
+/**
+ * A text error in the leaf or label that starts at `chunk`, inside `labels`
+ * text directive labels: thrown now, or dropped during the tree build.
+ */
 export function textError(
   source: Source,
-  chunk: number,
-  labels: number,
-  at: number,
+  _chunk: number,
+  _labels: number,
+  _at: number,
   error: MdxError,
 ): void {
-  add(source, { text: true, chunk, labels, at, error });
+  if (!built.has(source)) {
+    throw error;
+  }
 }
 
 interface Content {
@@ -143,6 +140,7 @@ function containers(tree: Root, text: string): Content[] {
 
 /** Throws the first waiting error of the parse of `source`, if any. */
 export function throwWaiting(tree: Root, source: Source): void {
+  built.add(source);
   const list = waiting.get(source);
   if (list === undefined) {
     return;

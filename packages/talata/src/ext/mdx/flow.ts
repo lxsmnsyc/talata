@@ -13,6 +13,8 @@ import { flowError } from './order';
 import { jsOf } from './acorn';
 import { startsEsm } from './esm';
 import { prefixEnd } from './prefixes';
+import { SPAN_SIZE } from '../../core/spans';
+import type { Spans } from '../../core/spans';
 import { found, interruptAt, isRun } from './reread';
 import { DONE, FLOW, MORE, NOK, Scanner } from './scanner';
 import type { Item } from './scanner';
@@ -994,11 +996,26 @@ class OpenMdxFlow implements OpenBlock {
   fail(state: BlockState, scanner: Scanner): never {
     const source = state.source;
     const next = this.lastLine + 1;
-    const at = next < source.lineStarts.length ? source.lineStarts[next] : source.text.length;
+    let at = next < source.lineStarts.length ? source.lineStarts[next] : source.text.length;
+    const spans = state.spans;
     if (!state.closeKeepsLineEnding) {
       if (this.lazyAt === -1) {
-        // A line that a quote around does not take is lazy.
-        const after = prefixEnd(state, this.bound, at);
+        let after: number;
+        const start = spans === undefined ? at : contentStart(spans, next);
+        if (start !== -1) {
+          // A line that a quote around does not take is lazy. In the
+          // content of a container directive it starts after the prefixes
+          // of the containers around the directive.
+          after = prefixEnd(state, this.bound, start);
+        } else if (spans!.finalLineEnding) {
+          // After the content's final line ending: the end of that
+          // document, which no container of it takes, is lazy there.
+          after = at;
+        } else {
+          // The content ends without a line ending: the end of file.
+          after = -1;
+          at = state.end;
+        }
         if (after !== -1) {
           scanner.feed(after, after, false, '', after, true);
         }
@@ -1011,6 +1028,12 @@ class OpenMdxFlow implements OpenBlock {
     // A scanner fed the end of file always throws.
     throw new Error('unreachable: open MDX construct at ' + JSON.stringify(point(source, at)));
   }
+}
+
+/** Where line `index` of `spans` starts after the prefixes around, or -1 after its last line. */
+function contentStart(spans: Spans, index: number): number {
+  const k = spans.from + index - spans.data[spans.from * SPAN_SIZE];
+  return k < spans.to ? spans.data[k * SPAN_SIZE + 1] : -1;
 }
 
 /** Tags and expressions on a line of their own. */

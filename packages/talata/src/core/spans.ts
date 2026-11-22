@@ -1,3 +1,6 @@
+import type { BlockState } from './blocks';
+import type { Line } from './line';
+
 /** Numbers per line in `Spans.data`: source line index, start, end, visual column, split-tab columns. */
 export const SPAN_SIZE = 5;
 
@@ -13,4 +16,10 @@ export interface Spans {
    * (`source.lineStarts[index + 1]`), as a source with a final line ending.
    */
   finalLineEnding: boolean;
+  /**
+   * Called for each line `k` (from `from` to `to - 1`) after the line source
+   * set it and before the containers of the document read it. talata/directive
+   * uses it for the quote prefixes of the containers around (`ext/directive/gaps.ts`).
+   */
+  onLine?(state: BlockState, line: Line, k: number): void;
 }

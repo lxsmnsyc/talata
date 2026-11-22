@@ -1,4 +1,5 @@
 import type { PhrasingContent, RootContent } from 'mdast';
+import type { TrackedContainer } from '../blocks/blockquote';
 import openParagraph from '../blocks/paragraph';
 import { CR, LF } from './chars';
 import { documentPass, textPass } from './chunks';
@@ -137,6 +138,8 @@ export interface BlockState extends DocumentState {
   readonly depth: number;
   /** End offset of this document's last line: the source length, or the end of the last span. Look-ahead stops here. */
   readonly end: number;
+  /** The lines of this document when it is the content of a container directive; undefined for the source. */
+  readonly spans: Spans | undefined;
   /**
    * From `BlockRule.start`, when the leaf it returns may still fail on a
    * later line (an MDX flow tag or expression that does not end on its line,
@@ -322,6 +325,32 @@ const document: OpenBlock = {
   },
 };
 
+/**
+ * The root of a nested document. It has the fields of a tracked container
+ * (`TrackedContainer` in `blocks/blockquote.ts`), so the blocks inside link
+ * to it and read its `quoteLine`. micromark's events of the content
+ * interleave with the prefixes of the containers around, so a quote prefix
+ * or footnote indent there counts as a token for the blocks inside, as one
+ * around them in the same document would. `Spans.onLine` sets `quoteLine`.
+ */
+function createNestedRoot(): TrackedContainer {
+  return {
+    name: 'root',
+    isContainer: true,
+    acceptsLazy: true,
+    quoteLine: -1,
+    openChild: undefined,
+    closeEnd: -1,
+    interruptLine: -1,
+    continue(): boolean {
+      return true;
+    },
+    close(): undefined {
+      return undefined;
+    },
+  };
+}
+
 /** Numbers per recorded line: index, start, end, visual column, split-tab columns, matched, unmatched, flags. */
 const RECORD_SIZE = 8;
 /** Record flags: `line.last` and `line.endsContent`. */
@@ -412,6 +441,11 @@ export class BlockParser implements BlockState {
       spans === undefined || spans.to <= spans.from
         ? state.source.text.length
         : spans.data[(spans.to - 1) * SPAN_SIZE + 2];
+    if (spans !== undefined) {
+      const root = createNestedRoot();
+      this.container = root;
+      this.stack[0] = root;
+    }
   }
 
   /** Parses all lines and returns the document's children. */
@@ -474,6 +508,7 @@ export class BlockParser implements BlockState {
       line.endsContent = false;
       line.last = k === to - 1 && !spans.finalLineEnding;
       measureLine(line);
+      spans.onLine?.(this, line, k);
       this.processLine(line);
     }
     if (spans.finalLineEnding && to > spans.from) {

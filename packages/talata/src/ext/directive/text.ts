@@ -2,8 +2,7 @@ import type { PhrasingContent } from 'mdast';
 import type { InlineRule, InlineState } from '../../core/inline';
 import { point } from '../../core/source';
 import { pushNode } from '../../inline/text';
-import { parseLabel } from './labels';
-import { inLabel } from './scopes';
+import { queueTextLabel } from './labels';
 import { COLON, LEFT_BRACE, LEFT_BRACKET, readAttributes, readName, scanLabel } from './syntax';
 import type { Attributes } from './syntax';
 
@@ -63,16 +62,15 @@ function parseDirective(state: InlineState): boolean {
   if (pos < lineEnd && text.charCodeAt(pos) === COLON) {
     return false;
   }
-  let children: PhrasingContent[] = [];
+  const children: PhrasingContent[] = [];
   let attributes: Attributes = {};
-  // The label: inline content, parsed in place.
+  // The label: inline content, parsed in a later pass.
   if (pos < lineEnd && text.charCodeAt(pos) === LEFT_BRACKET) {
     const label = scanLabel(state, ranges, range, pos, state);
     if (label !== undefined) {
       const inner = getLabelRanges(state, range, pos, label.range, label.pos);
       if (inner.length > 2 || inner[0] !== inner[1]) {
-        const indents = state.indents;
-        children = inLabel(state.source, () => parseLabel(state, inner, indents));
+        queueTextLabel(state, children, inner);
       }
       range = label.range;
       pos = label.pos + 1;

@@ -342,7 +342,6 @@ const examples: Example[] = [
       { pass: textPass(0, 0), start: [1, 1], place: '1:3' },
       { pass: documentPass(1), start: [3, 2], place: '4:3' },
     ],
-    pending: 'a flow error in directive content throws at once (mdx-layers-flow)',
   },
   {
     // `--all --acorn` fuzz, seed 20261503, doc 344943.
@@ -352,7 +351,6 @@ const examples: Example[] = [
       { pass: textPass(0, 0), start: [1, 1], place: '1:2' },
       { pass: documentPass(1), start: [3, 2], place: '4:3' },
     ],
-    pending: 'acorn error in directive content thrown first (mdx-layers-flow)',
   },
 ];
 
@@ -449,35 +447,79 @@ describe('directive collector and definitions', () => {
   }
 });
 
-// Cases that need the implementation, each with the node that turns it on.
-const pending: [
+type Case = [
   input: string,
   names: ExtensionName[],
   gfm: boolean,
   options: ExtensionOptions,
   reason: string,
-][] = [
+];
+
+// Cases the nested documents of mdx-layers-directive fixed.
+const fixed: Case[] = [
   [
     ':::x\n---\na: b\n---\n:::',
     ['frontmatter', 'directive'],
     false,
     { frontmatter: [{ type: 'yaml', marker: '-', anywhere: true }] },
-    'frontmatter anywhere in a nested document root (mdx-layers-directive)',
+    'frontmatter anywhere in a nested document root',
   ],
   [
     '- 1. :::b[x]\n      >{\n    >\n',
     names,
     false,
     {},
-    'lazy line at the end of directive content is placed at the line start (mdx-layers-flow)',
+    'lazy line at the end of directive content is placed at the line start',
   ],
   [
     '>1. :::b\n>    >>\t<a b="\n>    >>\tb="\n>   > \n',
     names,
     false,
     {},
-    'lazy line at the end of directive content is placed at the line start (mdx-layers-flow)',
+    'lazy line at the end of directive content is placed at the line start',
   ],
+];
+
+describe('fixed cases', () => {
+  for (const [input, list, gfm, options, reason] of fixed) {
+    test(`${JSON.stringify(input)} (${reason})`, () => {
+      expect(parseTalata(input, gfm, list, options)).toEqual(
+        parseReference(input, gfm, list, options),
+      );
+    });
+  }
+});
+
+// Errors throw where met, except in the tree build of talata/mdx, which
+// parses image labels again without the `!`: what it meets there is not an
+// error of the reference.
+const buildRereads: [input: string, options: ExtensionOptions][] = [
+  ['![[]()<b></b>](i<)', {}],
+  ['![[]()<>](i<)', {}],
+  ['![[<>]()]([<)', {}],
+  ['![[<>]()]([<)', { mdx: { acorn } }],
+];
+
+describe('image labels read again in the tree build', () => {
+  for (const [input, options] of buildRereads) {
+    for (const list of [
+      ['mdx'],
+      ['frontmatter', 'math', 'directive', 'mdx'],
+    ] as ExtensionName[][]) {
+      for (const gfm of [false, true]) {
+        const title = `${list.join(',')}, gfm ${gfm}, acorn ${options.mdx !== undefined}`;
+        test(`${title}: ${JSON.stringify(input)}`, () => {
+          expect(parseTalata(input, gfm, list, options)).toEqual(
+            parseReference(input, gfm, list, options),
+          );
+        });
+      }
+    }
+  }
+});
+
+// Cases that need the implementation, each with the node that turns it on.
+const pending: Case[] = [
   [
     '>:c[{{\n>}',
     names,

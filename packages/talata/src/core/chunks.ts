@@ -26,7 +26,7 @@ export interface ChunkQueue {
    * `ranges` (v5 scope hooks of talata/directive) take the highest start
    * added before them in that pass, or -1. The sort is stable.
    * `node.children` is assigned for empty ranges too (the hooks run in its
-   * setter).
+   * setter). Once `run` returned, it parses at once, as `add` runs.
    */
   text(
     pass: number,
@@ -34,7 +34,13 @@ export interface ChunkQueue {
     ranges: number[],
     indents?: number[],
   ): void;
-  /** Any other chunk. `start` is the first offset it reads. `pass` must be above `this.pass`. */
+  /**
+   * Any other chunk. `start` is the first offset it reads. `pass` must be
+   * above `this.pass`. Once `run` returned, nothing is left to run it later:
+   * it runs at once, in the caller's context (an inline parse in a
+   * transform, such as talata/mdx reading an image label again, meets a text
+   * directive label).
+   */
   add(pass: number, start: number, run: () => void): void;
   /**
    * Runs passes in increasing order. In a pass, chunks run by start, equal
@@ -84,6 +90,8 @@ class Queue implements ChunkQueue {
   /** The pass added to last, and its number. */
   last: Pass | undefined = undefined;
   lastPass = -1;
+  /** `run` returned. */
+  done = false;
 
   constructor(state: DocumentState) {
     this.state = state;
@@ -117,6 +125,10 @@ class Queue implements ChunkQueue {
     ranges: number[],
     indents?: number[],
   ): void {
+    if (this.done) {
+      node.children = parseInline(this.state, ranges, indents);
+      return;
+    }
     const found = this.open(pass);
     // Empty ranges (v5 scope hooks) run after every chunk added before them,
     // also one added out of order (a container directive's label is queued
@@ -126,6 +138,10 @@ class Queue implements ChunkQueue {
   }
 
   add(pass: number, start: number, run: () => void): void {
+    if (this.done) {
+      run();
+      return;
+    }
     pushChunk(this.open(pass), run, undefined, undefined, start);
   }
 
@@ -158,6 +174,7 @@ class Queue implements ChunkQueue {
         }
       }
     }
+    this.done = true;
   }
 
   runChunk(found: Pass, i: number): void {

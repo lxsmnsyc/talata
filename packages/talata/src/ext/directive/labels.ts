@@ -1,7 +1,9 @@
-import type { PhrasingContent } from 'mdast';
+import type { PhrasingContent, Root, RootContent } from 'mdast';
 import type { BlockState } from '../../core/blocks';
 import { isSpaceOrTab } from '../../core/chars';
 import { parseInline } from '../../core/inline';
+import type { InlineState } from '../../core/inline';
+import type { Transform } from '../../core/transform';
 import type { Source } from '../../core/source';
 import { point, skipLineEnding } from '../../core/source';
 import type { DocumentState } from '../../core/state';
@@ -156,3 +158,96 @@ export function queueLabel(
     [start, end],
   );
 }
+
+// A text directive label is parsed after the text it is in, but an image
+// around it takes its `alt` from that text at once. The label's children
+// hold a marker until then: NUL, the label's number, NUL (the parser reads
+// no NUL, `core/source.ts`). The transform puts each label's text in its
+// place in the alts.
+
+const NUL = '\u0000';
+
+/** The children of each queued label of a parse, by number. */
+const queuedLabels = new WeakMap<Source, PhrasingContent[][]>();
+
+/**
+ * Queues the label `ranges` of a text directive into `children`. The label
+ * is a chunk of its own, parsed one pass after the text it is in, so it sees
+ * the definitions of the contents parsed in between.
+ */
+export function queueTextLabel(
+  state: InlineState,
+  children: PhrasingContent[],
+  ranges: number[],
+): void {
+  let labels = queuedLabels.get(state.source);
+  if (labels === undefined) {
+    labels = [];
+    queuedLabels.set(state.source, labels);
+  }
+  children.push({ type: 'text', value: NUL + labels.length + NUL });
+  labels.push(children);
+  const indents = state.indents;
+  const queue = state.queue;
+  queue.add(queue.pass + 1, ranges[0], () => {
+    children.length = 0;
+    for (const child of parseLabel(state, ranges, indents)) {
+      children.push(child);
+    }
+  });
+}
+
+/** Plain text of nodes, as mdast-util-to-string gives an image's `alt`. */
+function toPlainText(nodes: PhrasingContent[]): string {
+  let result = '';
+  for (const node of nodes) {
+    if ('value' in node) {
+      result += node.value;
+    } else if ('alt' in node) {
+      result += node.alt ?? '';
+    } else if ('children' in node) {
+      result += toPlainText(node.children);
+    }
+  }
+  return result;
+}
+
+/** `alt` with the text of each label marker in it. */
+function replaceMarkers(alt: string, labels: PhrasingContent[][]): string {
+  let result = '';
+  let from = 0;
+  for (;;) {
+    const open = alt.indexOf(NUL, from);
+    if (open === -1) {
+      return result + alt.slice(from);
+    }
+    const close = alt.indexOf(NUL, open + 1);
+    // An image in the label has the markers of the labels in it.
+    const text = toPlainText(labels[Number(alt.slice(open + 1, close))]);
+    result += alt.slice(from, open) + replaceMarkers(text, labels);
+    from = close + 1;
+  }
+}
+
+function fixAlts(node: Root | RootContent, labels: PhrasingContent[][]): void {
+  if ('alt' in node && typeof node.alt === 'string' && node.alt.includes(NUL)) {
+    node.alt = replaceMarkers(node.alt, labels);
+  }
+  if ('children' in node) {
+    for (const child of node.children) {
+      fixAlts(child, labels);
+    }
+  }
+}
+
+/** Image alts with the text of the text directive labels in them. */
+export const labelAlts: Transform = {
+  name: 'directiveLabelAlts',
+  transform(tree: Root, state: DocumentState): void {
+    const labels = queuedLabels.get(state.source);
+    if (labels !== undefined) {
+      queuedLabels.delete(state.source);
+      fixAlts(tree, labels);
+    }
+  },
+};
