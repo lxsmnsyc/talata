@@ -1,11 +1,11 @@
 ---
 id: fix-mdx-directive-growth
 title: Failed MDX constructs over directives grow linearly
-status: todo
-priority: should
+status: active
+priority: must
 type: fix
 outline: false
-milestone:
+milestone: m5-mdx
 target:
 from:
 size: S
@@ -22,17 +22,14 @@ owns:
 shared: []
 reserves: []
 provides: []
-depends_on:
-  - on: ext-mdx-acorn
-    kind: hard
-    why: both edit the re-read code in src/ext/mdx/flow.ts
+depends_on: []
 ---
 
 # Failed MDX constructs over directives grow linearly
 
 ## Goal
 
-With `[directive, mdx]`, `'{a\n:::x\n}x\n'.repeat(n)` grows about 14.6x per 4x size in talata (154 ms at 1000 units after fix-directive-nested-growth) while the reference grows linearly. The MDX re-read nests one container directive per unit before the parse throws. Make it grow under 5x per 4x size with the output unchanged.
+With `[directive, mdx]`, `'{a\n:::x\n}x\n'.repeat(n)` grows about 14.6x per 4x size in talata (on merged main: 11 KB takes 106 ms, 44 KB takes 1295 ms, so about 180 KB blocks for 20 s) while the reference grows linearly. Untrusted MDX can block a parser this way, so 0.4 ships with the fix. The MDX re-read nests one container directive per unit before the parse throws. Make it grow under 5x per 4x size with the output unchanged.
 
 ## Acceptance
 

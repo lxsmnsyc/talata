@@ -20,7 +20,7 @@ release:
 
 `talata` 0.3 adds the third subpath, `talata/directive`, on the same terms: `extensions: [frontmatter(), math(), directive()]` gives the tree of `mdast-util-from-markdown` with `micromark-extension-directive` and `mdast-util-directive`. 0.2.0 was published on 2026-10-28 (63728b7).
 
-`talata` 0.4 adds `talata/mdx`. `mdx()` gives the tree of `micromark-extension-mdx` with `mdast-util-mdx`, and `mdx({ acorn })` the tree of `micromark-extension-mdxjs` with `mdast-util-mdx`, except `data.estree`. The caller passes acorn in, so talata gets no runtime dependency. 0.3.0 was published on 2026-11-09. 0.4 is the target now.
+`talata` 0.4 adds `talata/mdx`. `mdx()` gives the tree of `micromark-extension-mdx` with `mdast-util-mdx`, and `mdx({ acorn })` the tree of `micromark-extension-mdxjs` with `mdast-util-mdx`, `data.estree` included, so `@mdx-js/mdx` can compile with talata as its parser. The caller passes acorn in, so talata gets no runtime dependency. 0.3.0 was published on 2026-11-09. 0.4 is the target now.
 
 ## Acceptance
 
@@ -35,7 +35,7 @@ For 0.2, and again for 0.3 with directive and for 0.4 with `mdx({ acorn })` adde
 
 - must: needed for the next release (0.4: MDX).
 - should: makes the release more trustworthy, but it can ship without it.
-- later: parked (MDX estree output, core-hooks-3).
+- later: parked (core-hooks-3).
 
 ## Constraints
 
@@ -43,7 +43,7 @@ For 0.2, and again for 0.3 with directive and for 0.4 with `mdx({ acorn })` adde
   - frontmatter: `micromark-extension-frontmatter` 2.0.0 and `mdast-util-frontmatter` 2.0.1;
   - math: `micromark-extension-math` 3.1.0 and `mdast-util-math` 3.0.0;
   - directive: `micromark-extension-directive` 4.0.0 and `mdast-util-directive` 3.1.1;
-  - mdx (current on 2026-11-09): `micromark-extension-mdx` 2.1.0, `micromark-extension-mdxjs` 3.0.0 and `mdast-util-mdx` 3.0.0, with `acorn` 8.19.0 and `acorn-jsx` 5.3.2 in tests.
+  - mdx (current on 2026-11-09): `micromark-extension-mdx` 2.1.0, `micromark-extension-mdxjs` 3.0.0 and `mdast-util-mdx` 3.0.0, with `acorn` 8.19.0 and `acorn-jsx` 5.3.2 in tests; `@mdx-js/mdx` 3.1.1 and `micromark-util-events-to-acorn` 2.0.3 for estree (current on 2026-11-23).
 - Extension factories take the same options as the reference's micromark extension, for example `frontmatter(['yaml', 'toml'])` and `math({ singleDollarTextMath })`.
 - One package, one build, plain `import`/`require` exports per subpath, as in 0.1.1. No runtime dependencies other than `@types/mdast`.
 - ES2020 output, runs in Node 20+ and browsers.
@@ -54,7 +54,6 @@ For 0.2, and again for 0.3 with directive and for 0.4 with `mdx({ acorn })` adde
 - HTML output (`roadmaps/v1/debate-html/debate.md`).
 - A documented third-party extension API. It comes after these three extensions work without core changes.
 - MDX in 0.2 and 0.3.
-- `data.estree` in 0.4 (outline node ext-mdx-estree).
 - acorn as a dependency or bundled into `talata/mdx`.
 
 ## Verification
@@ -82,7 +81,7 @@ For 0.2, and again for 0.3 with directive and for 0.4 with `mdx({ acorn })` adde
 - "add to plan: a migration guide to talata" (user, 2026-11-02) -> docs-migration
 - GFM footnote bug found by the core-hooks-2 fuzz (2026-11-02) -> fix-footnote-spread
 - v1 outline nodes ext-frontmatter, ext-math, ext-directive, ext-mdx -> moved here
-- "I wanted to prioritize mdx" (user, 2026-11-09) -> mdx-core, ext-mdx, ext-mdx-acorn, release-0.4; estree -> ext-mdx-estree (later)
+- "I wanted to prioritize mdx" (user, 2026-11-09) -> mdx-core, ext-mdx, ext-mdx-acorn, release-0.4; estree -> ext-mdx-estree (in 0.4 since 2026-11-23)
 
 ## Decisions
 
@@ -100,3 +99,4 @@ For 0.2, and again for 0.3 with directive and for 0.4 with `mdx({ acorn })` adde
 - release-0.2: the user merges the Version Packages pull request, which publishes to npm.
 - release-0.3: the same, for 0.3.0.
 - release-0.4: the same, for 0.4.0.
+- 2026-11-23: `data.estree` moves into 0.4 (the user's choice: fix now or drop, no later). Without it `@mdx-js/mdx` cannot use talata as its parser.

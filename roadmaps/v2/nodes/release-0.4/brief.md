@@ -1,7 +1,7 @@
 ---
 id: release-0.4
 title: Docs and the 0.4 release
-status: todo
+status: active
 priority: must
 type: release
 outline: false
@@ -37,6 +37,18 @@ depends_on:
   - on: fix-directive-list-indent
     kind: hard
     why: 0.4 ships with no known directive tree mismatch
+  - on: fix-mdx-directive-growth
+    kind: hard
+    why: 0.4 ships without the quadratic MDX re-read over directives
+  - on: ext-mdx-estree
+    kind: hard
+    why: documents and ships data.estree
+  - on: mdx-layers-contract
+    kind: hard
+    why: part of the MDX design that 0.4 ships
+  - on: mdx-layers-flow
+    kind: hard
+    why: 0.4 ships with no known MDX mismatch and no quadratic MDX input
   - on: ext-mdx-acorn
     kind: hard
     why: documents and ships the acorn option
@@ -46,7 +58,7 @@ depends_on:
 
 ## Goal
 
-Document the `talata/mdx` subpath in `packages/talata/README.md`: usage with and without acorn, the unified plugin, the `remark-mdx` setup it replaces, and the differences from the reference (no `data.estree`). Add an MDX section to `docs/migration.md`. Update the size and speed tables, and add a minor changeset. The release workflow publishes 0.4.0 when the user merges the Version Packages pull request.
+Document the `talata/mdx` subpath in `packages/talata/README.md`: usage with and without acorn, the unified plugin, the `remark-mdx` setup it replaces, and the differences from the reference. Add an MDX section to `docs/migration.md`. Update the size and speed tables, and add a minor changeset. The release workflow publishes 0.4.0 when the user merges the Version Packages pull request.
 
 ## Acceptance
 
