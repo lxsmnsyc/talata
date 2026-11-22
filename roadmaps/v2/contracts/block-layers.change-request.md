@@ -73,7 +73,7 @@ Accepted 2026-11-23 by the orchestrator after a fresh review of mdx-layers-direc
 # Change request: block-layers v3 to v4
 
 - From node: mdx-layers-flow
-- Status: proposed
+- Status: accepted
 
 ## Problem
 
@@ -96,3 +96,7 @@ Accepted 2026-11-23 by the orchestrator after a fresh review of mdx-layers-direc
 ## Workaround in place
 
 All four on `refactor/mdx-layers-flow`: `src/core/blocks.ts` (`recordFacts`, `restoreFacts`), `src/core/blocks.ts` (`tryStartContainer`), `src/gfm/footnote.ts` (`footnoteIndentLine`), `src/blocks/thematic-break.ts`, `src/ext/mdx/flow.ts`, `src/ext/mdx/esm.ts`.
+
+## Decision
+
+Accepted 2026-11-23 by the orchestrator after a fresh review of mdx-layers-flow, with point 2 amended as above. `block-layers.md` v4 points here.

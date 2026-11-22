@@ -1,7 +1,7 @@
 ---
 id: mdx-layers-flow
 title: MDX flow constructs rewind instead of emulating the re-read
-status: todo
+status: done
 priority: must
 type: refactor
 outline: false
@@ -9,6 +9,7 @@ milestone: m5-mdx
 target:
 from:
 size: L
+spent: 600000
 spike: false
 verify:
 exclusive: []

@@ -173,7 +173,7 @@ Accepted 2026-11-22 after a fresh review: no speed cost on the corpus, non-MDX o
 # Change request: extension v5 to v6
 
 - From node: mdx-layers-flow
-- Status: proposed
+- Status: accepted (2026-11-23), part of `extension.md` v6
 
 ## Problem
 
