@@ -90,13 +90,12 @@ function referenceExtensions(
       if (settings?.acorn === undefined) {
         extensions.push(mdx());
       } else {
-        // No `data.estree`: talata does not make it.
+        // `addResult` is on by default: nodes get `data.estree`.
         extensions.push(
           mdxjs({
             acorn: settings.acorn,
             // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the reference fills in `ecmaVersion`
             acornOptions: settings.acornOptions as AcornOptions | undefined,
-            addResult: false,
           }),
         );
       }
@@ -203,6 +202,40 @@ export function parseTalata(
     }
     throw error;
   }
+}
+
+/**
+ * What acorn's `onComment` and `onToken` get with `mdx({ acorn })` on one
+ * side: parses `value` with them as functions (the calls, in order), then
+ * as arrays (their contents).
+ */
+export function acornCallbacks(
+  value: string,
+  useGfm: boolean,
+  names: readonly ExtensionName[],
+  isReference: boolean,
+): unknown[] {
+  const calls: unknown[] = [];
+  const comments: unknown[] = [];
+  const tokens: unknown[] = [];
+  const callbacks = {
+    onComment(...args: unknown[]): void {
+      calls.push(['comment', ...args]);
+    },
+    onToken(token: unknown): void {
+      calls.push(['token', token]);
+    },
+  };
+  for (const acornOptions of [callbacks, { onComment: comments, onToken: tokens }]) {
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- acorn's callback types
+    const options = { mdx: { acorn, acornOptions: acornOptions as Partial<AcornOptions> } };
+    if (isReference) {
+      parseReference(value, useGfm, names, options);
+    } else {
+      parseTalata(value, useGfm, names, options);
+    }
+  }
+  return [calls, comments, tokens];
 }
 
 export function toHtmlString(tree: Root): string {

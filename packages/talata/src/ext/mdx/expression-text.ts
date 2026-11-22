@@ -1,20 +1,15 @@
 import type { PhrasingContent } from 'mdast';
 import type { InlineRule, InlineState } from '../../core/inline';
 import { pushNode } from '../../inline/text';
-import { span } from './error';
 import { scanInline } from './inline';
-import { TEXT_EXPRESSION } from './scanner';
+import { TEXT_EXPRESSION, expressionNode } from './scanner';
 
 function parseExpressionText(state: InlineState): boolean {
   const item = scanInline(state, TEXT_EXPRESSION);
   if (item?.kind !== 'expression') {
     return false;
   }
-  const node = {
-    type: 'mdxTextExpression',
-    value: item.value,
-    position: span(state.source, item.start, item.end),
-  };
+  const node = expressionNode('mdxTextExpression', state.source, item);
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- not in @types/mdast
   pushNode(state, node as unknown as PhrasingContent);
   return true;

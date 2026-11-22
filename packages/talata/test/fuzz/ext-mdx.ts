@@ -1,3 +1,4 @@
+// oxlint-disable no-template-curly-in-string -- JS template literals are MDX input here
 import type { ExtensionFuzz } from './ext';
 import type { Random } from './random';
 
@@ -28,6 +29,12 @@ const attributeParts = [
   'b={"}"}',
   '{...{a: "}"}}',
   'b={/* } */ 1}',
+  // Shapes for `data.estree`: parentheses, comments, templates.
+  'b={(c)}',
+  'b={((c))}',
+  '{...(c)}',
+  '{/* c */...d}',
+  'b={`c${d}`}',
 ];
 // Attributes acorn rejects.
 const badAttributes = ['{...a, b}', '{a}', 'b={a b}'];
@@ -53,6 +60,12 @@ const expressions = [
   '(a)',
   'a}',
   '`a\n\tb`',
+  '((a))',
+  '(a) /* b */',
+  '`a${b}c`',
+  '1n + a?.b',
+  '[(a), b]',
+  'a\n  // b\n  + c',
 ];
 // Expressions acorn rejects.
 const badExpressions = ['a b', '"a', '?', 'a =>'];
@@ -73,6 +86,11 @@ const esm = [
   ['export var a = /* }', '', '*/ 1'],
   ['import a from "b"', 'export {a}'],
   ['export var a = <b />'],
+  ['import {a as b} from "c"'],
+  ['import a, {b} from "c" // d'],
+  ['export * as a from "b"'],
+  ['export default (a) /* b */'],
+  ['import {a} from "b"', 'export {a as c}'],
 ];
 // ESM acorn rejects.
 const badEsm = [

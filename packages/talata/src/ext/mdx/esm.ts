@@ -5,7 +5,7 @@ import { advanceLine } from '../../core/line';
 import type { Source } from '../../core/source';
 import { skipLineEnding } from '../../core/source';
 import { parseEsm } from './acorn';
-import type { Code, Js } from './acorn';
+import type { Code, Estree, Js } from './acorn';
 import { span } from './error';
 
 // ESM, as `micromark-extension-mdxjs-esm` 3.0.0: `import` or `export` and a
@@ -46,6 +46,8 @@ class OpenMdxEsm implements OpenBlock {
   lines: number[];
   /** End offset once it parsed. */
   end = -1;
+  /** The program once it parsed. */
+  estree: Estree | undefined;
 
   constructor(js: Js, lines: number[]) {
     this.js = js;
@@ -101,6 +103,7 @@ class OpenMdxEsm implements OpenBlock {
       for (const name of result.defined) {
         defined.push(name);
       }
+      this.estree = result.estree;
       const lines = this.lines;
       this.end = lines[lines.length - 1];
       if (ending) {
@@ -129,11 +132,14 @@ class OpenMdxEsm implements OpenBlock {
       }
     }
     const start = this.lines[0];
-    const node = {
+    const node: Record<string, unknown> = {
       type: 'mdxjsEsm',
       value: this.value(state.source.text),
       position: span(state.source, start, this.end),
     };
+    if (this.estree !== undefined) {
+      node.data = { estree: this.estree };
+    }
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- not in @types/mdast
     return node as unknown as RootContent;
   }

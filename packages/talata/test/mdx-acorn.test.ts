@@ -7,8 +7,8 @@ import type { ExtensionName } from './parsers';
 import { readFileSync } from 'node:fs';
 
 // `mdx({ acorn })` against `micromark-extension-mdxjs` with
-// `mdast-util-mdx`, without `data.estree` (the reference runs with
-// `addResult: false`).
+// `mdast-util-mdx`, `data.estree` included (`test/mdx-estree.test.ts` has
+// the cases for the programs themselves).
 
 const options = { mdx: { acorn } };
 const all: ExtensionName[] = ['frontmatter', 'math', 'directive', 'mdx'];

@@ -7,8 +7,7 @@ import { advanceLine, isLastLine } from '../../core/line';
 import { point } from '../../core/source';
 import { bindJs } from './acorn';
 import type { Js } from './acorn';
-import { span } from './error';
-import { DONE, FLOW, MORE, NOK, Scanner } from './scanner';
+import { DONE, FLOW, MORE, NOK, Scanner, expressionNode } from './scanner';
 import type { Item } from './scanner';
 import { flowMarker, markSource } from './tags';
 
@@ -68,6 +67,17 @@ function keptWhitespace(line: Line): string {
     }
   }
   return result;
+}
+
+/** Calls `onComment` and `onToken` again for flow that interrupted a paragraph and ended. */
+function runReplay(scanner: Scanner): void {
+  const replay = scanner.replay;
+  if (replay !== undefined) {
+    scanner.replay = undefined;
+    for (const report of replay) {
+      report();
+    }
+  }
 }
 
 // One scanner for first lines; a construct that spans lines keeps it.
@@ -130,6 +140,7 @@ class OpenMdxFlow implements OpenBlock {
     }
     this.scanner = undefined;
     if (result === DONE) {
+      runReplay(scanner);
       this.items = scanner.items;
       this.end = scanner.pos;
       this.done = true;
@@ -170,11 +181,7 @@ class OpenMdxFlow implements OpenBlock {
     const items = this.items;
     const first = items[0];
     if (items.length === 1 && first.kind === 'expression' && first.end === this.end) {
-      const node = {
-        type: 'mdxFlowExpression',
-        value: first.value,
-        position: span(state.source, first.start, first.end),
-      };
+      const node = expressionNode('mdxFlowExpression', state.source, first);
       // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- not in @types/mdast
       return node as unknown as RootContent;
     }
@@ -223,12 +230,17 @@ export default function createMdxFlow(js: Js | undefined): BlockRule {
       }
       const scanner = shared;
       scanner.begin(state.source, FLOW, line.nonBlank, line.end, isLastLine(line));
+      if (state.paragraph !== undefined) {
+        scanner.interrupts = true;
+        scanner.replay = [];
+      }
       const result = scanner.run();
       if (result === NOK) {
         return undefined;
       }
       const block = new OpenMdxFlow(rule, line);
       if (result === DONE) {
+        runReplay(scanner);
         block.items = scanner.items;
         block.end = scanner.pos;
       } else {

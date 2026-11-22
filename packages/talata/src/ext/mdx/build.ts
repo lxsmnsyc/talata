@@ -6,6 +6,7 @@ import type { DocumentState } from '../../core/state';
 import type { Transform } from '../../core/transform';
 import { MdxError, span, stringifyPlace } from './error';
 import { startBuild } from './inline';
+import { expressionNode } from './scanner';
 import type { Item, Tag } from './scanner';
 import { FLOW_MARKER, TEXT_MARKER, markedTags, reparsed } from './tags';
 
@@ -435,11 +436,7 @@ class Builder {
       if (item.kind === 'tag') {
         this.tag(item, 'mdxJsxFlowTag');
       } else {
-        this.top.out.push({
-          type: 'mdxFlowExpression',
-          value: item.value,
-          position: span(this.source, item.start, item.end),
-        });
+        this.top.out.push(expressionNode('mdxFlowExpression', this.source, item));
       }
     }
   }
