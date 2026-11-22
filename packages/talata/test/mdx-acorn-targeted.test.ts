@@ -16,6 +16,8 @@ import { describeDiff, firstDiff } from './tree-diff';
 // runs more documents.
 
 const count = Number(process.env.MDX_ACORN_TARGETED ?? 4000);
+// `MDX_ACORN_START` runs documents from that index on, to split a large count.
+const first = Number(process.env.MDX_ACORN_START ?? 0);
 const names: ExtensionName[] = ['frontmatter', 'math', 'directive', 'mdx'];
 const options = { mdx: { acorn } };
 
@@ -192,7 +194,7 @@ test(
   `targeted documents with acorn (${count})`,
   () => {
     const failures: string[] = [];
-    for (let i = 0; i < count && failures.length < 5; i++) {
+    for (let i = first; i < first + count && failures.length < 5; i++) {
       const value = document(createRandom(documentSeed(20261121, i)));
       for (const gfm of [true, false]) {
         if (differs(value, gfm) !== undefined) {
@@ -205,5 +207,5 @@ test(
     expect(failures.join('\n\n')).toBe('');
     // A large count runs for minutes.
   },
-  Math.max(30_000, count),
+  Math.max(30_000, count * 5),
 );

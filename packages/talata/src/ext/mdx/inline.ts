@@ -1,74 +1,34 @@
 import type { InlineState } from '../../core/inline';
 import type { Source } from '../../core/source';
-import { linePrefix, reach } from '../../inline/lines';
+import { containerEnd, linePrefix, reach, wasReached } from '../../inline/lines';
 import { MdxError } from './error';
-import { textError } from './order';
 import { DONE, MORE, Scanner } from './scanner';
 import type { Item } from './scanner';
 
 const scanner = new Scanner();
 
-// A text error throws at once (`order.ts`): the chunk queue runs text in
-// micromark's order, so the first error met is the reference's. During the
-// tree build it is dropped, and the rest of its leaf or label is text. A text
-// directive's label is a chunk of its own, parsed with ranges inside its
-// leaf's: the chain of chunks seen, outermost first, says how deep it is.
-// `mdxChunks` runs at each `:` so the leaf is in the chain before the label's
-// parse starts.
+// A text error throws at once: the chunk queue runs text in micromark's
+// order, so the first error met is the reference's. The tree build
+// (`build.ts`) parses image labels again without the `!`, and what it meets
+// there is not an error of the reference: it is dropped, and the rest of the
+// leaf or label is text.
 
-interface Chunk {
-  ranges: number[];
-  start: number;
-  end: number;
+// Parses whose tree build started.
+const building = new WeakSet<Source>();
+
+/** From the tree build: text errors of the parse of `source` are dropped from now on. */
+export function startBuild(source: Source): void {
+  building.add(source);
 }
 
-let chainSource: Source | undefined;
-let chain: Chunk[] = [];
-
-/** Puts the chunk of `state` in the chain, after the chunks that hold it. */
-export function enterChunk(state: InlineState): Chunk[] {
-  const ranges = state.ranges;
-  if (chainSource !== state.source) {
-    chainSource = state.source;
-    chain = [];
-  }
-  for (let i = chain.length - 1; i >= 0; i--) {
-    if (chain[i].ranges === ranges) {
-      chain.length = i + 1;
-      return chain;
-    }
-  }
-  const start = ranges[0];
-  const end = ranges[ranges.length - 1];
-  while (chain.length > 0) {
-    const top = chain[chain.length - 1];
-    if (top.start <= start && end <= top.end) {
-      break;
-    }
-    chain.pop();
-  }
-  chain.push({ ranges, start, end });
-  return chain;
-}
-
-// Leaves and labels that had a dropped error: the rest of them is text.
+// Labels read again by the tree build that had a dropped error.
 const failed = new WeakSet<number[]>();
-
-/** Throws `error`, found in the chunk of `state`, or drops it during the tree build. */
-function record(state: InlineState, error: MdxError): void {
-  failed.add(state.ranges);
-  const place = error.place;
-  const at = place !== undefined && 'offset' in place ? place.offset! : 0;
-  const chunks = enterChunk(state);
-  textError(state.source, chunks[chunks.length - 1].start, chunks.length - 1, at, error);
-}
 
 /**
  * Scans one tag or expression at `state.pos` across the ranges of the leaf.
  * Returns the item, or undefined when it is not one (whitespace after `<`)
  * or throws on bad syntax (see above; dropped during the tree build, then
- * undefined). Moves `state.range` and
- * `state.pos` past it on success.
+ * undefined). Moves `state.range` and `state.pos` past it on success.
  */
 export function scanInline(state: InlineState, mode: number): Item | undefined {
   if (failed.has(state.ranges)) {
@@ -87,6 +47,7 @@ export function scanInline(state: InlineState, mode: number): Item | undefined {
         break;
       }
       range += 2;
+      const reached = wasReached(state, range);
       reach(state, range);
       const start = ranges[range];
       scanner.feed(
@@ -97,12 +58,18 @@ export function scanInline(state: InlineState, mode: number): Item | undefined {
         start,
         false,
       );
+      if (reached) {
+        scanner.lineStartAt(containerEnd(state, range));
+      }
     }
   } catch (error) {
     if (!(error instanceof MdxError)) {
       throw error;
     }
-    record(state, error);
+    if (!building.has(state.source)) {
+      throw error;
+    }
+    failed.add(state.ranges);
     return undefined;
   }
   const item = scanner.item!;

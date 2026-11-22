@@ -357,6 +357,17 @@ export class Scanner {
     }
   }
 
+  /**
+   * With acorn, in an expression, after `feed`: a place at the start of the
+   * fed line maps to `offset`. micromark ends a line ending in text after
+   * the next line's container prefixes once a lookahead reached that line.
+   */
+  lineStartAt(offset: number): void {
+    if (this.js !== undefined && this.state === EXPRESSION_BEFORE) {
+      this.stops.push(this.code.length, offset);
+    }
+  }
+
   /** The end of input right after a line ending, at `at`. */
   feedEnd(at: number): void {
     this.feed(at, at, true, '', at, false);

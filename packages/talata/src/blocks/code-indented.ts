@@ -8,8 +8,8 @@ import { point, skipLineEnding } from '../core/source';
 /**
  * Whether `line` is the last line, has no line ending and nothing is left
  * after the container prefixes (`> ```\n> a\n>`). micromark then ends an open
- * fenced code or HTML block right after the previous line ending. A line that
- * a container marked with `BlockState.endContent` counts as a last line.
+ * fenced code or HTML block right after the previous line ending. The last
+ * line of a nested document without a final line ending counts too.
  */
 export function isEmptyLastLine(line: Line): boolean {
   return line.start === line.end && line.partialTab === 0 && isLastLine(line);

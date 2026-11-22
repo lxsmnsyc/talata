@@ -169,3 +169,36 @@ None: the hooks are in `packages/talata/src/core/blocks.ts` and `src/blocks/para
 ## Decision
 
 Accepted 2026-11-22 after a fresh review: no speed cost on the corpus, non-MDX output identical.
+
+# Change request: extension v5 to v6
+
+- From node: mdx-layers-flow
+- Status: proposed
+
+## Problem
+
+`block-layers.md` (v3) says the block layers become extension contract v6: the v5 re-read hooks go, and the v2 and v3 hooks go once no extension uses them. After mdx-layers-flow, talata/mdx reads failed flow constructs again through `mark`, `commit`, `rewind` and `onLazyLine`. No extension calls the old hooks, except `getBlock` and `getDepth`, which `src/ext/directive/gaps.ts` still reads.
+
+## Proposed change
+
+Removed from `core/blocks.ts`, `core/line.ts` and `blocks/paragraph.ts` (done on `refactor/mdx-layers-flow`):
+
+- v5: `BlockState.readLineAt`, `processLine(line, from)` (now `processLine(line)`), `OpenParagraph.inlineIndents` and its use in `paragraphIndents`.
+- v3: `BlockState.endContent`, `Line.endsContent`.
+- v2: `OpenBlock.startsContainer`, `BlockState.closeOpenBlocks`. A starting container always sets `closeKeepsLineEnding`.
+- `isLastLine(line)` is `line.last`. No line comes from `createLine` without `last` any more (the table's header line for HTML is never a last line).
+
+Kept: `getBlock`, `getDepth` (talata/directive), `OpenBlock.willClose`, now `willClose?(state, line)` without `keepsLineEnding` (nothing calls `closeOpenBlocks` any more). No extension uses it, but without its call in `attach` V8 inlines `attach` differently and the readmes benchmark input parses about 7% slower (bisected against main 6221c4a). Also kept: `containerStartsOff`, `opensContainer`, `openContainer`, `takeParagraph`, `splitParagraph`, `inline`, `isLastLine`, `keepsLazyContainers`, `interruptible`, the v4 `disable` lists and `indentLimit`.
+
+Added: everything in `block-layers.md` Interface (v3 and its change requests).
+
+The "Re-reading lines (v5)" section and the `endContent` text of v3 in `extension.md` go.
+
+## Affected nodes
+
+- ext-mdx-estree: builds on the v6 hooks; it uses none of the removed ones.
+- No other extension used them. Their tests in `test/core-hooks.test.ts` and `test/core-hooks-2.test.ts` are removed; the `getBlock` and `getDepth` tests stay, and `willClose` has a new test.
+
+## Workaround in place
+
+None needed: the hooks are removed on the branch. Trees without MDX equal main 6221c4a (see `nodes/mdx-layers-flow/outcome.md`).

@@ -25,6 +25,21 @@ class OpenThematicBreak implements OpenBlock {
   }
 }
 
+/** Whether `text` from `start` to `end` is 3 or more of its first character, with spaces and tabs between. */
+export function isThematicBreak(text: string, start: number, end: number): boolean {
+  const marker = text.charCodeAt(start);
+  let count = 0;
+  for (let i = start; i < end; i++) {
+    const code = text.charCodeAt(i);
+    if (code === marker) {
+      count++;
+    } else if (!isSpaceOrTab(code)) {
+      return false;
+    }
+  }
+  return count >= 3;
+}
+
 const thematicBreak: BlockRule = {
   name: 'thematicBreak',
   priority: 600,
@@ -34,20 +49,9 @@ const thematicBreak: BlockRule = {
     if (line.indent >= line.indentLimit) {
       return undefined;
     }
-    const text = line.text;
     const start = line.nonBlank;
     const end = line.end;
-    const marker = text.charCodeAt(start);
-    let count = 0;
-    for (let i = start; i < end; i++) {
-      const code = text.charCodeAt(i);
-      if (code === marker) {
-        count++;
-      } else if (!isSpaceOrTab(code)) {
-        return undefined;
-      }
-    }
-    if (count < 3) {
+    if (!isThematicBreak(line.text, start, end)) {
       return undefined;
     }
     line.start = end;
