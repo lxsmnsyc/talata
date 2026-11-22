@@ -83,6 +83,15 @@ export function footnoteIndentAt(state: BlockState, lineStart: number): boolean 
 }
 
 /**
+ * Records that a footnote definition around a nested document consumed its
+ * indent on the line that starts at `lineStart`, for `footnoteIndentAt` in
+ * that document (`state`): the indent is a token among its events too.
+ */
+export function setFootnoteIndent(state: BlockState, lineStart: number): void {
+  indentLines.set(state, lineStart);
+}
+
+/**
  * True when a footnote definition among `children` (or nested in one) spans
  * a blank line: its label line with nothing after it, or a line between or
  * after its children. mdast-util-from-markdown counts those for

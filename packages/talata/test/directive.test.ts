@@ -274,6 +274,14 @@ const referenceInputs: string[] = [
 
 // Cases of our own: containers, lazy lines, nesting, attributes and labels.
 const ownInputs: string[] = [
+  // Labels and contents run in passes (mdx-layers-directive): a label inside
+  // a label does not see a definition two directives deep after it, and an
+  // image takes its alt from labels parsed after it.
+  ':e[:b[[^1]]]\n:::y\n:::x\n[^1]:',
+  ':e[:b[[a]]]\n:::y\n:::x\n[a]: u',
+  ':e[:b[[a]]]\n::::y\n:::x\n[a]: b\n:::\n::::',
+  '![:a[[b]]](u)\n\n:::x\n[b]: c\n:::',
+  '![x :a[y ![:b[z]](u)] w](v)',
   ':a[b *c*]{#x .y z=1 z=2 .w} d',
   ':a[b\n  c]{k="1\n  2"}',
   ':a[b  \n  c  ]',

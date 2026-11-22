@@ -112,6 +112,7 @@ export function createInlineState(
     definitions: state.definitions,
     footnotes: state.footnotes,
     rules: state.rules,
+    queue: state.queue,
     ranges,
     range: 0,
     pos: first,

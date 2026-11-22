@@ -142,10 +142,36 @@ describe('frontmatter options', () => {
   }
 });
 
+// With `anywhere`, the content of a container directive is a document of its
+// own: a matter at column 1 there starts as at the root, and its closing
+// fence must be in that content.
+describe('frontmatter anywhere in container directives', () => {
+  const options: Options = { type: 'yaml', marker: '-', anywhere: true };
+  const inputs = [
+    ':::x\n---\na: b\n---\n:::',
+    ':::x\n---\na: b\n---',
+    ':::x\n---\na\n:::\n---',
+    ':::x\na\n---\nb\n---\n:::',
+    '::::x\n:::y\n---\na\n---\n:::\n::::',
+    '> :::x\n> ---\n> a\n> ---',
+    ':::x\n---\na\n:::\n> b',
+  ];
+  for (const gfm of [false, true]) {
+    for (const input of inputs) {
+      test(`${gfm ? 'gfm' : 'plain'} ${JSON.stringify(input)}`, () => {
+        const names: ('frontmatter' | 'directive')[] = ['frontmatter', 'directive'];
+        expect(parseTalata(input, gfm, names, { frontmatter: options })).toEqual(
+          parseReference(input, gfm, names, { frontmatter: options }),
+        );
+      });
+    }
+  }
+});
+
 // Known gap: with `anywhere`, a matter that interrupts a lazy paragraph of a
 // quote or list (`> a\n---\nb\n---`) stays inside that container in the
-// reference. The rule here only starts in the root, so the contract's root
-// condition holds and this case differs. Not covered by the default options.
+// reference. Here the lazy line closes the quote first, so this case differs.
+// Not covered by the default options.
 test('anywhere inside a lazy container is a known gap', () => {
   const input = '> a\n---\nb\n---';
   const options: Options = { type: 'yaml', marker: '-', anywhere: true };

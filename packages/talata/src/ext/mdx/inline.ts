@@ -8,11 +8,13 @@ import type { Item } from './scanner';
 
 const scanner = new Scanner();
 
-// A text error waits (`order.ts`): micromark's first error is not always the
-// first one talata meets. A text directive's label is a chunk of its own,
-// parsed with ranges inside its leaf's: the chain of chunks seen, outermost
-// first, says how deep it is. `mdxChunks` runs at each `:` so the leaf is in
-// the chain before the label's parse starts.
+// A text error throws at once (`order.ts`): the chunk queue runs text in
+// micromark's order, so the first error met is the reference's. During the
+// tree build it is dropped, and the rest of its leaf or label is text. A text
+// directive's label is a chunk of its own, parsed with ranges inside its
+// leaf's: the chain of chunks seen, outermost first, says how deep it is.
+// `mdxChunks` runs at each `:` so the leaf is in the chain before the label's
+// parse starts.
 
 interface Chunk {
   ranges: number[];
@@ -49,9 +51,10 @@ export function enterChunk(state: InlineState): Chunk[] {
   return chain;
 }
 
-// Leaves and labels that had an error: a later one in the same chunk cannot come first.
+// Leaves and labels that had a dropped error: the rest of them is text.
 const failed = new WeakSet<number[]>();
 
+/** Throws `error`, found in the chunk of `state`, or drops it during the tree build. */
 function record(state: InlineState, error: MdxError): void {
   failed.add(state.ranges);
   const place = error.place;
@@ -63,7 +66,8 @@ function record(state: InlineState, error: MdxError): void {
 /**
  * Scans one tag or expression at `state.pos` across the ranges of the leaf.
  * Returns the item, or undefined when it is not one (whitespace after `<`)
- * or has bad syntax (the error waits, see above). Moves `state.range` and
+ * or throws on bad syntax (see above; dropped during the tree build, then
+ * undefined). Moves `state.range` and
  * `state.pos` past it on success.
  */
 export function scanInline(state: InlineState, mode: number): Item | undefined {

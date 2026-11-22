@@ -79,32 +79,34 @@ class OpenMatter implements OpenBlock {
 }
 
 /**
- * Looks for the matter that opens on the line at `from`. It must be closed:
- * the value is what lies between the fences, without the line ending before
- * the closing fence.
+ * Looks for the matter that opens on the line at `from`. It must be closed
+ * before `limit`, the end of the document: the value is what lies between the
+ * fences, without the line ending before the closing fence. `noClose` caches
+ * failed scans when the document runs to the end of the text.
  */
 function open(
   text: string,
   from: number,
   end: number,
+  limit: number,
   matter: ResolvedMatter,
-  noClose: number[],
+  noClose: number[] | undefined,
   index: number,
 ): OpenMatter | null | undefined {
   if (!fenceAt(text, from, end, matter.open)) {
     return undefined;
   }
-  if (end >= text.length) {
+  if (end >= limit) {
     return null;
   }
   const contentStart = skipLineEnding(text, end);
   // An earlier scan from `noClose[index]` found no closing fence, so a later one cannot either.
-  if (noClose[index] <= contentStart) {
+  if (noClose !== undefined && noClose[index] <= contentStart) {
     return null;
   }
   let lineStart = contentStart;
   let previousEnd = contentStart;
-  while (lineStart < text.length) {
+  while (lineStart < limit) {
     const eol = lineEnd(text, lineStart);
     if (fenceAt(text, lineStart, eol, matter.close)) {
       return new OpenMatter(matter.type, from, eol, text.slice(contentStart, previousEnd));
@@ -112,7 +114,9 @@ function open(
     previousEnd = eol;
     lineStart = skipLineEnding(text, eol);
   }
-  noClose[index] = contentStart;
+  if (noClose !== undefined) {
+    noClose[index] = contentStart;
+  }
   return null;
 }
 
@@ -139,27 +143,29 @@ export function matterRule(matters: ResolvedMatter[]): BlockRule {
     canInterruptParagraph: anywhere,
     triggers,
     start(state: BlockState, line: Line): OpenBlock | undefined {
-      if (
-        state.container.name !== 'root' ||
-        line.start !== state.source.lineStarts[line.index] ||
-        line.nonBlank !== line.start
-      ) {
+      // Column 1 only, as the reference's `position.column === 1`. In the
+      // content of a container directive too: it is a document of its own.
+      if (line.start !== state.source.lineStarts[line.index] || line.nonBlank !== line.start) {
         return undefined;
       }
       const text = line.text;
+      const limit = state.end;
       let unclosed = false;
-      let noClose = noCloseByParse.get(state.source);
-      if (noClose === undefined) {
-        noClose = [];
-        for (let i = 0; i < matters.length; i++) {
-          noClose.push(Infinity);
+      let noClose: number[] | undefined;
+      if (limit === text.length) {
+        noClose = noCloseByParse.get(state.source);
+        if (noClose === undefined) {
+          noClose = [];
+          for (let i = 0; i < matters.length; i++) {
+            noClose.push(Infinity);
+          }
+          noCloseByParse.set(state.source, noClose);
         }
-        noCloseByParse.set(state.source, noClose);
       }
       for (let i = 0; i < matters.length; i++) {
         const matter = matters[i];
         if (line.index === 0 || matter.anywhere) {
-          const block = open(text, line.start, line.end, matter, noClose, i);
+          const block = open(text, line.start, line.end, limit, matter, noClose, i);
           if (block === null) {
             unclosed = true;
           } else if (block !== undefined) {
@@ -168,7 +174,7 @@ export function matterRule(matters: ResolvedMatter[]): BlockRule {
           }
         }
       }
-      if (unclosed && line.end < text.length) {
+      if (unclosed && line.end < limit) {
         // micromark tries the fence to the end of the document and starts no
         // container after it (`---\n> a` gives a thematic break and a paragraph).
         state.containerStartsOff = true;
